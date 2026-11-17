@@ -56,7 +56,7 @@ class PvzSfx {
       if (!AC) return null;
       this.ctx = new AC();
       this.master = this.ctx.createGain();
-      this.master.gain.value = 0.5;
+      this.master.gain.value = 0.72;
       this.master.connect(this.ctx.destination);
     }
     if (this.ctx.state === "suspended") this.ctx.resume();
@@ -1487,7 +1487,7 @@ class PvZGame {
   // ------------------------------------------------------------ 波次
   _spawnWave(wave) {
     if (wave.huge) {
-      this._showBanner("一大波僵尸正在接近！", "最后一波", 2.2);
+      this._showBanner("一大波僵尸正在接近！", typeof wave.huge === "string" ? wave.huge : "最后一波", 2.2);
       this.sfx.wave();
       const flag = new Zombie(this, "flag", this._pickRow());
       flag.x = W + 20;
@@ -2161,6 +2161,20 @@ class PvZGame {
     toast(`已增加 ${count} 只${ZOMBIES[type].name}`, "ok");
   }
 
+  _spawnHugeWave() {
+    if (this.phase !== "playing") return;
+    this._spawnWave({
+      huge: "金手指增援",
+      list: [
+        { type: "normal", count: 10 },
+        { type: "cone", count: 4 },
+        { type: "bucket", count: 3 },
+        { type: "football", count: 2 },
+      ],
+    });
+    toast("一大波僵尸来袭：20 只混合僵尸", "ok");
+  }
+
   _handleCheat(action) {
     if (action === "close") {
       this._closeCheat();
@@ -2190,6 +2204,8 @@ class PvZGame {
       this._spawnCheatZombie("bucket", 1);
     } else if (action === "spawnFootball") {
       this._spawnCheatZombie("football", 1);
+    } else if (action === "spawnHuge") {
+      this._spawnHugeWave();
     } else if (action === "invincible") {
       this.cheatInvincible = !this.cheatInvincible;
       toast(`植物无敌：${this.cheatInvincible ? "开" : "关"}`, "ok");
