@@ -233,6 +233,137 @@
 .level-card.theme-champion .lv-stars .on { color: #ffd47a; }
 .level-foot { text-align: center; color: #9b8a68; font-size: 10.5px; line-height: 1.7; margin-top: 16px; }
 
+/* ---------------- 开放世界 ---------------- */
+.world-screen { display: none; background: #16233a; }
+.world-screen.show { display: block; }
+#worldCanvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+.world-hud {
+  position: absolute; top: calc(10px + var(--safe-top)) ; left: 12px; right: 12px;
+  z-index: 6; display: flex; align-items: flex-start; gap: 8px; pointer-events: none;
+}
+.trainer-chip {
+  display: flex; align-items: center; gap: 9px; padding: 7px 12px 7px 8px;
+  border-radius: 999px; border: 1.5px solid rgba(255, 255, 255, 0.28);
+  background: rgba(18, 30, 48, 0.8); backdrop-filter: blur(8px);
+  box-shadow: 0 8px 20px rgba(10, 20, 40, 0.28); color: #f4eddc;
+}
+.trainer-avatar { width: 32px; height: 32px; flex: 0 0 auto; }
+.trainer-avatar svg { width: 32px; height: 32px; display: block; }
+.trainer-meta b { display: block; font-size: 12.5px; font-weight: 900; line-height: 1.2; }
+.trainer-meta span { display: flex; align-items: center; gap: 4px; font-size: 10px; color: #d8c8a8; margin-top: 2px; }
+.trainer-meta .coin { width: 11px; height: 11px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff0a8, #f2b625 62%, #c88a12); border: 1px solid #a56c0c; }
+.trainer-meta span b { display: inline; font-size: 10.5px; color: #ffd47a; font-weight: 900; }
+.world-actions { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.world-btn {
+  pointer-events: auto; height: 38px; padding: 0 13px; border-radius: 11px;
+  border: 1.5px solid rgba(255, 255, 255, 0.22);
+  background: rgba(18, 30, 48, 0.8); color: #f4eddc;
+  font-size: 12px; font-weight: 900; backdrop-filter: blur(8px);
+  transition: transform 0.12s, background 0.15s, border-color 0.15s;
+  position: relative;
+}
+.world-btn:hover { background: rgba(255, 255, 255, 0.14); }
+.world-btn:active { transform: scale(0.95); }
+.world-btn.icon { width: 38px; padding: 0; font-size: 14px; }
+.world-btn.cheat { color: #ffe08a; border-color: rgba(255, 210, 120, 0.5); background: rgba(76, 50, 16, 0.78); }
+#taskBadge {
+  position: absolute; top: -6px; right: -5px; min-width: 17px; height: 17px;
+  padding: 0 4px; border-radius: 999px; background: #e8504a; color: #fff;
+  font-size: 9px; font-weight: 900; display: none; align-items: center; justify-content: center;
+  box-shadow: 0 2px 6px rgba(120, 20, 20, 0.4);
+}
+#taskBadge.show { display: inline-flex; }
+#worldAccount {
+  pointer-events: auto; height: 38px; padding: 0 4px;
+  border-color: rgba(255, 255, 255, 0.22); background: rgba(18, 30, 48, 0.8);
+  color: #f4eddc; flex: 0 0 auto;
+}
+#worldAccount .name { display: none; }
+#worldAccount .avatar { width: 28px; height: 28px; }
+
+.quest-tracker {
+  position: absolute; left: 12px; top: calc(64px + var(--safe-top)); z-index: 5;
+  width: min(248px, 60vw); padding: 9px 11px; border-radius: 13px;
+  border: 1.5px solid rgba(255, 255, 255, 0.2);
+  background: rgba(18, 30, 48, 0.76); color: #f4eddc;
+  backdrop-filter: blur(8px); pointer-events: none;
+  box-shadow: 0 8px 20px rgba(10, 20, 40, 0.24);
+}
+.quest-tracker:empty { display: none; }
+.quest-tracker .qt-label { display: block; font-size: 8.5px; letter-spacing: 0.12em; color: #ffd47a; font-weight: 900; }
+.quest-tracker b { display: block; font-size: 11.5px; font-weight: 900; margin-top: 2px; }
+.quest-tracker .qt-bar { height: 4px; border-radius: 99px; background: rgba(255, 255, 255, 0.18); overflow: hidden; margin-top: 5px; }
+.quest-tracker .qt-bar i { display: block; height: 100%; background: linear-gradient(90deg, #8fd8ff, #4a8fe8); }
+.quest-tracker .qt-num { display: block; text-align: right; font-size: 8.5px; color: #b8c8dc; margin-top: 2px; }
+
+.world-hint {
+  position: absolute; left: 50%; bottom: calc(26px + var(--safe-bottom)); transform: translateX(-50%);
+  z-index: 5; padding: 7px 14px; border-radius: 999px;
+  background: rgba(18, 30, 48, 0.72); border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #e8e0cc; font-size: 10.5px; font-weight: 700; white-space: nowrap;
+  backdrop-filter: blur(6px); pointer-events: none; transition: opacity 0.3s;
+}
+.world-hint.hide { opacity: 0; }
+.interact-tip {
+  position: absolute; left: 50%; bottom: calc(62px + var(--safe-bottom)); transform: translateX(-50%) translateY(6px);
+  z-index: 6; padding: 8px 16px; border-radius: 999px;
+  border: 1.5px solid #ffd47a; background: rgba(255, 248, 225, 0.96);
+  color: #7a4a10; font-size: 11px; font-weight: 900; white-space: nowrap;
+  opacity: 0; visibility: hidden; transition: opacity 0.2s, transform 0.2s, visibility 0.2s;
+  box-shadow: 0 10px 24px rgba(60, 40, 10, 0.3);
+}
+.interact-tip.show { opacity: 1; visibility: visible; transform: translateX(-50%) translateY(0); }
+
+.joystick {
+  position: absolute; left: calc(20px + env(safe-area-inset-left, 0px));
+  bottom: calc(20px + var(--safe-bottom)); z-index: 6;
+  width: 112px; height: 112px; border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.3); background: rgba(16, 28, 44, 0.35);
+  backdrop-filter: blur(4px); pointer-events: auto; touch-action: none;
+}
+.joystick .js-stick {
+  position: absolute; left: 50%; top: 50%; width: 48px; height: 48px;
+  margin: -24px 0 0 -24px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff8e0, #ffb547 62%, #d8781a);
+  border: 2px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 6px 16px rgba(80, 40, 0, 0.35);
+  transition: transform 0.08s;
+}
+html[data-device="desktop"] .joystick { display: none; }
+
+/* 委托面板 */
+.quest-card {
+  width: min(760px, 100%); max-height: min(92vh, 800px); overflow: auto;
+  border: 3px solid #8a6a3e; border-radius: 24px;
+  background: linear-gradient(180deg, #fffdf4, #f4e9cf 82%);
+  box-shadow: 0 28px 70px rgba(10, 20, 40, 0.45), inset 0 2px 0 rgba(255, 255, 255, 0.95);
+  padding: clamp(20px, 3vw, 30px); color: var(--pk-ink);
+}
+.quest-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.quest-head h2 { font-size: 22px; font-weight: 900; margin-top: 6px; }
+.quest-head p { color: #8a7c5b; font-size: 11.5px; margin-top: 3px; }
+.quest-list { display: flex; flex-direction: column; gap: 9px; margin-top: 16px; }
+.quest-item {
+  display: flex; align-items: center; gap: 12px;
+  border: 1.5px solid #e0d0ac; border-radius: 14px;
+  background: rgba(255, 255, 255, 0.68); padding: 12px 14px;
+}
+.quest-item.done { border-color: #e0b25a; background: #fff6da; }
+.quest-main { flex: 1; min-width: 0; }
+.quest-main b { display: block; font-size: 13px; font-weight: 900; }
+.quest-main .q-desc { display: block; color: #8a7c5b; font-size: 10.5px; margin-top: 2px; }
+.quest-bar { height: 6px; border-radius: 99px; background: #e6dcc4; overflow: hidden; margin-top: 6px; max-width: 320px; }
+.quest-bar i { display: block; height: 100%; background: linear-gradient(90deg, #7ddc91, #4cc06b); }
+.quest-item .q-reward { text-align: right; flex: 0 0 auto; }
+.quest-item .q-reward span { display: block; color: #b8791a; font-size: 11px; font-weight: 900; }
+.quest-item .q-reward small { display: block; color: #968762; font-size: 9px; margin-top: 2px; }
+.quest-claim {
+  flex: 0 0 auto; border: 1.5px solid #d8b060; border-radius: 9px;
+  background: #fff6da; color: #8a5a10; font-size: 11px; font-weight: 900; padding: 7px 14px;
+}
+.quest-claim:disabled { opacity: 0.5; }
+.quest-empty { color: #a09070; font-size: 12px; text-align: center; padding: 24px 0; }
+
 /* ---------------- 初始伙伴 ---------------- */
 .starter-card {
   width: min(660px, 100%);
@@ -826,6 +957,23 @@
   .battle-msg { min-height: 36px; font-size: 11.5px; padding: 6px 10px; }
   .battle-controls { min-height: 104px; }
   .team-dots { bottom: 6px; }
+
+  .world-hud { left: 8px; right: 8px; gap: 5px; flex-wrap: wrap; row-gap: 5px; }
+  .trainer-chip { order: 1; padding: 5px 9px 5px 6px; gap: 6px; }
+  .trainer-avatar, .trainer-avatar svg { width: 27px; height: 27px; }
+  .trainer-meta b { font-size: 11px; }
+  #worldAccount { order: 2; margin-left: auto; height: 34px; }
+  .world-actions { order: 3; flex-basis: 100%; justify-content: space-between; gap: 4px; }
+  .world-btn { flex: 1; height: 34px; padding: 0 4px; font-size: 11px; }
+  .world-btn.icon { width: auto; }
+  .quest-tracker { top: calc(102px + var(--safe-top)); width: min(235px, 68vw); padding: 7px 9px; }
+  .quest-tracker b { font-size: 10.5px; }
+  .joystick { width: 96px; height: 96px; }
+  .joystick .js-stick { width: 42px; height: 42px; margin: -21px 0 0 -21px; }
+  .world-hint { font-size: 9.5px; bottom: calc(18px + var(--safe-bottom)); }
+  .interact-tip { bottom: calc(50px + var(--safe-bottom)); font-size: 10px; }
+  .quest-item { flex-wrap: wrap; }
+  .quest-item .q-reward { text-align: left; }
 }
 @media (max-height: 520px) and (orientation: landscape) {
   .battle-top { padding-top: 4px; padding-bottom: 4px; }
@@ -860,6 +1008,21 @@
   .tut-item { padding: 9px; }
   .tut-item p { display: none; }
   .tutorial-controls { display: none; }
+  .world-hud { top: calc(6px + var(--safe-top)); }
+  .trainer-chip { padding: 4px 8px 4px 5px; }
+  .trainer-meta span { font-size: 9px; }
+  .world-btn { height: 30px; padding: 0 8px; font-size: 10.5px; }
+  .world-btn.icon { width: 30px; }
+  .quest-tracker { top: calc(46px + var(--safe-top)); width: 200px; padding: 6px 8px; }
+  .quest-tracker b { font-size: 10px; }
+  .joystick { width: 84px; height: 84px; }
+  .joystick .js-stick { width: 38px; height: 38px; margin: -19px 0 0 -19px; }
+  .world-hint, .interact-tip { display: none; }
+  .quest-card { padding: 12px 16px; }
+  .quest-head h2 { font-size: 18px; }
+  .quest-head p { display: none; }
+  .quest-list { margin-top: 8px; gap: 6px; }
+  .quest-item { padding: 8px 10px; }
   .team-card { max-height: 94vh; padding: 10px 16px; }
   .team-head h2 { font-size: 18px; margin-top: 2px; }
   .team-tabs { margin: 8px 0 6px; }

@@ -11,53 +11,35 @@
   <link rel="stylesheet" href="./style.css">
 </head>
 <body class="pk-body">
-  <!-- 关卡选择 -->
-  <section class="screen level-screen show" id="levelScreen">
-    <div class="pk-bg" aria-hidden="true">
-      <div class="pk-sun"></div>
-      <div class="pk-cloud c1"></div>
-      <div class="pk-cloud c2"></div>
-      <div class="pk-hills"></div>
-      <div class="pk-ball-bg"></div>
-    </div>
+  <!-- 开放世界 -->
+  <section class="screen world-screen show" id="worldScreen">
+    <canvas id="worldCanvas" aria-label="丰缘草地地图"></canvas>
 
-    <div class="level-panel">
-      <header class="level-head">
-        <a class="back-link" href="../" aria-label="返回游戏厅">← 游戏厅</a>
-        <div class="level-title">
-          <span class="kicker">POKÉMON · HOENN ADVENTURE</span>
-          <h1>精灵宝可梦</h1>
-        </div>
-        <div class="level-head-actions">
-          <button class="pk-icon-btn cheat" id="pkCheat" type="button" aria-label="金手指">✦</button>
-          <button class="account-chip" data-account-chip aria-label="账号与进度"></button>
-        </div>
-      </header>
-
-      <div class="level-summary">
-        <div class="score-box">
-          <div class="big-stars"><span id="pkStars">0</span><small>/ 24 ★</small></div>
-          <div class="level-bar"><i id="pkBar"></i></div>
-          <p id="pkProgress">已解锁 1 / 8 关 · 图鉴 0 / 31</p>
-        </div>
-        <div class="pk-summary-side">
-          <div class="pk-money"><span class="coin"></span><b id="pkMoney">1200</b></div>
-          <div class="pk-team-mini" id="pkTeamMini"></div>
-        </div>
-        <div class="level-actions">
-          <button class="btn primary" id="pkContinue" type="button">开始第 1 关</button>
-          <button class="btn ghost" id="pkTeamBtn" type="button">队伍 / 图鉴</button>
-          <button class="btn ghost" id="pkShopBtn" type="button">商店</button>
-          <button class="btn ghost" id="pkTutorialBtn" type="button">玩法说明</button>
+    <div class="world-hud">
+      <div class="trainer-chip">
+        <span class="trainer-avatar" aria-hidden="true">
+          <svg viewBox="0 0 32 32"><circle cx="16" cy="16" r="15" fill="#e8504a"/><path d="M2 16h28" stroke="#fff" stroke-width="4"/><circle cx="16" cy="16" r="5" fill="#fff" stroke="#2a2a34" stroke-width="2"/></svg>
+        </span>
+        <div class="trainer-meta">
+          <b>小训练家</b>
+          <span>Lv.<b id="trainerRank">1</b> <i class="coin"></i><b id="worldMoney">1200</b></span>
         </div>
       </div>
-
-      <div class="level-grid" id="levelGrid"></div>
-      <p class="level-foot">
-        选择关卡 → 战斗 → 捕捉与升级<br>
-        三星条件：全队无人倒下 · 捕获率与属性克制遵循第三世代公式
-      </p>
+      <div class="world-actions">
+        <button class="world-btn" id="worldTasks" type="button">委托<span id="taskBadge"></span></button>
+        <button class="world-btn" id="worldTeam" type="button">队伍</button>
+        <button class="world-btn" id="worldShop" type="button">商店</button>
+        <button class="world-btn icon" id="worldSound" type="button" aria-label="声音">♪</button>
+        <button class="world-btn icon cheat" id="worldCheat" type="button" aria-label="金手指">✦</button>
+        <button class="world-btn icon" id="worldHelp" type="button" aria-label="帮助">?</button>
+      </div>
+      <button class="account-chip" id="worldAccount" data-account-chip aria-label="账号与进度"></button>
     </div>
+
+    <div class="quest-tracker" id="questTracker"></div>
+    <div class="world-hint" id="worldHint">走进草丛寻找宝可梦 · 靠近博士按 E 对话</div>
+    <button class="interact-tip" id="interactTip" type="button">按 E / 点击与枫木博士对话</button>
+    <div class="joystick" id="joystick"><span class="js-stick" id="joystickStick"></span></div>
   </section>
 
   <!-- 初始伙伴 -->
@@ -77,36 +59,51 @@
     <div class="tutorial-card">
       <div class="tutorial-head">
         <span class="tut-badge">HOW TO PLAY</span>
-        <h2>成为宝可梦训练家</h2>
-        <p>回合制对战、属性克制、捕捉与养成。</p>
+        <h2>在丰缘草地冒险</h2>
+        <p>没有关卡选择：走路、钻草丛、遇宝可梦、接博士委托。</p>
       </div>
       <div class="tutorial-grid">
         <div class="tut-item">
-          <div class="tut-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 010 18M12 3a14 14 0 000 18"/></svg></div>
-          <h3>回合制对战</h3>
-          <p>每回合选择招式、道具或换人。速度快的先出手，被克制会吃到双倍伤害。</p>
+          <div class="tut-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 21s7-6.4 7-12a7 7 0 10-14 0c0 5.6 7 12 7 12z"/><circle cx="12" cy="9" r="2.4"/></svg></div>
+          <h3>自由探索</h3>
+          <p>用方向键 / WASD 或左下摇杆在草地上行走，靠近博士可以接取和领取委托。</p>
         </div>
         <div class="tut-item">
-          <div class="tut-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 4v16M4 12h16"/><circle cx="12" cy="12" r="9"/></svg></div>
-          <h3>属性克制</h3>
-          <p>火克草、水克火、电克水。合理利用本系加成（×1.5）与克制倍率。</p>
+          <div class="tut-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 18c2-8 5-10 7-10s2 4 4 4 3-6 7-6"/><path d="M3 21h18"/></svg></div>
+          <h3>草丛遭遇</h3>
+          <p>走进深色草丛，每一步都可能遇到野生宝可梦。不同草地的种类和等级不同。</p>
         </div>
         <div class="tut-item">
           <div class="tut-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="8"/><path d="M4 12h16"/><circle cx="12" cy="12" r="3"/></svg></div>
-          <h3>捕捉宝可梦</h3>
-          <p>野生对战中打开背包扔精灵球。HP 越低、有异常状态，捕获率越高。</p>
+          <h3>战斗与捕捉</h3>
+          <p>遭遇后进入回合制战斗。打开背包扔精灵球，HP 越低、有异常状态越容易捕获。</p>
         </div>
         <div class="tut-item">
-          <div class="tut-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 19l7-7 7 7"/><path d="M12 12V4M8 8l4-4 4 4"/></svg></div>
-          <h3>升级与进化</h3>
-          <p>战斗获得经验，达到等级后自动学习新招并进化。队伍最多 3 只，其余进入电脑。</p>
+          <div class="tut-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 3h12v18l-6-4-6 4z"/><path d="M9 9h6M9 12h4"/></svg></div>
+          <h3>博士委托</h3>
+          <p>捕捉、击败、行走和升级都会推进委托。完成后找博士领取金币、精灵球和伤药。</p>
         </div>
       </div>
       <div class="tutorial-controls">
-        <span><b>手机</b> 点击按钮选择招式、背包与换人</span>
-        <span><b>电脑</b> 鼠标点击操作；战斗中可随时打开金手指</span>
+        <span><b>手机</b> 左下摇杆移动 · 靠近博士点“对话” · 镜头会跟着你</span>
+        <span><b>电脑</b> WASD / 方向键移动 · E 或空格与博士对话 · 战斗中可打开金手指</span>
       </div>
       <button class="btn primary block" id="tutorialStart" type="button">开始冒险</button>
+    </div>
+  </section>
+
+  <!-- 博士委托 -->
+  <section class="screen center-screen" id="questScreen">
+    <div class="quest-card">
+      <div class="quest-head">
+        <div>
+          <span class="tut-badge">PROFESSOR'S QUESTS</span>
+          <h2>博士的委托</h2>
+          <p>完成委托后回来领取奖励，博士会继续派发新的委托。</p>
+        </div>
+        <button class="modal-close" id="questClose" type="button" aria-label="关闭">✕</button>
+      </div>
+      <div class="quest-list" id="questList"></div>
     </div>
   </section>
 
@@ -125,7 +122,7 @@
         <button data-tab="dex" type="button">图鉴</button>
         <button data-tab="shop" type="button">商店</button>
       </div>
-      <div class="team-money-row">金币 <b id="teamMoney">0</b><span>通关关卡与战斗奖励获得</span></div>
+      <div class="team-money-row">金币 <b id="teamMoney">0</b><span>完成博士委托与战斗获得</span></div>
       <div class="team-content" id="teamContent"></div>
     </div>
   </section>
@@ -133,7 +130,7 @@
   <!-- 战斗 -->
   <section class="screen battle-screen" id="battleScreen">
     <div class="battle-top">
-      <span class="battle-place" id="battlePlace">101号道路</span>
+      <span class="battle-place" id="battlePlace">101号草地</span>
       <div class="battle-top-actions">
         <button class="pk-icon-btn cheat" id="battleCheat" type="button" aria-label="金手指">✦</button>
         <button class="pk-icon-btn" id="battlePause" type="button" aria-label="暂停">Ⅱ</button>
@@ -172,8 +169,8 @@
       <p>宝可梦们正在原地休息</p>
       <div class="pause-actions">
         <button class="btn primary block" id="resumeBtn" type="button">继续战斗</button>
-        <button class="btn block" id="restartBtn" type="button">重新开始本关</button>
-        <button class="btn block" id="pauseLevelsBtn" type="button">返回关卡选择</button>
+        <button class="btn block" id="restartBtn" type="button">重新遭遇</button>
+        <button class="btn block" id="pauseLevelsBtn" type="button">返回草地</button>
         <button class="btn block ghost" id="pauseSoundBtn" type="button">关闭音效</button>
         <a class="btn block ghost" href="../">回到游戏厅</a>
       </div>
@@ -186,7 +183,7 @@
       <div class="cheat-head">
         <span class="tut-badge">CHEAT MODE</span>
         <h2>金手指</h2>
-        <p>修改当前战斗与账号数据；解锁与图鉴会写入云端进度。</p>
+        <p>修改当前战斗与账号数据；图鉴与等级会写入云端进度。</p>
       </div>
       <div class="cheat-grid">
         <button class="cheat-item" data-cheat="heal" type="button"><strong>全队回满</strong><span>恢复 HP 并解除异常状态</span></button>
@@ -196,7 +193,6 @@
         <button class="cheat-item" data-cheat="oneHit" type="button"><strong id="cheatOneHitText">一击必杀：关</strong><span>我方攻击必定击倒对手</span></button>
         <button class="cheat-item" data-cheat="catch" type="button"><strong id="cheatCatchText">捕捉必中：关</strong><span>精灵球必定捕获成功</span></button>
         <button class="cheat-item" data-cheat="infinite" type="button"><strong id="cheatInfiniteText">无限 PP / 道具：关</strong><span>招式 PP 与道具不消耗</span></button>
-        <button class="cheat-item" data-cheat="unlock" type="button"><strong>解锁全部关卡</strong><span>写入账号进度</span></button>
         <button class="cheat-item" data-cheat="dex" type="button"><strong>登记全图鉴</strong><span>登记全部 31 种宝可梦</span></button>
         <button class="cheat-item" data-cheat="win" type="button"><strong>直接获胜</strong><span>立即结算当前战斗</span></button>
         <button class="cheat-item" data-cheat="close" type="button"><strong>关闭</strong><span>返回游戏</span></button>
@@ -210,8 +206,8 @@
       <div class="result-stars" id="resultStars">
         <span class="rstar">★</span><span class="rstar">★</span><span class="rstar">★</span>
       </div>
-      <h2 id="resultTitle">胜利！</h2>
-      <p id="resultSub">第 1 关 · 101号道路</p>
+      <h2 id="resultTitle">战斗胜利！</h2>
+      <p id="resultSub">101号草地 · 野生遭遇</p>
       <div class="result-caught" id="resultCaught"></div>
       <div class="result-stats">
         <div><strong id="statMoney">0</strong><span>获得金币</span></div>
@@ -220,9 +216,9 @@
       </div>
       <p class="result-note" id="resultNote"></p>
       <div class="result-actions">
-        <button class="btn primary" id="nextBtn" type="button">下一关</button>
-        <button class="btn" id="retryBtn" type="button">再来一次</button>
-        <button class="btn ghost" id="resultLevelsBtn" type="button">关卡选择</button>
+        <button class="btn primary" id="nextBtn" type="button">继续探索</button>
+        <button class="btn" id="retryBtn" type="button">查看队伍</button>
+        <button class="btn ghost" id="resultLevelsBtn" type="button">回到城镇</button>
       </div>
     </div>
   </section>

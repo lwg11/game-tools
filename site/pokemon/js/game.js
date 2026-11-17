@@ -8,13 +8,18 @@ import "../../assets/js/device.js";
 import { ProgressStore } from "../../assets/js/progress.js";
 import { initAccount } from "../../assets/js/account.js";
 import { toast, icon } from "../../assets/js/ui.js";
+import { audio } from "../../assets/js/audio.js";
 import {
   SPECIES, SPECIES_ORDER, SPECIES_COUNT, STARTERS, MOVES, TYPE_NAMES, TYPE_COLORS,
-  ITEMS, ITEM_IDS, BALLS, BALL_IDS, LEVELS, TOTAL_LEVELS, getLevel, getLevelEnemies,
+  ITEMS, ITEM_IDS, BALLS, BALL_IDS,
   createMon, calcStats, expForLevel, levelProgress, grantExp, catchChance,
   effectiveness, STAT_NAMES, NATURES,
 } from "./data.js";
 import { monsterSVG } from "./sprites.js";
+import {
+  WORLD_W, WORLD_H, PROFESSOR, canWalk, zoneAt, pickWild, drawWorld,
+  initialQuests, createQuest,
+} from "./world.js";
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -43,7 +48,7 @@ class Sfx {
       if (!AC) return null;
       this.ctx = new AC();
       this.master = this.ctx.createGain();
-      this.master.gain.value = 0.2;
+      this.master.gain.value = 0.5;
       this.master.connect(this.ctx.destination);
     }
     if (this.ctx.state === "suspended") this.ctx.resume();
@@ -107,7 +112,7 @@ class PokemonGame {
   constructor() {
     this.store = new ProgressStore("pokemon");
     this.sfx = new Sfx();
-    this.phase = "menu"; // menu | busy | choose | switch | pause | cheat | over
+    this.phase = "menu"; // menu | world | busy | choose | pause | cheat | over
     this.battle = null;
     this.busy = false;
     this.cheatOpen = false;
@@ -117,10 +122,17 @@ class PokemonGame {
     this.teamTab = "team";
     this.selectedStarter = null;
     this.soundOn = true;
-    this.lastLevelId = 1;
-    this.resultNextId = 1;
     this._rotateTimer = null;
+    this.world = null;
+    this.worldTime = 0;
+    this.worldLastTs = 0;
+    this.worldCtx = null;
+    this.worldView = { w: 1, h: 1, scale: 1, camX: 0, camY: 0 };
+    this.keys = {};
+    this.joystick = { active: false, x: 0, y: 0, pointerId: null };
+    this.encounterGrace = 0;
     this._bindUI();
+    this._setupWorld();
     this._boot();
   }
 
@@ -134,40 +146,74 @@ class PokemonGame {
     await this.store.init();
     this.soundOn = this.p.sound !== false;
     this.sfx.enabled = this.soundOn;
-    this._refreshLevelScreen();
+    audio.setEnabled(this.soundOn);
+    audio.setMusic("pokemon");
+    this._ensureWorldState();
+    this._refreshWorldHUD();
+    this._updateQuestHUD();
     this.store.onChange(() => {
-      this._refreshLevelScreen();
+      this._refreshWorldHUD();
+      this._updateQuestHUD();
       if (document.getElementById("teamScreen").classList.contains("show")) this._renderTeamScreen();
+      if (document.getElementById("questScreen").classList.contains("show")) this._renderQuests();
     });
     try {
       await initAccount(document.querySelector("[data-account-chip]"));
     } catch (err) { /* 游客模式 */ }
 
+    document.getElementById("worldScreen").classList.add("show");
     if (!this.p.starter) {
-      document.getElementById("levelScreen").classList.add("show");
       document.getElementById("starterScreen").classList.add("show");
     } else {
-      document.getElementById("levelScreen").classList.add("show");
+      this._enterWorld();
       if (!this.p.tutorialSeen) this._showTutorial(true);
     }
     document.getElementById("rotateTip").classList.add("hide");
   }
 
+  _ensureWorldState() {
+    const pos = this.p.pos || { x: 255, y: 385 };
+    let x = Number(pos.x) || 255;
+    let y = Number(pos.y) || 385;
+    if (!canWalk(x, y)) { x = 255; y = 385; }
+    this.world = { player: { x, y, dir: 1, walkPhase: 0 }, moving: false };
+    this.p.pos = { x, y };
+    if (this.p.starter && (!Array.isArray(this.p.quests) || !this.p.quests.length)) {
+      this.store.update((p) => { p.quests = initialQuests(); });
+    }
+  }
+
+  _avgTeamLevel() {
+    const team = this.p.team || [];
+    if (!team.length) return 5;
+    return team.reduce((sum, m) => sum + (Number(m.level) || 1), 0) / team.length;
+  }
+
+  _overlayOpen() {
+    return document.getElementById("teamScreen").classList.contains("show")
+      || document.getElementById("questScreen").classList.contains("show")
+      || document.getElementById("cheatScreen").classList.contains("show")
+      || document.getElementById("tutorialScreen").classList.contains("show");
+  }
+
   _bindUI() {
     const $ = (id) => document.getElementById(id);
 
-    $("pkContinue").addEventListener("click", () => this.startBattle(this._continueLevelId()));
-    $("pkTeamBtn").addEventListener("click", () => this._openTeam("team"));
-    $("pkShopBtn").addEventListener("click", () => this._openTeam("shop"));
-    $("pkTutorialBtn").addEventListener("click", () => this._showTutorial(false));
-    $("pkCheat").addEventListener("click", () => { this.sfx.ensure(); this._openCheat(); });
+    $("worldTeam").addEventListener("click", () => { this.sfx.click(); this._openTeam("team"); });
+    $("worldShop").addEventListener("click", () => { this.sfx.click(); this._openTeam("shop"); });
+    $("worldTasks").addEventListener("click", () => { this.sfx.click(); this._openQuests(); });
+    $("worldHelp").addEventListener("click", () => this._showTutorial(false));
+    $("worldCheat").addEventListener("click", () => { this.sfx.ensure(); this._openCheat(); });
+    $("worldSound").addEventListener("click", () => this._toggleSound());
+    $("interactTip").addEventListener("click", () => { this.sfx.click(); this._openQuests(); });
 
-    $("levelGrid").addEventListener("click", (e) => {
-      const card = e.target.closest("[data-level]");
-      if (!card || card.classList.contains("locked")) return;
-      this.sfx.ensure();
-      this.sfx.click();
-      this.startBattle(Number(card.dataset.level));
+    $("questClose").addEventListener("click", () => this._closeQuests());
+    $("questScreen").addEventListener("click", (e) => {
+      if (e.target.id === "questScreen") this._closeQuests();
+    });
+    $("questList").addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-claim]");
+      if (btn && !btn.disabled) this._claimQuest(btn.dataset.claim);
     });
 
     $("starterGrid").addEventListener("click", (e) => {
@@ -251,9 +297,13 @@ class PokemonGame {
     $("resumeBtn").addEventListener("click", () => this._closePause());
     $("restartBtn").addEventListener("click", () => {
       document.getElementById("pauseScreen").classList.remove("show");
-      this.startBattle(this.lastLevelId);
+      if (this.lastEncounter) {
+        this.startEncounter(this.lastEncounter.species, this.lastEncounter.level, this.lastEncounter.zone);
+      } else {
+        this._enterWorld();
+      }
     });
-    $("pauseLevelsBtn").addEventListener("click", () => this._openLevelScreen());
+    $("pauseLevelsBtn").addEventListener("click", () => this._enterWorld());
     $("pauseSoundBtn").addEventListener("click", () => this._toggleSound());
 
     $("cheatScreen").addEventListener("click", (e) => {
@@ -262,18 +312,39 @@ class PokemonGame {
       if (btn) this._handleCheat(btn.dataset.cheat);
     });
 
-    $("nextBtn").addEventListener("click", () => this.startBattle(this.resultNextId));
-    $("retryBtn").addEventListener("click", () => this.startBattle(this.lastLevelId));
-    $("resultLevelsBtn").addEventListener("click", () => this._openLevelScreen());
+    $("nextBtn").addEventListener("click", () => this._enterWorld());
+    $("retryBtn").addEventListener("click", () => { this._enterWorld(); this._openTeam("team"); });
+    $("resultLevelsBtn").addEventListener("click", () => this._returnToTown());
     $("rotateTip").addEventListener("click", () => $("rotateTip").classList.add("hide"));
 
     window.addEventListener("keydown", (e) => {
-      if (e.key !== "Escape") return;
-      if (this.cheatOpen) this._closeCheat();
-      else if (this.pauseOpen) this._closePause();
-      else if (this.battle && !this.battle.over && this.phase === "choose") this._openPause();
+      const key = e.key.toLowerCase();
+      if (key === "escape") {
+        if (this.cheatOpen) this._closeCheat();
+        else if (this.pauseOpen) this._closePause();
+        else if (document.getElementById("questScreen").classList.contains("show")) this._closeQuests();
+        else if (document.getElementById("teamScreen").classList.contains("show")) this._closeTeam();
+        else if (this.battle && !this.battle.over && this.phase === "choose") this._openPause();
+        return;
+      }
+      if (this.phase !== "world" || this._overlayOpen()) return;
+      if (["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright"].includes(key)) {
+        e.preventDefault();
+        this.keys[key] = true;
+        return;
+      }
+      if (key === "e" || key === " " || key === "enter") {
+        if (this.nearProfessor) {
+          e.preventDefault();
+          this._openQuests();
+        }
+      }
+    });
+    window.addEventListener("keyup", (e) => {
+      this.keys[e.key.toLowerCase()] = false;
     });
     document.addEventListener("visibilitychange", () => {
+      this._saveWorldPos();
       if (document.hidden && this.battle && !this.battle.over && this.phase === "choose") this._openPause();
     });
   }
@@ -283,37 +354,348 @@ class PokemonGame {
     document.querySelectorAll(".screen").forEach((el) => el.classList.remove("show"));
   }
 
-  _openLevelScreen() {
+  _enterWorld() {
     this.battle = null;
-    this.phase = "menu";
+    this.phase = "world";
     this.busy = false;
     this.pendingSwitch = null;
     this.cheatOpen = false;
     this.pauseOpen = false;
+    this.encounterGrace = Math.max(this.encounterGrace, 1.2);
     this._hideScreens();
+    document.getElementById("worldScreen").classList.add("show");
     document.getElementById("rotateTip").classList.add("hide");
-    document.getElementById("levelScreen").classList.add("show");
-    this._refreshLevelScreen();
+    document.getElementById("interactTip").classList.remove("show");
+    this._resizeWorld();
+    this._refreshWorldHUD();
+    this._updateQuestHUD();
+  }
+
+  _returnToTown() {
+    if (!this.world) this._ensureWorldState();
+    this.world.player.x = 255;
+    this.world.player.y = 385;
+    this.world.player.dir = 1;
+    this.encounterGrace = 1.5;
+    this._saveWorldPos();
+    this._enterWorld();
+    toast("回到了研究所门前", "", 1600);
+  }
+
+  _saveWorldPos() {
+    if (!this.world) return;
+    this.p.pos = { x: this.world.player.x, y: this.world.player.y };
+    this.store.update(() => {});
   }
 
   _showTutorial(first) {
     this.firstTutorial = Boolean(first);
-    document.getElementById("tutorialStart").textContent = first ? "开始第 1 关" : "继续冒险";
+    document.getElementById("tutorialStart").textContent = first ? "开始冒险" : "继续冒险";
     document.getElementById("tutorialScreen").classList.add("show");
   }
 
   _startFromTutorial() {
     document.getElementById("tutorialScreen").classList.remove("show");
     if (!this.p.tutorialSeen) this.store.update((p) => { p.tutorialSeen = true; });
-    this.startBattle(this.firstTutorial ? 1 : this._continueLevelId());
+    this._enterWorld();
   }
 
-  _continueLevelId() {
-    const unlocked = clamp(Number(this.p.unlocked) || 1, 1, TOTAL_LEVELS);
-    for (let i = 1; i <= unlocked; i++) {
-      if (!(this.p.cleared || {})[i]) return i;
+  // ------------------------------------------------------------ 开放世界
+  _setupWorld() {
+    this.worldCanvas = document.getElementById("worldCanvas");
+    this.worldCtx = this.worldCanvas.getContext("2d");
+    this._resizeWorld();
+    window.addEventListener("resize", () => this._resizeWorld());
+    requestAnimationFrame((ts) => this._worldLoop(ts));
+
+    const joy = document.getElementById("joystick");
+    const stick = document.getElementById("joystickStick");
+    const apply = (e) => {
+      const rect = joy.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      let dx = (e.clientX - cx) / (rect.width / 2);
+      let dy = (e.clientY - cy) / (rect.height / 2);
+      const len = Math.hypot(dx, dy);
+      if (len > 1) { dx /= len; dy /= len; }
+      this.joystick.x = dx;
+      this.joystick.y = dy;
+      if (stick) stick.style.transform = `translate(${dx * 26}px, ${dy * 26}px)`;
+    };
+    const end = () => {
+      this.joystick.active = false;
+      this.joystick.x = 0;
+      this.joystick.y = 0;
+      if (stick) stick.style.transform = "";
+    };
+    joy.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      this.joystick.active = true;
+      joy.setPointerCapture?.(e.pointerId);
+      this.sfx.ensure();
+      apply(e);
+    });
+    joy.addEventListener("pointermove", (e) => {
+      if (this.joystick.active) apply(e);
+    });
+    joy.addEventListener("pointerup", end);
+    joy.addEventListener("pointercancel", end);
+
+    this.worldCanvas.addEventListener("pointerup", (e) => {
+      if (this.phase !== "world" || this._overlayOpen()) return;
+      const w = this._screenToWorld(e);
+      if (Math.hypot(w.x - PROFESSOR.x, w.y - PROFESSOR.y) < 50) {
+        this.sfx.click();
+        this._openQuests();
+      }
+    });
+  }
+
+  _resizeWorld() {
+    if (!this.worldCanvas) return;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    this.worldCanvas.width = Math.round(w * dpr);
+    this.worldCanvas.height = Math.round(h * dpr);
+    this.worldCanvas.style.width = w + "px";
+    this.worldCanvas.style.height = h + "px";
+    this.worldDpr = dpr;
+    this.worldView.w = w;
+    this.worldView.h = h;
+    this.worldView.scale = Math.max(w / WORLD_W, h / WORLD_H);
+  }
+
+  _screenToWorld(e) {
+    const v = this.worldView;
+    return {
+      x: (e.clientX + v.camX) / v.scale,
+      y: (e.clientY + v.camY) / v.scale,
+    };
+  }
+
+  _worldLoop(ts) {
+    const dt = this.worldLastTs ? Math.min(0.04, (ts - this.worldLastTs) / 1000) : 0.016;
+    this.worldLastTs = ts;
+    this.worldTime += dt;
+    if (this.phase === "world" && this.world && !this._overlayOpen()) this._updateWorld(dt);
+    if (document.getElementById("worldScreen").classList.contains("show")) this._drawWorldFrame();
+    requestAnimationFrame((t) => this._worldLoop(t));
+  }
+
+  _updateWorld(dt) {
+    if (this.encounterGrace > 0) this.encounterGrace -= dt;
+    const p = this.world.player;
+    let dx = 0;
+    let dy = 0;
+    const k = this.keys;
+    if (k["a"] || k["arrowleft"]) dx -= 1;
+    if (k["d"] || k["arrowright"]) dx += 1;
+    if (k["w"] || k["arrowup"]) dy -= 1;
+    if (k["s"] || k["arrowdown"]) dy += 1;
+    if (this.joystick.active) {
+      dx += this.joystick.x;
+      dy += this.joystick.y;
     }
-    return unlocked;
+    const len = Math.hypot(dx, dy);
+    let moved = 0;
+    if (len > 0.08) {
+      const nx = dx / len;
+      const ny = dy / len;
+      const step = 172 * dt;
+      const tx = p.x + nx * step;
+      const ty = p.y + ny * step;
+      if (canWalk(tx, p.y)) { p.x = tx; moved += Math.abs(nx * step); }
+      if (canWalk(p.x, ty)) { p.y = ty; moved += Math.abs(ny * step); }
+      if (Math.abs(nx) > 0.15) p.dir = nx > 0 ? 1 : -1;
+      p.walkPhase += step * 0.12;
+      this.world.moving = moved > 0.1;
+      if (moved > 0.1) document.getElementById("worldHint").classList.add("hide");
+    } else {
+      this.world.moving = false;
+    }
+
+    this.nearProfessor = Math.hypot(p.x - PROFESSOR.x, p.y - PROFESSOR.y) < 78;
+    const claimable = (this.p.quests || []).some((q) => q.progress >= q.goal);
+    const tip = document.getElementById("interactTip");
+    tip.classList.toggle("show", this.nearProfessor);
+    if (this.nearProfessor) {
+      tip.textContent = claimable ? "按 E / 点击找枫木博士领取奖励" : "按 E / 点击与枫木博士对话";
+      document.getElementById("worldHint").classList.add("hide");
+    }
+
+    if (moved > 0.1) {
+      this.p.steps = (Number(this.p.steps) || 0) + moved;
+      this.p.pos = { x: p.x, y: p.y };
+      const zoneNow = zoneAt(p.x, p.y);
+      this.world.stepAccum = (this.world.stepAccum || 0) + moved;
+      while (this.world.stepAccum >= 26) {
+        this.world.stepAccum -= 26;
+        if (zoneNow) this._questEvent("walk", { amount: 26 });
+        if (zoneNow && this.encounterGrace <= 0 && Math.random() < 0.055) {
+          this._triggerEncounter(zoneNow);
+          break;
+        }
+      }
+    }
+  }
+
+  _triggerEncounter(zone) {
+    const wild = pickWild(zone, this._avgTeamLevel());
+    if (!wild) return;
+    this.lastEncounter = { ...wild, zone };
+    this.encounterGrace = 2.8;
+    this.world.moving = false;
+    this._saveWorldPos();
+    this.sfx.ensure();
+    this.sfx.encounter();
+    this.startEncounter(wild.species, wild.level, zone);
+  }
+
+  _drawWorldFrame() {
+    const ctx = this.worldCtx;
+    if (!ctx || !this.world) return;
+    const v = this.worldView;
+    const dpr = this.worldDpr || 1;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, v.w, v.h);
+    const p = this.world.player;
+    const maxX = Math.max(0, WORLD_W * v.scale - v.w);
+    const maxY = Math.max(0, WORLD_H * v.scale - v.h);
+    v.camX = clamp(p.x * v.scale - v.w / 2, 0, maxX);
+    v.camY = clamp(p.y * v.scale - v.h / 2, 0, maxY);
+    ctx.save();
+    ctx.translate(-v.camX, -v.camY);
+    ctx.scale(v.scale, v.scale);
+    drawWorld(ctx, this);
+    ctx.restore();
+  }
+
+  _refreshWorldHUD() {
+    document.getElementById("worldMoney").textContent = String(Number(this.p.money) || 0);
+    document.getElementById("trainerRank").textContent = String(1 + Math.floor((Number(this.p.questsDone) || 0) / 2));
+    const sound = document.getElementById("worldSound");
+    if (sound) sound.innerHTML = icon(this.soundOn !== false ? "sound" : "mute");
+  }
+
+  _updateQuestHUD() {
+    const quests = this.p.quests || [];
+    const claimable = quests.filter((q) => q.progress >= q.goal).length;
+    const badge = document.getElementById("taskBadge");
+    if (badge) {
+      badge.textContent = String(claimable);
+      badge.classList.toggle("show", claimable > 0);
+    }
+    const tracker = document.getElementById("questTracker");
+    if (!tracker) return;
+    if (!quests.length) {
+      tracker.innerHTML = "";
+      return;
+    }
+    const q = quests.find((x) => x.progress < x.goal) || quests[0];
+    const pct = Math.round((q.progress / Math.max(1, q.goal)) * 100);
+    tracker.innerHTML = `<span class="qt-label">${claimable > 0 ? `${claimable} 个委托可领取` : "博士的委托"}</span>
+      <b>${q.title}</b>
+      <div class="qt-bar"><i style="width:${Math.min(100, pct)}%"></i></div>
+      <span class="qt-num">${Math.min(q.progress, q.goal)} / ${q.goal}</span>`;
+  }
+
+  _openQuests() {
+    document.getElementById("questScreen").classList.add("show");
+    this._renderQuests();
+  }
+
+  _closeQuests() {
+    document.getElementById("questScreen").classList.remove("show");
+  }
+
+  _renderQuests() {
+    const list = document.getElementById("questList");
+    if (!list) return;
+    const quests = this.p.quests || [];
+    if (!quests.length) {
+      list.innerHTML = '<div class="quest-empty">暂时没有委托，先去找博士聊聊吧。</div>';
+      return;
+    }
+    list.innerHTML = quests.map((q) => {
+      const done = q.progress >= q.goal;
+      const pct = Math.round((q.progress / Math.max(1, q.goal)) * 100);
+      const items = q.reward && q.reward.items
+        ? Object.entries(q.reward.items).map(([id, n]) => `${ITEMS[id] ? ITEMS[id].name : id}×${n}`).join(" ")
+        : "";
+      return `<div class="quest-item ${done ? "done" : ""}">
+        <div class="quest-main">
+          <b>${q.title}</b>
+          <span class="q-desc">${q.desc}</span>
+          <div class="quest-bar"><i style="width:${Math.min(100, pct)}%"></i></div>
+          <span class="q-desc">${Math.min(q.progress, q.goal)} / ${q.goal}</span>
+        </div>
+        <div class="q-reward"><span>${q.reward.money} 金币</span><small>${items || "经验与成长"}</small></div>
+        <button class="quest-claim" data-claim="${q.id}" type="button" ${done ? "" : "disabled"}>${done ? "领取" : "进行中"}</button>
+      </div>`;
+    }).join("");
+  }
+
+  _claimQuest(id) {
+    const p = this.p;
+    const q = (p.quests || []).find((x) => x.id === id);
+    if (!q || q.progress < q.goal) return;
+    this.store.update((pp) => {
+      pp.money = (Number(pp.money) || 0) + (Number(q.reward.money) || 0);
+      pp.items = pp.items || {};
+      for (const [itemId, n] of Object.entries(q.reward.items || {})) {
+        pp.items[itemId] = (Number(pp.items[itemId]) || 0) + n;
+      }
+      pp.questsDone = (Number(pp.questsDone) || 0) + 1;
+      const rest = (pp.quests || []).filter((x) => x.id !== id);
+      pp.quests = (pp.quests || []).map((x) => x.id === id ? createQuest(rest, pp.questsDone) : x);
+    });
+    this.sfx.level();
+    toast(`委托完成：${q.title}，奖励已领取`, "ok");
+    this._renderQuests();
+    this._updateQuestHUD();
+    this._refreshWorldHUD();
+  }
+
+  _questEvent(kind, data = {}) {
+    const quests = this.p.quests || [];
+    if (!quests.length) return;
+    let changed = false;
+    for (const q of quests) {
+      if (q.progress >= q.goal) continue;
+      const prev = q.progress;
+      let inc = 0;
+      let set = null;
+      if (kind === "catch") {
+        if (q.kind === "catchAny") inc = 1;
+        else if (q.kind === "catchType" && (data.types || []).includes(q.target)) inc = 1;
+        else if (q.kind === "catchSpecies" && data.species === q.target) inc = 1;
+        if (q.kind === "dex") set = data.count;
+      } else if (kind === "win") {
+        if (q.kind === "win") inc = 1;
+      } else if (kind === "walk") {
+        if (q.kind === "walk") inc = data.amount || 0;
+      } else if (kind === "level") {
+        if (q.kind === "level") set = data.level;
+      } else if (kind === "dex") {
+        if (q.kind === "dex") set = data.count;
+      }
+      if (set != null) q.progress = Math.min(q.goal, Math.max(q.progress, Number(set) || 0));
+      else if (inc) q.progress = Math.min(q.goal, q.progress + inc);
+      if (q.progress !== prev) {
+        changed = true;
+        if (q.progress >= q.goal) toast(`委托完成：${q.title}，去找博士领取奖励`, "ok", 2600);
+      }
+    }
+    if (changed) {
+      if (kind === "walk") {
+        clearTimeout(this._questSaveTimer);
+        this._questSaveTimer = setTimeout(() => this.store.update(() => {}), 900);
+      } else {
+        this.store.update(() => {});
+      }
+    }
+    this._updateQuestHUD();
   }
 
   // ------------------------------------------------------------ 初始伙伴
@@ -350,59 +732,19 @@ class PokemonGame {
       p.caught = p.caught || {};
       p.caught[id] = true;
       p.items = p.items || {};
+      p.pos = { x: 255, y: 385 };
+      if (!Array.isArray(p.quests) || !p.quests.length) p.quests = initialQuests();
     });
     document.getElementById("starterScreen").classList.remove("show");
     this.selectedStarter = null;
+    this._ensureWorldState();
+    this._questEvent("dex", { count: Object.keys(this.p.caught || {}).length });
+    this._questEvent("level", { level: 5 });
     this.sfx.ensure();
     this.sfx.level();
     toast(`${SPECIES[id].name} 加入了队伍！`, "ok");
     if (!this.p.tutorialSeen) this._showTutorial(true);
-    else this._openLevelScreen();
-  }
-
-  // ------------------------------------------------------------ 关卡选择
-  _refreshLevelScreen() {
-    const p = this.p;
-    const stars = Object.values(p.stars || {}).reduce((sum, n) => sum + (Number(n) || 0), 0);
-    const cleared = Object.keys(p.cleared || {}).length;
-    const caught = Object.keys(p.caught || {}).length;
-    const unlocked = clamp(Number(p.unlocked) || 1, 1, TOTAL_LEVELS);
-    document.getElementById("pkStars").textContent = String(stars);
-    document.getElementById("pkBar").style.width = Math.round((cleared / TOTAL_LEVELS) * 100) + "%";
-    document.getElementById("pkProgress").textContent = `已解锁 ${unlocked} / ${TOTAL_LEVELS} 关 · 图鉴 ${caught} / ${SPECIES_COUNT} 种`;
-    document.getElementById("pkMoney").textContent = String(Number(p.money) || 0);
-    document.getElementById("pkTeamMini").innerHTML = (p.team || []).map((mon) =>
-      `<span class="mini-mon" title="${SPECIES[mon.species].name}">${monsterSVG(mon.species)}</span>`
-    ).join("") || '<span class="mini-empty">?</span>';
-
-    const btn = document.getElementById("pkContinue");
-    if (!p.starter) btn.textContent = "选择初始伙伴";
-    else if (cleared >= TOTAL_LEVELS) btn.textContent = "再战冠军";
-    else btn.textContent = `继续第 ${this._continueLevelId()} 关`;
-
-    this._renderLevelGrid();
-  }
-
-  _renderLevelGrid() {
-    const state = this.p;
-    const unlocked = clamp(Number(state.unlocked) || 1, 1, TOTAL_LEVELS);
-    const stars = state.stars || {};
-    const starter = state.starter;
-    document.getElementById("levelGrid").innerHTML = LEVELS.map((lv) => {
-      const locked = lv.id > unlocked;
-      const s = Number(stars[lv.id]) || 0;
-      const first = getLevelEnemies(lv, starter)[0];
-      const current = !locked && lv.id === unlocked && !(state.cleared || {})[lv.id];
-      return `<button class="level-card theme-${lv.theme} ${locked ? "locked" : ""} ${current ? "current" : ""}" data-level="${lv.id}" ${locked ? 'aria-disabled="true"' : ""}>
-        <span class="lv-thumb">${monsterSVG(first.species)}</span>
-        <span>
-          <span class="lv-name">${String(lv.id).padStart(2, "0")} · ${lv.name}</span>
-          <span class="lv-sub">${lv.sub}</span>
-          <span class="lv-stars">${[1, 2, 3].map((i) => `<span class="${s >= i ? "on" : ""}">★</span>`).join("")}</span>
-        </span>
-        ${locked ? `<span class="lv-lock">${icon("lock")}</span>` : ""}
-      </button>`;
-    }).join("");
+    else this._enterWorld();
   }
 
   // ------------------------------------------------------------ 队伍 / 图鉴 / 商店
@@ -556,21 +898,29 @@ class PokemonGame {
   }
 
   // ------------------------------------------------------------ 战斗初始化
-  startBattle(id) {
-    const level = getLevel(id);
+  startEncounter(species, level, zone) {
     const team = (this.p.team || []).map((mon) => this._runtime(mon));
     if (!team.length) {
       toast("请先选择初始宝可梦", "err");
       return;
     }
-    const enemies = getLevelEnemies(level, this.p.starter).map((e) => this._makeEnemy(e));
-    this._hideScreens();
-    this.lastLevelId = level.id;
+    const mon = createMon(species, level);
+    const reward = Math.round(40 + level * 12 + (zone.tier || 1) * 40);
+    const drop = Math.random() < 0.28 ? { pokeBall: 1 } : {};
+    this.lastEncounter = { species, level, zone };
     this.battle = {
-      level,
-      wild: Boolean(level.wild),
-      trainer: level.trainer || null,
-      enemies,
+      level: {
+        id: 0,
+        name: zone.name,
+        sub: "野生宝可梦",
+        theme: zone.theme,
+        wild: true,
+        reward,
+        items: drop,
+      },
+      wild: true,
+      trainer: null,
+      enemies: [this._runtime(mon)],
       enemyIndex: 0,
       team,
       active: 0,
@@ -586,9 +936,10 @@ class PokemonGame {
     this.cheatOpen = false;
     this.pauseOpen = false;
     this._clearSub();
+    this._hideScreens();
     document.getElementById("battleScreen").classList.add("show");
-    document.getElementById("battlePlace").textContent = `${level.name} · ${level.sub}`;
-    document.getElementById("battleField").dataset.theme = level.theme;
+    document.getElementById("battlePlace").textContent = `${zone.name} · 野生遭遇`;
+    document.getElementById("battleField").dataset.theme = zone.theme;
     const rotateTip = document.getElementById("rotateTip");
     rotateTip.classList.remove("hide");
     if (this._rotateTimer) clearTimeout(this._rotateTimer);
@@ -602,15 +953,8 @@ class PokemonGame {
 
   async _battleIntro() {
     this.sfx.ensure();
-    this.sfx.encounter();
-    await sleep(260);
-    const level = this.battle.level;
-    if (level.intro) await this._say(level.intro, 850);
-    if (this.battle.wild) {
-      await this._say(`野生的 ${this._name(this._foe())} 出现了！`, 700);
-    } else {
-      await this._say(`${this.battle.trainer} 派出了 ${this._name(this._foe())}！`, 700);
-    }
+    await sleep(220);
+    await this._say(`野生的 ${this._name(this._foe())} 从草丛里跳了出来！`, 780);
     if (!this.battle) return;
     this.busy = false;
     this.phase = "choose";
@@ -633,10 +977,6 @@ class PokemonGame {
       }),
       catchRate: SPECIES[mon.species].catchRate,
     };
-  }
-
-  _makeEnemy(entry) {
-    return this._runtime(createMon(entry.species, entry.level));
   }
 
   _sp(rt) { return SPECIES[rt.mon.species]; }
@@ -1233,6 +1573,7 @@ class PokemonGame {
     this.store.update((p) => {
       p.caught = p.caught || {};
       p.caught[mon.species] = true;
+      p.catches = (Number(p.catches) || 0) + 1;
       p.team = p.team || [];
       p.box = p.box || [];
       if (p.team.length < 3) {
@@ -1244,6 +1585,9 @@ class PokemonGame {
       }
     });
     this.battle.caught = { species: mon.species, dest };
+    const dexCount = Object.keys(this.p.caught || {}).length;
+    this._questEvent("catch", { species: mon.species, types: sp.types, count: dexCount });
+    this._questEvent("dex", { count: dexCount });
     this.sfx.catch();
     await this._say(`太好了！成功捕获了 ${sp.name}！`, 800);
     await this._say(`${sp.name} 加入了${dest}。`, 650);
@@ -1292,7 +1636,8 @@ class PokemonGame {
       this.battle.over = true;
       this.phase = "over";
       await this._say("成功逃走了！", 600);
-      this._openLevelScreen();
+      this.encounterGrace = 2.2;
+      this._enterWorld();
       toast("已离开战斗", "", 1600);
     } else {
       await this._say("没能逃走！", 600);
@@ -1401,22 +1746,18 @@ class PokemonGame {
     b.over = true;
     this.busy = true;
     this.phase = "over";
-    const stars = b.faints === 0 ? 3 : b.faints === 1 ? 2 : 1;
     const money = Number(b.level.reward) || 0;
-    b.stars = stars;
     b.money = money;
     this.store.update((p) => {
       p.money = (Number(p.money) || 0) + money;
-      p.stars = p.stars || {};
-      p.stars[b.level.id] = Math.max(Number(p.stars[b.level.id]) || 0, stars);
-      p.cleared = p.cleared || {};
-      p.cleared[b.level.id] = true;
-      p.unlocked = Math.max(Number(p.unlocked) || 1, Math.min(TOTAL_LEVELS, b.level.id + 1));
+      p.wins = (Number(p.wins) || 0) + 1;
       p.items = p.items || {};
       for (const [id, n] of Object.entries(b.level.items || {})) {
         p.items[id] = (Number(p.items[id]) || 0) + n;
       }
     });
+    this._questEvent("win", {});
+    this._questEvent("level", { level: Math.max(...(this.p.team || []).map((m) => m.level || 1), 1) });
     this.sfx.win();
     await this._say(byCatch ? "捕获成功！" : "战斗胜利！", 650);
     this._showResult(true);
@@ -1429,24 +1770,18 @@ class PokemonGame {
     this.phase = "over";
     this.battle.stars = 0;
     this.sfx.lose();
-    await this._say("眼前一黑……", 750);
+    await this._say("眼前一黑……被博士送回了研究所", 900);
     this._showResult(false);
   }
 
   _showResult(win) {
     const b = this.battle;
     if (!b) return;
-    const level = b.level;
-    const stars = b.stars || 0;
     const $ = (id) => document.getElementById(id);
-    $("resultStars").style.display = "flex";
-    $("resultStars").querySelectorAll(".rstar").forEach((el, i) => {
-      el.classList.toggle("lit", i < stars);
-      el.style.transitionDelay = `${i * 0.12}s`;
-    });
+    $("resultStars").style.display = "none";
     $("resultTitle").textContent = win ? (b.caught ? "捕获成功！" : "战斗胜利！") : "战斗失败…";
     $("resultTitle").style.color = win ? "#2f7a4a" : "#a33a2c";
-    $("resultSub").textContent = `第 ${level.id} 关 · ${level.name}`;
+    $("resultSub").textContent = `${b.level.name} · 野生遭遇`;
     const caught = b.caught;
     $("resultCaught").innerHTML = caught
       ? `<span class="caught-mon">${monsterSVG(caught.species)}</span><span class="caught-text"><b>${SPECIES[caught.species].name} 已捕获</b><span>加入了${caught.dest} · 已登记图鉴</span></span>`
@@ -1455,21 +1790,12 @@ class PokemonGame {
     $("statFaints").textContent = String(b.faints);
     $("statCaught").textContent = String(Object.keys(this.p.caught || {}).length);
     $("resultNote").textContent = win
-      ? stars === 3 ? "三星达成：全队无人倒下，完美的一战！" : "关卡进度与宝可梦成长已保存。"
-      : "调整队伍与属性克制，再来挑战一次吧。";
-    const next = $("nextBtn");
-    if (win) {
-      next.style.display = "";
-      if (level.id < TOTAL_LEVELS) {
-        this.resultNextId = level.id + 1;
-        next.textContent = "下一关";
-      } else {
-        this.resultNextId = level.id;
-        next.textContent = "再战冠军";
-      }
-    } else {
-      next.style.display = "none";
-    }
+      ? (b.caught ? "新伙伴已加入队伍，回去找博士领取研究奖励吧。" : "战斗获得经验，委托进度已更新。")
+      : "队伍已经恢复，整理一下再回草丛吧。";
+    $("nextBtn").style.display = "";
+    $("nextBtn").textContent = "继续探索";
+    $("retryBtn").style.display = "none";
+    $("resultLevelsBtn").textContent = "回到城镇";
     $("resultScreen").classList.add("show");
   }
 
@@ -1500,8 +1826,10 @@ class PokemonGame {
   _toggleSound() {
     this.soundOn = !this.soundOn;
     this.sfx.enabled = this.soundOn;
+    audio.setEnabled(this.soundOn);
     this.store.update((p) => { p.sound = this.soundOn; });
     document.getElementById("pauseSoundBtn").textContent = this.soundOn ? "关闭音效" : "开启音效";
+    this._refreshWorldHUD();
     if (this.soundOn) { this.sfx.ensure(); this.sfx.click(); }
   }
 
@@ -1575,7 +1903,8 @@ class PokemonGame {
         for (const mon of this.p.team || []) this._levelUpMon(mon, 5);
       }
       this.store.update(() => {});
-      this._refreshLevelScreen();
+      this._questEvent("level", { level: Math.max(...(this.p.team || []).map((m) => m.level || 1), 1) });
+      this._refreshWorldHUD();
       this.sfx.level();
       toast("全队等级 +5", "ok");
     } else if (action === "masterball") {
@@ -1597,16 +1926,13 @@ class PokemonGame {
     } else if (action === "infinite") {
       this.cheats.infinite = !this.cheats.infinite;
       toast(`无限 PP / 道具：${this.cheats.infinite ? "开" : "关"}`, "ok");
-    } else if (action === "unlock") {
-      this.store.update((p) => { p.unlocked = TOTAL_LEVELS; p.tutorialSeen = true; });
-      this._refreshLevelScreen();
-      toast("已解锁全部关卡", "ok");
     } else if (action === "dex") {
       this.store.update((p) => {
         p.caught = p.caught || {};
         SPECIES_ORDER.forEach((id) => { p.caught[id] = true; });
       });
-      this._refreshLevelScreen();
+      this._questEvent("dex", { count: SPECIES_COUNT });
+      this._refreshWorldHUD();
       if (document.getElementById("teamScreen").classList.contains("show")) this._renderTeamScreen();
       toast(`已登记全部 ${SPECIES_COUNT} 种宝可梦`, "ok");
     } else if (action === "win") {
