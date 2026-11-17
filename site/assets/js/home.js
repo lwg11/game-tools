@@ -6,7 +6,7 @@ import { toast } from "./ui.js";
 markDeviceBadge(document.getElementById("deviceTag"));
 markDeviceBadge(document.getElementById("deviceTag2"));
 
-const TOTAL = { "stone-wars": 14, pvz: 12, carrot: 8 };
+const TOTAL = { "stone-wars": 14, pvz: 12, carrot: 8, pokemon: 8 };
 const els = {
   "stone-wars": {
     bar: document.getElementById("swBar"),
@@ -25,6 +25,12 @@ const els = {
     text: document.getElementById("ctProgress"),
     sync: document.getElementById("ctSync"),
     enter: document.getElementById("ctEnter"),
+  },
+  pokemon: {
+    bar: document.getElementById("pkBar"),
+    text: document.getElementById("pkProgress"),
+    sync: document.getElementById("pkSync"),
+    enter: document.getElementById("pkEnter"),
   },
 };
 
@@ -50,6 +56,9 @@ function paint(gameId, progress, isGuest) {
   }
   if (gameId === "carrot" && Number(progress.endlessBest) > 0) {
     text += ` · 无尽 ${progress.endlessBest} 波`;
+  }
+  if (gameId === "pokemon") {
+    text += ` · 图鉴 ${Object.keys(progress.caught || {}).length}/31`;
   }
   el.text.textContent = text;
   el.sync.textContent = isGuest ? "游客进度 · 登录可同步" : "已登录 · 云端存档";

@@ -111,7 +111,7 @@
 .section-head h2 { font-size: 27px; font-weight: 900; letter-spacing: -0.02em; }
 .section-head p { color: var(--muted); font-size: 13.5px; margin-top: 5px; }
 
-.game-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+.game-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
 
 .game-card {
   position: relative;

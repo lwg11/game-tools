@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0c0e12">
-  <meta name="description" content="石器游戏厅：石器大战、植物大战僵尸加强版，手机与电脑打开即玩，进度随账号云端保存。">
+  <meta name="description" content="石器游戏厅：石器大战、植物大战僵尸加强版、保卫萝卜、精灵宝可梦，手机与电脑打开即玩，进度随账号云端保存。">
   <title>石器游戏厅 · 经典怀旧游戏</title>
   <link rel="icon" href="./favicon.svg" type="image/svg+xml">
   <link rel="manifest" href="./manifest.webmanifest">
@@ -46,7 +46,7 @@
           <div class="eyebrow"><span class="pulse"></span>手机 · 电脑 · 打开即玩</div>
           <h1>回到石器时代<br><span class="hl">守住最后草坪</span></h1>
           <p class="hero-sub">
-            三款刻在记忆里的经典：投石、守草坪，再去萝卜田里摆一座炮塔。
+            四款刻在记忆里的经典：投石、守草坪、摆炮塔，再去丰缘地区收服宝可梦。
             手机触控与电脑键鼠自动适配，关卡进度跟着账号走。
           </p>
           <div class="hero-actions">
@@ -57,8 +57,8 @@
             <button class="btn ghost" id="howBtn" type="button">玩法与存档说明</button>
           </div>
           <div class="hero-stats">
-            <div><strong>3</strong><span>款经典游戏</span></div>
-            <div><strong>34</strong><span>个手工关卡</span></div>
+            <div><strong>4</strong><span>款经典游戏</span></div>
+            <div><strong>42</strong><span>个手工关卡</span></div>
             <div><strong>∞</strong><span>无尽挑战</span></div>
           </div>
         </div>
@@ -164,7 +164,7 @@
         <div class="section-head">
           <div>
             <h2>选择游戏</h2>
-            <p>三款都支持手机横屏与电脑全屏，进度自动保存。</p>
+            <p>四款都支持手机横屏与电脑全屏，进度自动保存。</p>
           </div>
           <span class="device-tag" id="deviceTag2"></span>
         </div>
@@ -434,6 +434,92 @@
               </div>
             </div>
           </article>
+
+          <article class="game-card" data-game="pokemon">
+            <a class="cover" href="./pokemon/" aria-label="进入精灵宝可梦">
+              <svg viewBox="0 0 640 360" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+                <defs>
+                  <linearGradient id="pkSky" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0" stop-color="#2e4a7a"/><stop offset="0.55" stop-color="#7fb8e8"/><stop offset="1" stop-color="#d9f0c8"/>
+                  </linearGradient>
+                  <linearGradient id="pkGrass" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0" stop-color="#7fd06a"/><stop offset="1" stop-color="#3f8d4a"/>
+                  </linearGradient>
+                  <linearGradient id="pkBallTop" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0" stop-color="#ff7a6a"/><stop offset="1" stop-color="#d83a3a"/>
+                  </linearGradient>
+                  <radialGradient id="pkBallBottom" cx="40%" cy="30%" r="80%">
+                    <stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#d8dce8"/>
+                  </radialGradient>
+                </defs>
+                <rect width="640" height="360" fill="url(#pkSky)"/>
+                <circle cx="520" cy="64" r="30" fill="#fff3b0" opacity=".9"/>
+                <g fill="#fff" opacity=".55">
+                  <ellipse cx="110" cy="66" rx="42" ry="12"/><ellipse cx="140" cy="58" rx="28" ry="10"/>
+                  <ellipse cx="330" cy="96" rx="34" ry="9"/>
+                </g>
+                <path d="M0 238h640v122H0z" fill="url(#pkGrass)"/>
+                <path d="M0 270h640M0 306h640" stroke="#2f7c4a" stroke-width="2" opacity=".18"/>
+                <g transform="translate(452 196) rotate(-14)">
+                  <ellipse cx="0" cy="86" rx="92" ry="20" fill="#1c2a3a" opacity=".22"/>
+                  <circle r="78" fill="url(#pkBallBottom)"/>
+                  <path d="M-78 0a78 78 0 00156 0z" fill="url(#pkBallTop)"/>
+                  <rect x="-78" y="-10" width="156" height="20" fill="#1c2230"/>
+                  <circle r="26" fill="#1c2230"/>
+                  <circle r="18" fill="#f4f4f8"/>
+                  <circle r="10" fill="#d8dce8"/>
+                  <circle cx="-9" cy="-9" r="4" fill="#fff" opacity=".8"/>
+                </g>
+                <g transform="translate(188 244)">
+                  <ellipse cx="0" cy="42" rx="44" ry="9" fill="#1c2a3a" opacity=".2"/>
+                  <ellipse cx="0" cy="10" rx="34" ry="36" fill="#ffb03a"/>
+                  <ellipse cx="0" cy="18" rx="24" ry="24" fill="#ffd47a" opacity=".55"/>
+                  <circle cx="0" cy="-30" r="28" fill="#ffb03a"/>
+                  <path d="M0 -56c-7-14 2-20 5-6 4-12 12-10 8 4-5 6-9 7-13 2z" fill="#ff7a2f"/>
+                  <path d="M-4 -30l8 5 8-5-8 9z" fill="#ff7a2f"/>
+                  <circle cx="-10" cy="-33" r="4" fill="#2a1a08"/><circle cx="12" cy="-33" r="4" fill="#2a1a08"/>
+                  <circle cx="-11" cy="-34" r="1.4" fill="#fff"/><circle cx="11" cy="-34" r="1.4" fill="#fff"/>
+                  <path d="M-7 -20c4 3 10 3 14 0" fill="none" stroke="#a04a10" stroke-width="2" stroke-linecap="round"/>
+                  <path d="M-22 46v10M22 46v10" stroke="#e8702a" stroke-width="5" stroke-linecap="round"/>
+                  <path d="M-32 56h16M16 56h16" stroke="#e8702a" stroke-width="5" stroke-linecap="round"/>
+                </g>
+                <g fill="#3f7f3a">
+                  <path d="M300 300c2-16 6-22 10-24-2 10-2 18 2 24z"/>
+                  <path d="M320 306c4-12 10-16 16-18-4 8-6 14-4 18z"/>
+                  <path d="M70 312c0-14 4-20 8-24-2 10-2 18 0 24z"/>
+                </g>
+                <g fill="#ffe9a0">
+                  <path d="M96 132l3 8 8 3-8 3-3 8-3-8-8-3 8-3z"/>
+                  <path d="M352 172l2.4 6 6 2.4-6 2.4-2.4 6-2.4-6-6-2.4 6-2.4z" opacity=".8"/>
+                </g>
+                <text x="34" y="322" font-family="Arial Black, sans-serif" font-size="23" fill="#f8ffe8" letter-spacing="1">POKÉMON · HOENN</text>
+                <text x="36" y="342" font-family="Arial, sans-serif" font-size="11" fill="#e8f7d0" letter-spacing="4">精灵宝可梦 · 丰缘冒险</text>
+              </svg>
+              <span class="badge hot">捕捉养成</span>
+              <span class="play-fab">
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>
+              </span>
+            </a>
+            <div class="card-body">
+              <div class="card-title-row">
+                <div>
+                  <h3>精灵宝可梦 · 丰缘冒险</h3>
+                  <p class="card-sub">Pokémon Hoenn Adventure</p>
+                </div>
+                <span class="level-pill" id="pkLevel">8 关 · 31 种</span>
+              </div>
+              <p class="card-desc">火稚鸡、木守宫、水跃鱼三选一。属性克制、捕捉、升级进化，8 个关卡挑战冠军，还带金手指。</p>
+              <div class="tags"><span>回合制</span><span>捕捉养成</span><span>31 种宝可梦</span></div>
+              <div class="progress-line">
+                <div class="bar green"><i id="pkBar" style="width:0%"></i></div>
+                <span id="pkProgress">读取中…</span>
+              </div>
+              <div class="card-actions">
+                <span class="sync-hint" id="pkSync">游客进度 · 登录可同步</span>
+                <a class="btn primary" href="./pokemon/" id="pkEnter">开始游戏</a>
+              </div>
+            </div>
+          </article>
         </div>
       </section>
 
@@ -470,7 +556,7 @@
       <div class="modal-head">
         <div>
           <div class="modal-title">怎么玩 & 怎么存档</div>
-          <div class="modal-sub">三款游戏的操作与进度规则</div>
+          <div class="modal-sub">四款游戏的操作与进度规则</div>
         </div>
         <button class="modal-close" id="howClose" aria-label="关闭">✕</button>
       </div>
@@ -489,6 +575,10 @@
         </div>
         <div class="how-item">
           <span class="how-num">4</span>
+          <div><h4>精灵宝可梦 · 丰缘冒险</h4><p>三选一初始伙伴，回合制对战；火克草、水克火、电克水。<br>野生关卡可扔精灵球捕捉，HP 越低越容易捕获。<br>8 个关卡挑战冠军，队伍最多 3 只，其余存入电脑。</p></div>
+        </div>
+        <div class="how-item">
+          <span class="how-num">5</span>
           <div><h4>账号与进度</h4><p>支持用户名或手机号登录。手机号绑定后全局唯一，可直接用于登录，不需要验证码。<br>未登录也能玩，进度保存在当前浏览器；登录时自动合并两者。</p></div>
         </div>
       </div>

@@ -1,7 +1,7 @@
 {
   "name": "石器游戏厅",
   "short_name": "石器游戏厅",
-  "description": "石器大战、植物大战僵尸加强版，手机与电脑打开即玩。",
+  "description": "石器大战、植物大战僵尸加强版、保卫萝卜、精灵宝可梦，手机与电脑打开即玩。",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

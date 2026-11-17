@@ -9,7 +9,7 @@ import { api } from "./api.js";
 
 const KEY_PREFIX = "gt.progress.v1.";
 
-export const GAME_IDS = ["stone-wars", "pvz", "carrot"];
+export const GAME_IDS = ["stone-wars", "pvz", "carrot", "pokemon"];
 
 export const DEFAULT_PROGRESS = {
   "stone-wars": {
@@ -37,12 +37,35 @@ export const DEFAULT_PROGRESS = {
     tutorialSeen: false,
     sound: true,
   },
+  pokemon: {
+    unlocked: 1,
+    stars: {},
+    cleared: {},
+    endlessBest: 0,
+    tutorialSeen: false,
+    sound: true,
+    money: 1200,
+    items: {
+      potion: 3,
+      superPotion: 1,
+      hyperPotion: 0,
+      pokeBall: 5,
+      greatBall: 1,
+      ultraBall: 0,
+      masterBall: 0,
+    },
+    team: [],
+    box: [],
+    caught: {},
+    starter: null,
+  },
 };
 
 export const GAME_NAMES = {
   "stone-wars": "石器大战",
   pvz: "植物大战僵尸加强版",
   carrot: "保卫萝卜",
+  pokemon: "精灵宝可梦",
 };
 
 function clone(obj) {
@@ -98,6 +121,37 @@ export function mergeProgress(gameId, remote, local) {
       cleared: { ...(a.cleared || {}), ...(b.cleared || {}) },
       bestTurns,
       endlessBest: Math.max(Number(a.endlessBest) || 0, Number(b.endlessBest) || 0),
+      tutorialSeen: Boolean(a.tutorialSeen || b.tutorialSeen),
+      sound: b.sound !== false,
+    };
+  }
+  if (gameId === "pokemon") {
+    // 宝可梦按 uid 合并，队伍优先使用本地，其余进入电脑
+    const byUid = new Map();
+    [...(b.team || []), ...(b.box || []), ...(a.team || []), ...(a.box || [])].forEach((m) => {
+      if (m && m.uid) byUid.set(m.uid, m);
+    });
+    const preferredTeam = ((b.team || []).length ? b.team : (a.team || []))
+      .map((m) => byUid.get(m.uid) || m)
+      .slice(0, 3);
+    const teamUids = new Set(preferredTeam.map((m) => m.uid));
+    const box = [...byUid.values()].filter((m) => !teamUids.has(m.uid));
+    const items = { ...(a.items || {}) };
+    Object.keys(b.items || {}).forEach((k) => {
+      items[k] = Math.max(Number(items[k]) || 0, Number(b.items[k]) || 0);
+    });
+    return {
+      ...a,
+      unlocked: Math.max(Number(a.unlocked) || 1, Number(b.unlocked) || 1),
+      stars: mergeMaps(a.stars, b.stars),
+      cleared: { ...(a.cleared || {}), ...(b.cleared || {}) },
+      money: Math.max(Number(a.money) || 0, Number(b.money) || 0),
+      items,
+      caught: { ...(a.caught || {}), ...(b.caught || {}) },
+      team: preferredTeam,
+      box,
+      starter: b.starter || a.starter || null,
+      endlessBest: 0,
       tutorialSeen: Boolean(a.tutorialSeen || b.tutorialSeen),
       sound: b.sound !== false,
     };
