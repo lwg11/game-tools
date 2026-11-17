@@ -43,7 +43,7 @@
         </div>
 
         <div class="weapon-bar" id="weaponBar"></div>
-        <div class="aim-hint" id="aimHint">按住拖动瞄准 · 松手发射 · 拖回原点取消</div>
+        <div class="aim-hint" id="aimHint">按住拖动瞄准 · 松手发射 · 拖得越长力度越大</div>
 
         <div class="touch-pad" id="touchPad">
           <button class="pad-btn" data-move="left" aria-label="向左移动">←</button>
@@ -96,7 +96,7 @@
 
       <div class="level-grid" id="levelGrid"></div>
       <p class="ls-foot">
-        关卡为回合制，无限模式没有回合上限 · 拖动瞄准，松手发射，拖回原点取消<br>
+        关卡为回合制，无限模式没有回合上限 · 拖动瞄准，松手发射，拖动越远力度越大<br>
         三星条件：全员存活，并在目标回合内结束战斗
       </p>
     </div>
@@ -114,7 +114,7 @@
         <div class="tut-item">
           <div class="tut-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></div>
           <h3>瞄准与开火</h3>
-          <p>按住任意位置朝射击方向拖动，松手立即发射；如果拖出去又拖回原点，则会取消这次发射。</p>
+          <p>按住任意位置朝射击方向拖动，松手立即发射，拖动距离决定力度；松开后不会再因为位置回拉而取消。</p>
         </div>
         <div class="tut-item">
           <div class="tut-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 8h10a3 3 0 100-6"/><path d="M3 13h14a3 3 0 110 6"/><path d="M3 18h7"/></svg></div>
@@ -124,7 +124,7 @@
         <div class="tut-item">
           <div class="tut-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 2l2.2 5.2L20 5.5l-3.2 4.5L22 13l-5.5 1.2L18 20l-5-2.5L10 22l-1-5.7L4 18l2-5.3L2 9l5.7-.4z"/></svg></div>
           <h3>回合制对决</h3>
-          <p>关卡中你发射一次后轮到敌方行动，轮流出招；无限模式取消回合上限，只有一方全部倒下才结束，对面全灭即胜利。</p>
+          <p>关卡中双方轮流行动：你移动、跳跃并发射一次，敌方同样会走位起跳后还击；无限模式没有回合上限，把对方全部打倒即胜利。</p>
         </div>
         <div class="tut-item">
           <div class="tut-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 20L18 6"/><path d="M15 4l5 1-1 5z"/><path d="M6 17l4 4"/></svg></div>
@@ -133,7 +133,7 @@
         </div>
       </div>
       <div class="tut-controls">
-        <span><b>手机</b> 左侧移动 · 右侧跳跃 · 拖动瞄准，松手发射，拖回原点取消 · 可点“切换”换人</span>
+        <span><b>手机</b> 左侧移动 · 右侧跳跃 · 拖动瞄准，松手发射 · 可点“切换”换人</span>
         <span><b>电脑</b> A/D 移动 · W 跳跃 · 鼠标拖动瞄准，松手发射 · 1-7 切换武器</span>
       </div>
       <button class="btn primary block" id="tutorialStart" type="button">开始第 1 关</button>

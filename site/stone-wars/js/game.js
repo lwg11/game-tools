@@ -1290,8 +1290,6 @@ class StoneWars {
   _onPointerUp(e) {
     if (!this.aim.active) return;
     e.preventDefault();
-    this._updateAimFromEvent(e);
-    const dragLen = this.aim.dragLen;
     const maxDrag = this.aim.maxDrag;
     const angle = this.aim.angle;
     const power = this.aim.power;
@@ -1317,13 +1315,7 @@ class StoneWars {
       return;
     }
 
-    // 拖出去后又拖回原点：取消这次发射
-    if (dragLen < 26) {
-      this.sfx.click();
-      toast("已取消发射");
-      return;
-    }
-
+    // 松手即发射：不再因拖回原点而取消，避免误触丢回合
     this.firePlayer(angle, power);
   }
 
@@ -1346,9 +1338,16 @@ class StoneWars {
     const len = Math.hypot(dx, dy);
     this.aim.dragLen = len;
     this.aim.maxDrag = Math.max(this.aim.maxDrag || 0, len);
-    if (len >= 5) this.aim.angle = Math.atan2(dy, dx);
-    // 世界坐标下拖动 18~300px 映射为 12%~100% 力度，拖得更长便于精细控制
-    this.aim.power = clamp((len - 18) / 282, 0.12, 1);
+    // 角度死区 + 平滑：轻微手抖不会让准星乱跳
+    if (len >= 26) {
+      const raw = Math.atan2(dy, dx);
+      let delta = raw - this.aim.angle;
+      while (delta > Math.PI) delta -= TAU;
+      while (delta < -Math.PI) delta += TAU;
+      this.aim.angle += delta * 0.35;
+    }
+    // 世界坐标下拖动 44~374px 映射为 12%~100% 力度，拉长映射降低灵敏度
+    this.aim.power = clamp((len - 44) / 330, 0.12, 1);
     u.facing = Math.cos(this.aim.angle) >= 0 ? 1 : -1;
   }
 
@@ -1486,15 +1485,68 @@ class StoneWars {
     this.moveBudget = 0;
     this.enemyAim = null;
     this.aiMove = null;
+    this.enemyMove = null;
     this._activeEnemy();
     this._updateHUD();
-    this._showBanner("敌方回合", "对方正在计算落点", true);
+    this._showBanner("敌方回合", "对方正在走位并计算落点", true);
     this._hideAimHint();
-    this._addTimer(0.65, () => this._enemyDecide());
+    this._addTimer(0.5, () => this._enemyMove());
+  }
+
+  /** 敌方回合先走位（被挡住会起跳），再瞄准开火 */
+  _enemyMove() {
+    if (this.phase !== "enemyWait") return;
+    const u = this._activeEnemy();
+    if (!u) { this.finish(true); return; }
+    const targets = this.players.filter((p) => p.alive);
+    if (!targets.length) { this.finish(false, "族人全部倒下"); return; }
+    const nearest = targets.reduce((a, b) => (Math.abs(a.x - u.x) < Math.abs(b.x - u.x) ? a : b), targets[0]);
+    const dist = Math.abs(nearest.x - u.x);
+    let dir = 0;
+    if (dist > 430) dir = Math.sign(nearest.x - u.x);
+    else if (dist < 190) dir = -Math.sign(nearest.x - u.x);
+    else if (Math.random() < 0.55) dir = Math.random() < 0.5 ? -1 : 1;
+    if (!dir) {
+      this._addTimer(0.2, () => this._enemyDecide());
+      return;
+    }
+    this.enemyMove = { dir, t: rand(0.55, 0.95) };
+    this.phase = "enemyMove";
+    this._updateHUD();
+  }
+
+  _updateEnemyMovement(dt) {
+    const m = this.enemyMove;
+    const u = this._activeEnemy();
+    if (!m || !u || !u.alive) {
+      this.enemyMove = null;
+      this._enemyDecide();
+      return;
+    }
+    const step = m.dir * 96 * dt;
+    const before = u.x;
+    if (u.onGround) {
+      if (u.tryMove(step)) {
+        u.moveSpeed = m.dir * 96;
+        u.facing = m.dir;
+      } else {
+        // 被地形挡住：起跳翻越并继续前进
+        u.jump();
+        m.t -= dt * 1.5;
+      }
+    } else {
+      u.tryMove(step);
+    }
+    if (Math.abs(u.x - before) < 0.05) m.t -= dt * 0.5;
+    m.t -= dt;
+    if (m.t <= 0) {
+      this.enemyMove = null;
+      this._enemyDecide();
+    }
   }
 
   _enemyDecide() {
-    if (this.phase !== "enemyWait") return;
+    if (this.phase !== "enemyWait" && this.phase !== "enemyMove") return;
     const u = this._activeEnemy();
     if (!u) { this.finish(true); return; }
     const targets = this.players.filter((p) => p.alive);
@@ -1509,7 +1561,7 @@ class StoneWars {
   }
 
   _enemyAim(target) {
-    if (this.phase !== "enemyWait") return;
+    if (this.phase !== "enemyWait" && this.phase !== "enemyMove") return;
     const u = this._activeEnemy();
     if (!u) return;
     this.aiMove = null;
@@ -1681,6 +1733,10 @@ class StoneWars {
     if (this.turnTeam === 0) {
       this._beginEnemyTurn();
     } else {
+      // 敌方多名单位轮流行动：每回合轮换下一个出手的敌人
+      if (this.enemies.length) {
+        this.activeEnemyIndex = (this.activeEnemyIndex + 1) % this.enemies.length;
+      }
       this.turnNo += 1;
       this._beginPlayerTurn();
     }
@@ -1728,6 +1784,7 @@ class StoneWars {
       const u = this._activePlayer();
       if (u) this._updatePlayingMovement(u, dt);
     }
+    if (this.phase === "enemyMove") this._updateEnemyMovement(dt);
     for (const u of this.units) u.update(dt);
     this.units = this.units.filter((u) => u.alive || u.team === 0 || u.deathT < 1.6);
     this.enemies = this.enemies.filter((u) => u.alive || u.deathT < 1.6);
