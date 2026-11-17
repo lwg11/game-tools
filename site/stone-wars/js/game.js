@@ -9,6 +9,7 @@ import "../../assets/js/device.js";
 import { ProgressStore } from "../../assets/js/progress.js";
 import { initAccount } from "../../assets/js/account.js";
 import { icon, toast } from "../../assets/js/ui.js";
+import { audio } from "../../assets/js/audio.js";
 import {
   WORLD, LEVELS, WEAPONS, WEAPON_ORDER, ENEMY_TYPES, THEMES, getLevel, getEndlessLevel,
 } from "./levels.js";
@@ -36,7 +37,7 @@ class Sfx {
       if (!AC) return null;
       this.ctx = new AC();
       this.master = this.ctx.createGain();
-      this.master.gain.value = 0.26;
+      this.master.gain.value = 0.5;
       this.master.connect(this.ctx.destination);
     }
     if (this.ctx.state === "suspended") this.ctx.resume();
@@ -862,6 +863,7 @@ class StoneWars {
       startWorld: null,
       currentWorld: null,
       dragLen: 0,
+      maxDrag: 0,
     };
     this.enemyAim = null;
     this.aiMove = null;
@@ -896,6 +898,8 @@ class StoneWars {
     await this.store.init();
     this.soundOn = this.store.state.sound !== false;
     this.sfx.enabled = this.soundOn;
+    audio.setEnabled(this.soundOn);
+    audio.setMusic("stone");
     this._updateSoundButtons();
     this._refreshLevelSummary();
     this.store.onChange(() => this._refreshLevelSummary());
@@ -950,7 +954,8 @@ class StoneWars {
       if (card && !card.classList.contains("locked")) this.startLevel(Number(card.dataset.level));
     });
     $("nextBtn").addEventListener("click", () => {
-      if (!this.level || this.level.endless) return;
+      if (!this.level) return;
+      if (this.level.endless) { this.startLevel(0); return; }
       const next = this.level.id + 1;
       if (next <= LEVELS.length) this.startLevel(next);
       else this.startLevel(0);
@@ -958,8 +963,6 @@ class StoneWars {
     $("retryBtn").addEventListener("click", () => { if (this.level) this.startLevel(this.level.id); });
     $("resultLevelsBtn").addEventListener("click", () => this._openLevelScreen());
     $("rotateTip").addEventListener("click", () => document.getElementById("rotateTip").classList.add("hide"));
-    $("fireBtn").addEventListener("click", () => { this.sfx.ensure(); this._fireFromButton(); });
-    $("cancelAimBtn").addEventListener("click", () => { this.sfx.ensure(); this._cancelAim(); });
     $("switchUnit").addEventListener("click", () => { this.sfx.ensure(); this._cyclePlayer(); });
 
     // 武器栏
@@ -1020,13 +1023,6 @@ class StoneWars {
           this._cancelAim();
         } else if (this.phase === "aim") {
           this._openPause();
-        }
-        return;
-      }
-      if (k === "enter" || k === "f") {
-        if (this.phase === "aim" && !this.paused) {
-          e.preventDefault();
-          this._fireFromButton();
         }
         return;
       }
@@ -1205,7 +1201,7 @@ class StoneWars {
       this.players.push(u);
       this.units.push(u);
     });
-    const hpMul = this.level.endless ? 1 : 1.25;
+    const hpMul = this.level.endless ? 1.35 : 1.25;
     (this.level.enemies || []).forEach((e, i) => {
       const cfg = ENEMY_TYPES[e.type] || ENEMY_TYPES.grunt;
       const x = clamp(e.x, 20, W - 20);
@@ -1218,22 +1214,18 @@ class StoneWars {
       this.units.push(u);
     });
 
+    this.turnLimit = this.level.endless ? Infinity : (Number(this.level.turnLimit) || 99);
     this.wind = this._rollWind();
     this.phase = "aim";
     this.paused = false;
     this._buildBackground();
     this._makeAmbient();
     this._refreshWeaponBar();
-    this._refreshFireButton();
     this._updateHUD();
-    this._showBanner(
-      this.level.endless ? "无限模式" : "战斗开始",
-      this.level.endless ? "消灭不断来袭的敌人，看看能撑到第几波" : "消灭所有敌人，对面全灭即胜利"
-    );
     this._showAimHint();
     this._clearTimers();
     this.sfx.ensure();
-    this.sfx.turn();
+    this._beginPlayerTurn();
   }
 
   _spawnY(x) {
@@ -1285,8 +1277,8 @@ class StoneWars {
     this.aim.startWorld = { x: p.x, y: p.y };
     this.aim.currentWorld = { x: p.x, y: p.y };
     this.aim.dragLen = 0;
+    this.aim.maxDrag = 0;
     this.aim.power = 0.12;
-    this._refreshFireButton();
   }
 
   _onPointerMove(e) {
@@ -1300,13 +1292,19 @@ class StoneWars {
     e.preventDefault();
     this._updateAimFromEvent(e);
     const dragLen = this.aim.dragLen;
+    const maxDrag = this.aim.maxDrag;
+    const angle = this.aim.angle;
+    const power = this.aim.power;
     const tap = this.aim.startWorld ? { ...this.aim.startWorld } : null;
     this.aim.active = false;
+    this.aim.locked = false;
     this.aim.startWorld = null;
     this.aim.currentWorld = null;
     this.aim.dragLen = 0;
-    if (dragLen < 40) {
-      // 轻点队友可以切换操控单位
+    this.aim.maxDrag = 0;
+
+    // 轻点队友可以切换操控单位
+    if (maxDrag < 40) {
       if (tap) {
         const other = this.players.find((p) => p.alive && p !== this._activePlayer()
           && Math.hypot(p.x - tap.x, p.y - 30 - tap.y) < 55);
@@ -1315,14 +1313,18 @@ class StoneWars {
           return;
         }
       }
-      toast("按住后朝射击方向拖远一点，松手锁定弹道");
-      this._refreshFireButton();
+      toast("按住后朝射击方向拖远一点，松手发射");
       return;
     }
-    // 松手只锁定弹道，不会发射；点右下角“发射”才开火
-    this.aim.locked = true;
-    this._refreshFireButton();
-    this._updateHUD();
+
+    // 拖出去后又拖回原点：取消这次发射
+    if (dragLen < 26) {
+      this.sfx.click();
+      toast("已取消发射");
+      return;
+    }
+
+    this.firePlayer(angle, power);
   }
 
   _canvasPoint(e) {
@@ -1343,37 +1345,17 @@ class StoneWars {
     const dy = p.y - this.aim.startWorld.y;
     const len = Math.hypot(dx, dy);
     this.aim.dragLen = len;
+    this.aim.maxDrag = Math.max(this.aim.maxDrag || 0, len);
     if (len >= 5) this.aim.angle = Math.atan2(dy, dx);
     // 世界坐标下拖动 18~300px 映射为 12%~100% 力度，拖得更长便于精细控制
     this.aim.power = clamp((len - 18) / 282, 0.12, 1);
     u.facing = Math.cos(this.aim.angle) >= 0 ? 1 : -1;
   }
 
-  /** 根据锁定状态、冷却、弹药刷新发射/取消按钮 */
+  /** 刷新换人按钮与其他瞄准 UI */
   _refreshFireButton() {
-    const btn = document.getElementById("fireBtn");
-    if (!btn) return;
-    const u = this._activePlayer();
-    const id = this.selectedWeapon;
-    const ready = this.time >= (this.weaponReadyAt[id] || 0);
-    const hasAmmo = (this.ammo[id] || 0) > 0;
-    const enabled = Boolean(this.level && this.phase === "aim" && !this.paused
-      && u && u.alive && this.aim.locked && ready && hasAmmo);
-    btn.classList.toggle("disabled", !enabled);
-    btn.title = !this.aim.locked ? "先拖动瞄准" : !ready ? "武器冷却中" : !hasAmmo ? "弹药耗尽" : "发射";
-    const cancel = document.getElementById("cancelAimBtn");
-    if (cancel) cancel.classList.toggle("show", this.aim.active || this.aim.locked);
     const sw = document.getElementById("switchUnit");
     if (sw) sw.style.display = this.players.filter((p) => p.alive).length > 1 ? "" : "none";
-  }
-
-  _fireFromButton() {
-    if (this.phase !== "aim" || this.paused) return;
-    if (!this.aim.locked) {
-      toast("先拖动瞄准，再点发射");
-      return;
-    }
-    this.firePlayer(this.aim.angle, this.aim.power);
   }
 
   _cancelAim() {
@@ -1382,6 +1364,7 @@ class StoneWars {
     this.aim.startWorld = null;
     this.aim.currentWorld = null;
     this.aim.dragLen = 0;
+    this.aim.maxDrag = 0;
     this._refreshFireButton();
     this._updateHUD();
   }
@@ -1414,7 +1397,7 @@ class StoneWars {
 
   // ------------------------------------------------------------ 玩家行动
   firePlayer(angle = this.aim.angle, power = this.aim.power) {
-    if (this.phase !== "aim" || this.paused) return false;
+    if (this.phase !== "aim" || this.paused || this.turnTeam !== 0) return false;
     const u = this._activePlayer();
     if (!u || !u.alive) return false;
     let id = this.selectedWeapon;
@@ -1440,10 +1423,18 @@ class StoneWars {
       Math.cos(angle) * speed, Math.sin(angle) * speed, 0
     ));
     u.facing = Math.cos(angle) >= 0 ? 1 : -1;
-    // 实时模式：不切换回合，也不进入飞行等待；冷却结束后可继续射击
+    // 回合制：发射后进入飞行结算，弹道结束后轮到敌方
     this.aim.angle = angle;
     this.aim.power = power;
-    this.aim.locked = true;
+    this.aim.active = false;
+    this.aim.locked = false;
+    this.aim.startWorld = null;
+    this.aim.currentWorld = null;
+    this.aim.dragLen = 0;
+    this.aim.maxDrag = 0;
+    this.phase = "flying";
+    this.turnTeam = 0;
+    this.shotReadyT = 0.55;
     this.sfx.shoot(id);
     this.spawnParticles(ox + Math.cos(angle) * 30, oy + Math.sin(angle) * 30, 6, w.color, "spark");
     this._refreshWeaponBar();
@@ -1456,7 +1447,7 @@ class StoneWars {
   // ------------------------------------------------------------ 回合推进
   _beginPlayerTurn() {
     if (this.phase === "over") return;
-    if (this.turnNo > this.level.turnLimit) {
+    if (Number.isFinite(this.turnLimit) && this.turnNo > this.turnLimit) {
       this.finish(false, "回合耗尽");
       return;
     }
@@ -1469,15 +1460,20 @@ class StoneWars {
     this.resolveT = null;
     this.enemyAim = null;
     this.aim.active = false;
+    this.aim.locked = false;
     this.aim.startWorld = null;
     this.aim.currentWorld = null;
     this.aim.dragLen = 0;
+    this.aim.maxDrag = 0;
     this._activePlayer();
     if ((this.ammo[this.selectedWeapon] || 0) <= 0) this.selectedWeapon = "spear";
     this._updateHUD();
     this._refreshWeaponBar();
-    this._showBanner("你的回合", `第 ${this.turnNo} 回合 · 注意风向`);
-    this._updateHUD();
+    this._refreshFireButton();
+    if (this.turnNo <= 2) this._showAimHint();
+    this._showBanner("你的回合", this.level.endless
+      ? `第 ${this.turnNo} 回合 · 无回合上限`
+      : `第 ${this.turnNo} / ${this.turnLimit} 回合 · 注意风向`);
     this.sfx.turn();
   }
 
@@ -1487,7 +1483,6 @@ class StoneWars {
     if (!this.players.some((u) => u.alive)) { this.finish(false, "族人全部倒下"); return; }
     this.turnTeam = 1;
     this.phase = "enemyWait";
-    this.wind = this._rollWind();
     this.moveBudget = 0;
     this.enemyAim = null;
     this.aiMove = null;
@@ -1504,23 +1499,17 @@ class StoneWars {
     if (!u) { this.finish(true); return; }
     const targets = this.players.filter((p) => p.alive);
     if (!targets.length) { this.finish(false, "族人全部倒下"); return; }
+    const accuracy = clamp(Number(this.level.ai) || 0.4, 0, 0.95);
     targets.sort((a, b) => a.hp - b.hp || Math.abs(a.x - u.x) - Math.abs(b.x - u.x));
-    const target = Math.random() < 0.25 ? targets[Math.floor(Math.random() * targets.length)] : targets[0];
+    // 关卡越靠后，AI 越倾向于集火残血目标
+    const focus = accuracy > 0.6 && Math.random() < accuracy * 0.7;
+    const target = focus ? targets[0] : targets[Math.floor(Math.random() * targets.length)];
     this.lastEnemyTarget = target;
-    const dist = Math.abs(target.x - u.x);
-    // 偶尔挪动位置，避免站桩对轰
-    if (dist > 340 && Math.random() < 0.55) {
-      const dir = Math.sign(target.x - u.x) * (Math.random() < 0.5 ? 1 : -1);
-      this.aiMove = { dir, time: 0.62 };
-      this.phase = "enemyMove";
-      this._addTimer(0.66, () => this._enemyAim(target));
-      return;
-    }
     this._enemyAim(target);
   }
 
   _enemyAim(target) {
-    if (this.phase !== "enemyMove" && this.phase !== "enemyWait") return;
+    if (this.phase !== "enemyWait") return;
     const u = this._activeEnemy();
     if (!u) return;
     this.aiMove = null;
@@ -1528,7 +1517,9 @@ class StoneWars {
     const sx = u.x;
     const sy = u.y - 44;
     const best = this._findBestShot(sx, sy, target, weapon);
-    const err = (1 - (Number(this.level.ai) || 0.4)) * 0.16;
+    const cfg = ENEMY_TYPES[u.type] || ENEMY_TYPES.grunt;
+    const accuracy = clamp((Number(this.level.ai) || 0.4) + (cfg.aiBonus || 0), 0, 0.96);
+    const err = (1 - accuracy) * 0.16;
     const angle = best.angle + rand(-err, err);
     const power = clamp(best.power + rand(-err * 0.6, err * 0.6), 0.2, 1);
     this.enemyAim = { angle, power, weapon };
@@ -1551,6 +1542,7 @@ class StoneWars {
     this.turnTeam = 1;
     this.enemyAim = null;
     this.resolveT = null;
+    this.shotReadyT = 0.55;
     this.sfx.shoot(weapon.id);
     this._updateHUD();
   }
@@ -1731,18 +1723,10 @@ class StoneWars {
       this._updateEffects(dt);
       return;
     }
+    if (this.phase === "aim" || this.phase === "flying") this.battleTime += dt;
     if (this.phase === "aim") {
-      this.battleTime += dt;
-      this.windTimer -= dt;
-      if (this.windTimer <= 0) {
-        this.wind = this._rollWind();
-        this.windTimer = rand(6, 9);
-      }
       const u = this._activePlayer();
       if (u) this._updatePlayingMovement(u, dt);
-      for (const e of this.enemies) {
-        if (e.alive) this._updateEnemyAI(e, dt);
-      }
     }
     for (const u of this.units) u.update(dt);
     this.units = this.units.filter((u) => u.alive || u.team === 0 || u.deathT < 1.6);
@@ -1754,12 +1738,19 @@ class StoneWars {
       if (p.dead) this.projectiles.splice(i, 1);
     }
     this._updateEffects(dt);
-    this._updateEndless(dt);
+    if (this.phase === "flying") {
+      if (this.shotReadyT > 0) {
+        this.shotReadyT -= dt;
+      } else if (!this.projectiles.length) {
+        this._finishShot();
+        return;
+      }
+    }
     if (!this.players.some((p) => p.alive)) {
       this.finish(false, "族人全部倒下");
       return;
     }
-    if (!this.level.endless && !this.enemies.some((e) => e.alive)) {
+    if (!this.enemies.some((e) => e.alive)) {
       this.finish(true);
       return;
     }
@@ -1772,18 +1763,21 @@ class StoneWars {
   _updatePlayingMovement(u, dt) {
     const left = this.keys["a"] || this.keys["arrowleft"] || this.touch.left;
     const right = this.keys["d"] || this.keys["arrowright"] || this.touch.right;
-    if (left === right) {
+    if (left === right || this.moveBudget <= 0) {
       u.moveSpeed *= 0.8;
       return;
     }
     const dir = left ? -1 : 1;
+    const step = dir * 112 * dt;
     if (u.onGround) {
-      if (u.tryMove(dir * 112 * dt)) {
+      if (u.tryMove(step)) {
+        this.moveBudget = Math.max(0, this.moveBudget - Math.abs(step));
         u.moveSpeed = dir * 112;
         if (!this.aim.active && !this.aim.locked) u.facing = dir;
       }
     } else {
-      u.tryMove(dir * 70 * dt);
+      u.tryMove(step * 0.62);
+      this.moveBudget = Math.max(0, this.moveBudget - Math.abs(step) * 0.62);
     }
   }
 
@@ -1972,7 +1966,7 @@ class StoneWars {
   _checkEndState() {
     if (this.phase === "over" || this.phase === "menu") return;
     if (!this.players.some((u) => u.alive)) { this.finish(false, "族人全部倒下"); return; }
-    if (!this.level.endless && !this.enemies.some((u) => u.alive)) { this.finish(true); return; }
+    if (!this.enemies.some((u) => u.alive)) { this.finish(true); return; }
     this._refreshFireButton();
     this._updateHUD();
   }
@@ -1991,39 +1985,38 @@ class StoneWars {
     const isEndless = Boolean(this.level.endless);
     const totalPlayers = this.players.length;
     const alive = this.players.filter((u) => u.alive).length;
-    const parTime = this.level.parTime || (this.level.par || 4) * 12;
+    const par = Number(this.level.par) || 4;
     let stars = 0;
     let newRecord = false;
-    if (!isEndless && win) {
-      if (alive === totalPlayers && this.battleTime <= parTime) stars = 3;
-      else if (alive === totalPlayers || this.battleTime <= parTime) stars = 2;
-      else stars = 1;
-      const prevStars = Number(this.store.state.stars[this.level.id]) || 0;
-      const prevBest = Number(this.store.state.bestTurns[this.level.id]) || 9999;
-      newRecord = stars > prevStars || this.battleTime < prevBest;
-      this.store.update((p) => {
-        const next = Math.min(LEVELS.length, this.level.id + 1);
-        p.unlocked = Math.max(Number(p.unlocked) || 1, next);
-        p.stars[this.level.id] = Math.max(Number(p.stars[this.level.id]) || 0, stars);
-        p.cleared[this.level.id] = true;
-        const best = Number(p.bestTurns[this.level.id]) || 9999;
-        p.bestTurns[this.level.id] = Math.min(best, Number(this.battleTime.toFixed(1)));
-      });
+    if (win) {
+      if (isEndless) {
+        this.store.update((p) => {
+          p.endlessBest = Math.max(Number(p.endlessBest) || 0, 1);
+        });
+        this.endlessBest = Math.max(this.endlessBest, 1);
+      } else {
+        if (alive === totalPlayers && this.turnNo <= par) stars = 3;
+        else if (alive === totalPlayers || this.turnNo <= par) stars = 2;
+        else stars = 1;
+        const prevStars = Number(this.store.state.stars[this.level.id]) || 0;
+        const prevBest = Number(this.store.state.bestTurns[this.level.id]) || 9999;
+        newRecord = stars > prevStars || this.turnNo < prevBest;
+        this.store.update((p) => {
+          const next = Math.min(LEVELS.length, this.level.id + 1);
+          p.unlocked = Math.max(Number(p.unlocked) || 1, next);
+          p.stars[this.level.id] = Math.max(Number(p.stars[this.level.id]) || 0, stars);
+          p.cleared[this.level.id] = true;
+          const best = Number(p.bestTurns[this.level.id]) || 9999;
+          p.bestTurns[this.level.id] = Math.min(best, this.turnNo);
+        });
+      }
       this.sfx.win();
       this._spawnConfetti();
-    } else if (isEndless) {
-      const prevBest = this.endlessBest;
-      this.endlessBest = Math.max(this.endlessBest, this.endlessWave);
-      this.store.update((p) => {
-        p.endlessBest = Math.max(Number(p.endlessBest) || 0, this.endlessWave);
-      });
-      newRecord = this.endlessWave > prevBest;
-      this.sfx.lose();
     } else {
       this.sfx.lose();
     }
-    this.result = { win: !isEndless && win, stars, alive, reason, isEndless };
-    this._showResult(!isEndless && win, stars, alive, reason, newRecord, isEndless);
+    this.result = { win, stars, alive, reason, isEndless };
+    this._showResult(win, stars, alive, reason, newRecord, isEndless);
     this._refreshFireButton();
     this._updateHUD();
   }
@@ -2036,22 +2029,24 @@ class StoneWars {
       el.classList.toggle("lit", i < stars);
       el.style.transitionDelay = (i * 0.12) + "s";
     });
-    $("resultTitle").textContent = isEndless ? "无限模式结束" : win ? "胜利！" : "战败";
-    $("resultTitle").style.color = isEndless || win ? "#ffe0ad" : "#ff9c8f";
+    $("resultTitle").textContent = isEndless
+      ? (win ? "无限模式胜利" : "无限模式失败")
+      : (win ? "胜利！" : "战败");
+    $("resultTitle").style.color = win ? "#ffe0ad" : "#ff9c8f";
     $("resultSub").textContent = isEndless
-      ? `坚持到第 ${this.endlessWave} 波`
+      ? "无回合上限 · 对手全灭即胜利"
       : `第 ${this.level.id} 关 · ${this.level.name}`;
-    $("statTurns").textContent = `${this.battleTime.toFixed(1)}s`;
+    $("statTurns").textContent = `${this.turnNo}`;
     $("statAlive").textContent = `${alive}/${this.players.length}`;
-    $("statStars").textContent = isEndless ? `${this.endlessBest}波` : win ? `${stars}★` : "0★";
+    $("statStars").textContent = isEndless ? (win ? "胜利" : "失败") : win ? `${stars}★` : "0★";
     const starLabel = $("statStars").parentElement.querySelector("span");
-    if (starLabel) starLabel.textContent = isEndless ? "最高波次" : "获得星星";
+    if (starLabel) starLabel.textContent = isEndless ? "结果" : "获得星星";
     let note = "";
     if (isEndless) {
-      note = `本局坚持到第 ${this.endlessWave} 波 · 历史最佳 ${this.endlessBest} 波`;
+      note = win ? "无回合上限，你消灭了全部敌人" : "无限模式没有回合上限，调整武器再试一次";
       if (newRecord) note += " · 新纪录";
     } else if (win) {
-      if (stars === 3) note = "三星达成：全员存活，并在目标时间内结束战斗";
+      if (stars === 3) note = "三星达成：全员存活，并在目标回合内结束战斗";
       else if (newRecord) note = "新纪录已保存";
       else note = "进度已保存";
       if (this.level.id === LEVELS.length) note += " · 全部关卡通关";
@@ -2060,9 +2055,9 @@ class StoneWars {
     }
     $("resultNote").textContent = note;
     const next = $("nextBtn");
-    if (win && !isEndless) {
+    if (win) {
       next.style.display = "";
-      next.textContent = this.level.id < LEVELS.length ? "下一关" : "无限模式";
+      next.textContent = isEndless ? "再战无限" : (this.level.id < LEVELS.length ? "下一关" : "无限模式");
     } else {
       next.style.display = "none";
     }
@@ -2160,6 +2155,7 @@ class StoneWars {
   _toggleSound() {
     this.soundOn = !(this.soundOn !== false);
     this.sfx.enabled = this.soundOn;
+    audio.setEnabled(this.soundOn);
     this.store.update((p) => { p.sound = this.soundOn; });
     this._updateSoundButtons();
     if (this.soundOn) {
@@ -2239,9 +2235,9 @@ class StoneWars {
   _updateHUD() {
     if (!this.level) return;
     document.getElementById("hudLevel").textContent = this.level.endless
-      ? `无限模式${this.endlessWave > 0 ? " · 第 " + this.endlessWave + " 波" : ""}`
+      ? "无限模式 · 无回合上限"
       : `第 ${this.level.id} 关 · ${this.level.name}`;
-    document.getElementById("hudTime").textContent = this.battleTime.toFixed(1);
+    document.getElementById("hudTime").textContent = this.level.endless ? "∞" : String(this.turnNo);
     document.getElementById("windVal").textContent = Math.abs(this.wind).toFixed(1);
     const arrow = document.getElementById("windArrow");
     arrow.style.transform = `rotate(${this.wind >= 0 ? 90 : -90}deg)`;

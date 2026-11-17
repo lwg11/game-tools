@@ -272,60 +272,11 @@
 }
 html[data-device="desktop"] .touch-pad { display: none; }
 
-/* 右侧操作区：发射、取消、跳跃自下而上排列 */
-.fire-btn {
-  position: absolute;
-  right: calc(14px + env(safe-area-inset-right, 0px));
-  bottom: calc(13px + var(--safe-bottom));
-  width: clamp(68px, 10vh, 84px);
-  height: clamp(68px, 10vh, 84px);
-  border-radius: 50%;
-  border: 2px solid rgba(255, 210, 130, 0.75);
-  background: radial-gradient(circle at 35% 30%, #ffd98a, #f08a24 62%, #c25c12);
-  color: #361b02;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0;
-  pointer-events: auto;
-  box-shadow: 0 10px 28px rgba(255, 120, 20, 0.35), inset 0 2px 0 rgba(255, 255, 255, 0.45);
-  touch-action: none;
-  user-select: none;
-  transition: transform 0.12s, opacity 0.12s, filter 0.12s;
-}
-.fire-btn span { font-size: clamp(16px, 2.4vh, 22px); font-weight: 900; letter-spacing: 0.05em; }
-.fire-btn small { font-size: 8px; font-weight: 800; letter-spacing: 0.2em; opacity: 0.65; margin-top: 1px; }
-.fire-btn:active { transform: scale(0.95); }
-.fire-btn.disabled { opacity: 0.34; filter: saturate(0.35); box-shadow: none; }
-
-.cancel-aim-btn {
-  position: absolute;
-  right: calc(28px + env(safe-area-inset-right, 0px));
-  bottom: calc(97px + var(--safe-bottom));
-  min-width: 58px;
-  height: 32px;
-  padding: 0 10px;
-  border-radius: 9px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(16, 18, 24, 0.78);
-  color: #ffd7a3;
-  font-size: 10.5px;
-  font-weight: 800;
-  display: none;
-  align-items: center;
-  justify-content: center;
-  pointer-events: auto;
-  backdrop-filter: blur(8px);
-}
-.cancel-aim-btn.show { display: flex; }
-.cancel-aim-btn:active { transform: scale(0.95); }
-
-/* 跳跃键放在右侧发射键上方，方便左手移动、右手跳跃/开火 */
+/* 右侧操作区：拖动瞄准后松手发射，只保留跳跃键 */
 .jump-btn {
   position: absolute;
-  right: calc(24px + env(safe-area-inset-right, 0px));
-  bottom: calc(137px + var(--safe-bottom));
+  right: calc(16px + env(safe-area-inset-right, 0px));
+  bottom: calc(13px + var(--safe-bottom));
   width: clamp(48px, 7.6vh, 64px);
   height: clamp(48px, 7.6vh, 64px);
   border-radius: 50%;
@@ -720,10 +671,8 @@ html[data-device="desktop"] .jump-btn { display: none; }
   .weapon-card .w-name { font-size: 8px; }
   .pad-btn { width: 44px; height: 44px; font-size: 18px; border-radius: 11px; }
   .touch-pad { left: 8px; bottom: 8px; gap: 5px; }
-  .fire-btn { right: 8px; bottom: 8px; width: 64px; height: 64px; }
-  .cancel-aim-btn { right: 20px; bottom: 78px; height: 28px; min-width: 50px; font-size: 10px; }
-  .jump-btn { right: 16px; bottom: 112px; width: 46px; height: 46px; }
-  .aim-hint { bottom: 58px; }
+  .jump-btn { right: 12px; bottom: 8px; width: 46px; height: 46px; }
+  .aim-hint { bottom: 62px; }
   .hud-center { font-size: 10px; }
 }
 
@@ -731,7 +680,5 @@ html[data-device="desktop"] .jump-btn { display: none; }
 @media (orientation: portrait) and (max-width: 900px) {
   .weapon-bar { bottom: calc(78px + var(--safe-bottom)); }
   .aim-hint { display: none; }
-  .fire-btn { right: 12px; bottom: 12px; width: 60px; height: 60px; }
-  .jump-btn { right: 80px; bottom: 12px; width: 50px; height: 50px; }
-  .cancel-aim-btn { right: 138px; bottom: 12px; height: 34px; min-width: 48px; }
+  .jump-btn { right: 12px; bottom: 12px; width: 50px; height: 50px; }
 }

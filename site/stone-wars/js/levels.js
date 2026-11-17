@@ -421,23 +421,29 @@ export function getLevel(id) {
   return LEVELS.find((lv) => lv.id === id) || LEVELS[0];
 }
 
-/** 无限模式：实时战斗，一波一波刷敌人，记录最高波次 */
+/** 无限模式：回合制但没有回合上限，消灭全部敌人即获胜 */
 export function getEndlessLevel() {
   return {
     id: 0,
     name: "无限模式",
-    goal: "守住阵地，消灭一波又一波敌人",
+    goal: "无回合上限，消灭全部敌人",
     theme: "night",
     style: "hills",
     seed: 777,
     player: [{ x: 140 }, { x: 220 }, { x: 300 }],
-    enemies: [],
+    enemies: [
+      { x: 860, type: "chief" },
+      { x: 945, type: "brute" },
+      { x: 1025, type: "thrower" },
+      { x: 1105, type: "brute" },
+      { x: 1180, type: "chief" },
+    ],
     ammo: {
       spear: Infinity, boulder: 6, grenade: 4, banana: 3, spike: 3,
       boomerang: 5, meteor: 3,
     },
     windMax: 6,
-    ai: 0.6,
+    ai: 0.72,
     endless: true,
   };
 }
