@@ -26,6 +26,7 @@
         </div>
         <div class="ct-stat wave">波次 <b id="ctWave">0/5</b></div>
         <div class="ct-actions">
+          <button class="ct-icon-btn cheat" id="ctCheat" type="button" aria-label="金手指">✦</button>
           <button class="ct-icon-btn" id="ctSpeed" type="button" aria-label="游戏速度">1×</button>
           <button class="ct-icon-btn" id="ctSound" type="button" aria-label="声音"></button>
           <button class="ct-icon-btn" id="ctPause" type="button" aria-label="暂停"></button>
@@ -141,6 +142,27 @@
         <button class="btn block" id="pauseLevelsBtn" type="button">返回关卡选择</button>
         <button class="btn block ghost" id="pauseSoundBtn" type="button">关闭音效</button>
         <a class="btn block ghost" href="../">回到游戏厅</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- 金手指 -->
+  <section class="screen center-screen" id="cheatScreen">
+    <div class="cheat-card">
+      <div class="cheat-head">
+        <span class="tut-badge">CHEAT MODE</span>
+        <h2>金手指</h2>
+        <p>直接修改当前关卡数据；解锁关卡会写入账号进度。</p>
+      </div>
+      <div class="cheat-grid">
+        <button class="cheat-item" data-cheat="gold" type="button"><strong>+1000 金币</strong><span>立刻补充建造资金</span></button>
+        <button class="cheat-item" data-cheat="heal" type="button"><strong>萝卜回满</strong><span>恢复全部生命值</span></button>
+        <button class="cheat-item" data-cheat="kill" type="button"><strong>秒杀全场怪物</strong><span>清除当前所有敌人</span></button>
+        <button class="cheat-item" data-cheat="maxTower" type="button"><strong>全塔满级</strong><span>所有炮塔升到 Lv.3</span></button>
+        <button class="cheat-item" data-cheat="infiniteGold" type="button"><strong id="cheatGoldText">金币无限：关</strong><span>金币保持充足</span></button>
+        <button class="cheat-item" data-cheat="unlock" type="button"><strong>解锁全部关卡</strong><span>写入账号进度</span></button>
+        <button class="cheat-item" data-cheat="win" type="button"><strong>直接过关</strong><span>立即结算当前关卡</span></button>
+        <button class="cheat-item" data-cheat="close" type="button"><strong>关闭</strong><span>返回游戏</span></button>
       </div>
     </div>
   </section>

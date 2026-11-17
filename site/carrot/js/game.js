@@ -640,6 +640,8 @@ class CarrotGame {
     this.tipTimer = null;
     this.banner = null;
     this.endlessBest = 0;
+    this.cheatOpen = false;
+    this.cheatInfiniteGold = false;
     this._bindUI();
     this._resizeCanvas();
     window.addEventListener("resize", () => this._resizeCanvas());
@@ -670,6 +672,12 @@ class CarrotGame {
     $("ctHome").addEventListener("click", () => this._openLevelScreen());
     $("ctPause").addEventListener("click", () => this._openPause());
     $("ctSound").addEventListener("click", () => this._toggleSound());
+    $("ctCheat").addEventListener("click", () => { this.sfx.ensure(); this._openCheat(); });
+    $("cheatScreen").addEventListener("click", (e) => {
+      if (e.target.id === "cheatScreen") this._closeCheat();
+      const btn = e.target.closest("[data-cheat]");
+      if (btn) this._handleCheat(btn.dataset.cheat);
+    });
     $("ctSpeed").addEventListener("click", () => {
       this.speed = this.speed === 1 ? 2 : 1;
       $("ctSpeed").textContent = this.speed + "×";
@@ -834,6 +842,8 @@ class CarrotGame {
     this.hoverSpot = null;
     this.banner = null;
     this.endlessBest = Number(this.store.state.endlessBest) || 0;
+    this.cheatOpen = false;
+    document.getElementById("cheatScreen").classList.remove("show");
     document.getElementById("ctTowerPanel").classList.remove("show");
     this.phase = "playing";
     this.paused = false;
@@ -1220,6 +1230,7 @@ class CarrotGame {
     }
     this._updateEffects(dt);
     this._updateHUD();
+    if (this.cheatInfiniteGold) this.gold = Math.max(this.gold, 9999);
     if (this.carrotHp <= 0) this._loseLevel();
   }
 
@@ -1343,6 +1354,67 @@ class CarrotGame {
     this.store.update((p) => { p.sound = this.soundOn; });
     this._updateSoundButtons();
     if (this.soundOn) { this.sfx.ensure(); this.sfx.coin(); }
+  }
+
+  // ------------------------------------------------------------ 金手指
+  _openCheat() {
+    if (this.phase !== "playing" || this.cheatOpen) return;
+    this.cheatOpen = true;
+    this.paused = true;
+    this._updateCheatText();
+    document.getElementById("cheatScreen").classList.add("show");
+  }
+
+  _closeCheat() {
+    document.getElementById("cheatScreen").classList.remove("show");
+    if (this.cheatOpen) {
+      this.cheatOpen = false;
+      if (this.phase === "playing") this.paused = false;
+    }
+  }
+
+  _updateCheatText() {
+    const el = document.getElementById("cheatGoldText");
+    if (el) el.textContent = `金币无限：${this.cheatInfiniteGold ? "开" : "关"}`;
+  }
+
+  _handleCheat(action) {
+    if (action === "close") { this._closeCheat(); return; }
+    if (this.phase !== "playing") return;
+    if (action === "gold") {
+      this.gold += 1000;
+      toast("金币 +1000", "ok");
+    } else if (action === "heal") {
+      this.carrotHp = this.level.carrotHp;
+      toast("萝卜生命已回满", "ok");
+    } else if (action === "kill") {
+      for (const e of this.enemies) if (e.alive) e.takeDamage(99999);
+      toast("已秒杀全场怪物", "ok");
+    } else if (action === "maxTower") {
+      for (const t of this.towers) {
+        t.level = 3;
+        t.invested = Math.max(t.invested, Math.round(t.def.cost * 2.2));
+      }
+      if (this.selectedTower) this._refreshPanel();
+      toast("所有炮塔已升到 Lv.3", "ok");
+    } else if (action === "infiniteGold") {
+      this.cheatInfiniteGold = !this.cheatInfiniteGold;
+      if (this.cheatInfiniteGold) this.gold = Math.max(this.gold, 9999);
+      toast(`金币无限：${this.cheatInfiniteGold ? "开" : "关"}`, "ok");
+    } else if (action === "unlock") {
+      this.store.update((p) => { p.unlocked = TOTAL_LEVELS; p.tutorialSeen = true; });
+      this._refreshSummary();
+      toast("已解锁全部关卡", "ok");
+    } else if (action === "win") {
+      if (this.level.endless) {
+        toast("无尽模式不能直接过关");
+      } else {
+        this._closeCheat();
+        this._winLevel();
+      }
+    }
+    this._updateCheatText();
+    this._updateHUD();
   }
 
   _openPause() {
