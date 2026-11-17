@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-device="mobile">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#7ec850">
+  <meta name="description" content="保卫萝卜：建造瓶子炮、冰锥塔、火焰瓶、闪电塔、多重箭，守住胡萝卜。">
+  <title>保卫萝卜 · 石器游戏厅</title>
+  <link rel="icon" href="../favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="../assets/css/base.css">
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body class="ct-body">
+  <div class="stage-wrap">
+    <div class="stage" id="stage">
+      <canvas id="canvas" width="1280" height="720" aria-label="保卫萝卜游戏画面"></canvas>
+
+      <div class="ct-hud">
+        <div class="ct-stat hp">
+          <svg class="ct-ico" viewBox="0 0 24 24" fill="none"><path d="M9 8c0-4 3-6 6-6-1 3-2 5-4 6" fill="#5fbf4a"/><path d="M8 7c-3 0-5 2-5 5v4c0 4 3 6 7 6h4c4 0 7-2 7-6v-4c0-3-2-5-5-5z" fill="#ff9a3d"/><circle cx="9" cy="14" r="1.5" fill="#2a1608"/><circle cx="15" cy="14" r="1.5" fill="#2a1608"/><path d="M10 18c1.5 1 2.5 1 4 0" stroke="#2a1608" stroke-width="1.6" stroke-linecap="round"/></svg>
+          <b id="ctHp">10</b>
+        </div>
+        <div class="ct-stat gold">
+          <span class="coin"></span>
+          <b id="ctGold">260</b>
+        </div>
+        <div class="ct-stat wave">波次 <b id="ctWave">0/5</b></div>
+        <div class="ct-actions">
+          <button class="ct-icon-btn" id="ctSpeed" type="button" aria-label="游戏速度">1×</button>
+          <button class="ct-icon-btn" id="ctSound" type="button" aria-label="声音"></button>
+          <button class="ct-icon-btn" id="ctPause" type="button" aria-label="暂停"></button>
+          <button class="ct-icon-btn" id="ctHome" type="button" aria-label="关卡选择"></button>
+        </div>
+      </div>
+
+      <div class="ct-tip" id="ctTip">选择炮塔，点击草地上的建造位</div>
+      <div class="ct-towerbar" id="ctTowerBar"></div>
+
+      <div class="ct-panel" id="ctTowerPanel">
+        <div class="tp-head">
+          <div><b id="tpName">瓶子炮</b><span id="tpLevel">Lv.1</span></div>
+          <button class="tp-close" id="tpClose" type="button" aria-label="关闭">✕</button>
+        </div>
+        <div class="tp-stats" id="tpStats"></div>
+        <div class="tp-actions">
+          <button class="btn green small" id="tpUpgrade" type="button">升级</button>
+          <button class="btn small" id="tpSell" type="button">出售</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="rotate-tip" id="rotateTip">横屏游玩体验更佳 · 点击关闭</div>
+
+  <!-- 关卡选择 -->
+  <section class="screen level-screen" id="levelScreen">
+    <div class="farm-bg" aria-hidden="true">
+      <div class="farm-sun"></div>
+      <div class="farm-cloud c1"></div>
+      <div class="farm-cloud c2"></div>
+      <div class="farm-hills"></div>
+      <div class="farm-fence"></div>
+      <div class="farm-lawn"></div>
+    </div>
+    <div class="level-panel">
+      <header class="level-head">
+        <a class="back-link" href="../" aria-label="返回游戏厅">← 游戏厅</a>
+        <div class="level-title">
+          <span class="kicker">CARROT FANTASY · 塔防</span>
+          <h1>保卫萝卜</h1>
+        </div>
+        <button class="account-chip" data-account-chip aria-label="账号与进度"></button>
+      </header>
+
+      <div class="level-summary">
+        <div class="score-box">
+          <div class="big-stars"><span id="totalStars">0</span><small>/ 24 ★</small></div>
+          <div class="level-bar"><i id="overallBar"></i></div>
+          <p id="progressText">已解锁 1 / 8 关</p>
+        </div>
+        <div class="level-actions">
+          <button class="btn ghost" id="tutorialBtn" type="button">玩法说明</button>
+          <button class="btn green" id="continueBtn" type="button">开始第 1 关</button>
+        </div>
+      </div>
+
+      <div class="level-grid" id="levelGrid"></div>
+      <p class="level-foot">
+        选择炮塔 → 点击草地建造位 → 升级或出售<br>
+        三星条件：胡萝卜生命值不低于 9
+      </p>
+    </div>
+  </section>
+
+  <!-- 玩法说明 -->
+  <section class="screen center-screen" id="tutorialScreen">
+    <div class="tutorial-card">
+      <div class="tutorial-head">
+        <span class="tut-badge">HOW TO PLAY</span>
+        <h2>守住胡萝卜</h2>
+        <p>建塔、升级、清怪，别让怪物碰到萝卜。</p>
+      </div>
+      <div class="tutorial-grid">
+        <div class="tut-item">
+          <div class="tut-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 3l7 4v10l-7 4-7-4V7z"/><path d="M12 12v9"/></svg></div>
+          <h3>建造炮塔</h3>
+          <p>点底部炮塔卡，再点草地上的建造位。每种炮塔定位不同，混搭更稳。</p>
+        </div>
+        <div class="tut-item">
+          <div class="tut-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 19l7-7 7 7"/><path d="M12 12V4M8 8l4-4 4 4"/></svg></div>
+          <h3>升级与出售</h3>
+          <p>点已建炮塔打开面板，升级提升伤害和范围；位置不好可以出售回收金币。</p>
+        </div>
+        <div class="tut-item">
+          <div class="tut-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 18c4-8 6 4 10-4s4 4 8-2"/><path d="M3 6h4M17 6h4"/></svg></div>
+          <h3>波次与金币</h3>
+          <p>每波会从右侧出现怪物，击杀获得金币。波次越高，怪物越强。</p>
+        </div>
+        <div class="tut-item">
+          <div class="tut-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M9 8c0-4 3-6 6-6-1 3-2 5-4 6" stroke="#5fbf4a"/><path d="M8 7c-3 0-5 2-5 5v4c0 4 3 6 7 6h4c4 0 7-2 7-6v-4c0-3-2-5-5-5z"/></svg></div>
+          <h3>保护胡萝卜</h3>
+          <p>怪物走到终点会咬萝卜一口。生命值归零就失败，剩余生命越多星级越高。</p>
+        </div>
+      </div>
+      <div class="tutorial-controls">
+        <span><b>手机</b> 点炮塔卡 → 点建造位；点已建炮塔可升级/出售</span>
+        <span><b>电脑</b> 鼠标点击操作；暂停按钮可随时暂停</span>
+      </div>
+      <button class="btn green block" id="tutorialStart" type="button">开始第 1 关</button>
+    </div>
+  </section>
+
+  <!-- 暂停 -->
+  <section class="screen center-screen" id="pauseScreen">
+    <div class="pause-card">
+      <h2>暂停中</h2>
+      <p>萝卜正在偷偷喘气</p>
+      <div class="pause-actions">
+        <button class="btn green block" id="resumeBtn" type="button">继续游戏</button>
+        <button class="btn block" id="restartBtn" type="button">重新开始本关</button>
+        <button class="btn block" id="pauseLevelsBtn" type="button">返回关卡选择</button>
+        <button class="btn block ghost" id="pauseSoundBtn" type="button">关闭音效</button>
+        <a class="btn block ghost" href="../">回到游戏厅</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- 结算 -->
+  <section class="screen center-screen" id="resultScreen">
+    <div class="result-card">
+      <div class="result-stars" id="resultStars">
+        <span class="rstar">★</span><span class="rstar">★</span><span class="rstar">★</span>
+      </div>
+      <h2 id="resultTitle">萝卜安全了！</h2>
+      <p id="resultSub">第 1 关 · 初入萝卜田</p>
+      <div class="result-stats">
+        <div><strong id="statHp">10</strong><span>萝卜生命</span></div>
+        <div><strong id="statKills">0</strong><span>消灭怪物</span></div>
+        <div><strong id="statWave">0</strong><span>完成波次</span></div>
+      </div>
+      <p class="result-note" id="resultNote"></p>
+      <div class="result-actions">
+        <button class="btn green" id="nextBtn" type="button">下一关</button>
+        <button class="btn" id="retryBtn" type="button">再来一次</button>
+        <button class="btn ghost" id="resultLevelsBtn" type="button">关卡选择</button>
+      </div>
+    </div>
+  </section>
+
+  <script type="module" src="./js/game.js"></script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+{
+  "name": "石器游戏厅",
+  "short_name": "石器游戏厅",
+  "description": "石器大战、植物大战僵尸加强版，手机与电脑打开即玩。",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0c0e12",
+  "theme_color": "#0c0e12",
+  "icons": [
+    {
+      "src": "./favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+[Unit]
+Description=Stone Arcade game portal (Stone Wars / PvZ)
+After=network.target
+
+[Service]
+Type=simple
+User=gametools
+Group=gametools
+WorkingDirectory=/opt/game-tools
+Environment=GT_HOST=127.0.0.1
+Environment=GT_PORT=8930
+Environment=GT_ROOT=/opt/game-tools/site
+Environment=GT_DB=/opt/game-tools/data/game-tools.db
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 /opt/game-tools/server/app.py
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target

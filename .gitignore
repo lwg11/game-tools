@@ -1,0 +1,9 @@
+# 本地敏感信息与运行产物
+ssh.env
+__pycache__/
+*.pyc
+deploy/.deploy_cache/
+server/data/
+.trae-html-share-packages/
+*.log
+.DS_Store

@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-device="mobile">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#0b0c10">
+  <meta name="description" content="石器大战手机原版复刻：回合制物理弹道，14 个关卡，5 种原始武器。">
+  <title>石器大战 · 石器游戏厅</title>
+  <link rel="icon" href="../favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="../assets/css/base.css">
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body class="sw-body">
+  <div class="stage-wrap">
+    <div class="stage" id="stage">
+      <canvas id="canvas" width="1280" height="720" aria-label="石器大战游戏画面"></canvas>
+
+      <div class="hud" id="hud">
+        <div class="hud-bar">
+          <div class="hud-side">
+            <button class="hud-mini" id="hudHome" title="返回关卡" aria-label="返回关卡"></button>
+            <button class="hud-mini" id="hudSound" title="声音" aria-label="声音"></button>
+          </div>
+          <div class="hud-center">
+            <span class="hud-level" id="hudLevel">第 1 关</span>
+            <span class="hud-turn">时间 <b id="hudTime">0.0</b>s</span>
+          </div>
+          <div class="hud-side right">
+            <div class="wind" id="windBox" title="风向影响弹道">
+              <span class="wind-label">风</span>
+              <i class="wind-arrow" id="windArrow"></i>
+              <b id="windVal">0.0</b>
+            </div>
+            <button class="hud-mini" id="hudPause" title="暂停" aria-label="暂停"></button>
+          </div>
+        </div>
+
+        <div class="hud-status">
+          <span id="teamLabel">战斗中</span>
+          <div class="movebar" title="当前武器冷却"><i id="moveBar"></i></div>
+          <button class="switch-unit" id="switchUnit" type="button">切换</button>
+        </div>
+
+        <div class="weapon-bar" id="weaponBar"></div>
+        <div class="aim-hint" id="aimHint">拖动瞄准 · 松手锁定 · 点发射开火</div>
+
+        <div class="touch-pad" id="touchPad">
+          <button class="pad-btn" data-move="left" aria-label="向左移动">←</button>
+          <button class="pad-btn" data-move="right" aria-label="向右移动">→</button>
+        </div>
+        <button class="fire-btn" id="fireBtn" type="button" aria-label="发射">
+          <span>发射</span>
+          <small>FIRE</small>
+        </button>
+        <button class="cancel-aim-btn" id="cancelAimBtn" type="button">取消瞄准</button>
+        <button class="jump-btn" id="jumpBtn" data-jump type="button" aria-label="跳跃">
+          <span>↑</span>
+          <b>跳跃</b>
+        </button>
+
+        <div class="turn-banner" id="turnBanner">
+          <strong>战斗开始</strong>
+          <span>消灭所有敌人</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="rotate-tip" id="rotateTip">横屏游玩体验更佳 · 点击关闭</div>
+
+  <!-- 关卡选择 -->
+  <section class="screen level-screen" id="levelScreen">
+    <div class="ls-deco" aria-hidden="true">
+      <div class="ls-sun"></div>
+      <div class="ls-ridge r1"></div>
+      <div class="ls-ridge r2"></div>
+      <div class="ls-ridge r3"></div>
+    </div>
+    <div class="ls-panel">
+      <header class="ls-head">
+        <a class="ls-back" href="../" aria-label="返回游戏厅">← 游戏厅</a>
+        <div class="ls-title">
+          <span class="ls-kicker">STONE WARS · 手机原版</span>
+          <h1>石器大战</h1>
+        </div>
+        <button class="account-chip" data-account-chip aria-label="账号与进度"></button>
+      </header>
+
+      <div class="ls-summary">
+        <div class="ls-score">
+          <div class="big-stars"><span id="totalStars">0</span><small>/ 42 ★</small></div>
+          <div class="ls-bar"><i id="overallBar"></i></div>
+          <p id="progressText">已解锁 1 / 14 关</p>
+        </div>
+        <div class="ls-actions">
+          <button class="btn ghost" id="tutorialBtn" type="button">玩法说明</button>
+          <button class="btn primary" id="continueBtn" type="button">继续第 1 关</button>
+        </div>
+      </div>
+
+      <div class="level-grid" id="levelGrid"></div>
+      <p class="ls-foot">
+        实时战斗 · 消灭所有敌人即获胜 · 拖动瞄准后点“发射”<br>
+        三星条件：全员存活，并在目标时间内结束战斗
+      </p>
+    </div>
+  </section>
+
+  <!-- 玩法说明 -->
+  <section class="screen center-screen" id="tutorialScreen">
+    <div class="tut-card">
+      <div class="tut-head">
+        <span class="tut-badge">HOW TO PLAY</span>
+        <h2>石器大战 · 玩法</h2>
+        <p>像原始人一样思考：算角度、借风力、炸地形。</p>
+      </div>
+      <div class="tut-grid">
+        <div class="tut-item">
+          <div class="tut-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></div>
+          <h3>瞄准与开火</h3>
+          <p>按住任意位置朝射击方向拖动，松手后锁定弹道；点右下角“发射”开火，点“取消瞄准”可以撤销，不会因为松手而误射。</p>
+        </div>
+        <div class="tut-item">
+          <div class="tut-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 8h10a3 3 0 100-6"/><path d="M3 13h14a3 3 0 110 6"/><path d="M3 18h7"/></svg></div>
+          <h3>利用风向</h3>
+          <p>顶部风向会随时间变化。顺风射得更远，逆风要抬高角度，重武器受风影响更小。</p>
+        </div>
+        <div class="tut-item">
+          <div class="tut-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 2l2.2 5.2L20 5.5l-3.2 4.5L22 13l-5.5 1.2L18 20l-5-2.5L10 22l-1-5.7L4 18l2-5.3L2 9l5.7-.4z"/></svg></div>
+          <h3>实时战斗</h3>
+          <p>没有回合等待：你可以持续移动、瞄准和射击，敌人也会不断开火。只有一方全部倒下才结束，对面全灭即胜利。</p>
+        </div>
+        <div class="tut-item">
+          <div class="tut-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 20L18 6"/><path d="M15 4l5 1-1 5z"/><path d="M6 17l4 4"/></svg></div>
+          <h3>七种武器</h3>
+          <p>石矛、石弹、火雷、香蕉炸弹、刺球、回旋镖、陨石。每种武器都有独立冷却，弹药有限，关键时刻再出手。</p>
+        </div>
+      </div>
+      <div class="tut-controls">
+        <span><b>手机</b> 左侧移动 · 右侧跳跃/发射 · 拖动瞄准，松手锁定 · 可点“切换”换人</span>
+        <span><b>电脑</b> A/D 移动 · W 跳跃 · 鼠标拖动瞄准 · 回车发射 · 1-7 切换武器</span>
+      </div>
+      <button class="btn primary block" id="tutorialStart" type="button">开始第 1 关</button>
+    </div>
+  </section>
+
+  <!-- 暂停 -->
+  <section class="screen center-screen" id="pauseScreen">
+    <div class="pause-card">
+      <h2>暂停中</h2>
+      <p>原始人也要喘口气</p>
+      <div class="pause-actions">
+        <button class="btn primary block" id="resumeBtn" type="button">继续游戏</button>
+        <button class="btn block" id="restartBtn" type="button">重新开始本关</button>
+        <button class="btn block" id="pauseLevelsBtn" type="button">返回关卡选择</button>
+        <button class="btn block ghost" id="pauseSoundBtn" type="button">关闭音效</button>
+        <a class="btn block ghost" href="../">回到游戏厅</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- 结算 -->
+  <section class="screen center-screen" id="resultScreen">
+    <div class="result-card">
+      <div class="result-stars" id="resultStars">
+        <span class="rstar">★</span><span class="rstar">★</span><span class="rstar">★</span>
+      </div>
+      <h2 id="resultTitle">胜利</h2>
+      <p id="resultSub">第 1 关 · 初次狩猎</p>
+      <div class="result-stats">
+        <div><strong id="statTurns">0</strong><span>战斗用时</span></div>
+        <div><strong id="statAlive">0</strong><span>存活族人</span></div>
+        <div><strong id="statStars">0</strong><span>获得星星</span></div>
+      </div>
+      <p class="result-note" id="resultNote"></p>
+      <div class="result-actions">
+        <button class="btn primary" id="nextBtn" type="button">下一关</button>
+        <button class="btn" id="retryBtn" type="button">再来一次</button>
+        <button class="btn ghost" id="resultLevelsBtn" type="button">关卡选择</button>
+      </div>
+    </div>
+  </section>
+
+  <script type="module" src="./js/game.js"></script>
+</body>
+</html>
