@@ -8,6 +8,7 @@ import { isMobile } from "../../assets/js/device.js";
 import { ProgressStore } from "../../assets/js/progress.js";
 import { initAccount } from "../../assets/js/account.js";
 import { toast, icon } from "../../assets/js/ui.js";
+import { audio } from "../../assets/js/audio.js";
 import {
   PLANTS, PLANT_ORDER, ZOMBIES, LEVELS, TOTAL_LEVELS, getLevel,
 } from "./levels.js";
@@ -55,7 +56,7 @@ class PvzSfx {
       if (!AC) return null;
       this.ctx = new AC();
       this.master = this.ctx.createGain();
-      this.master.gain.value = 0.22;
+      this.master.gain.value = 0.5;
       this.master.connect(this.ctx.destination);
     }
     if (this.ctx.state === "suspended") this.ctx.resume();
@@ -832,6 +833,7 @@ class PvZGame {
     this.cheatInvincible = false;
     this.cheatInfiniteSun = false;
     this.cheatNoCooldown = false;
+    this.cheatUnlockPlants = false;
     this.cheatOpen = false;
     this.longPressTimer = null;
     this.infoTimer = null;
@@ -866,6 +868,8 @@ class PvZGame {
     await this.store.init();
     this.soundOn = this.store.state.sound !== false;
     this.sfx.enabled = this.soundOn;
+    audio.setEnabled(this.soundOn);
+    audio.setMusic("pvz");
     this._updateSoundButtons();
     this._refreshSummary();
     this.store.onChange(() => this._refreshSummary());
@@ -1085,7 +1089,9 @@ class PvZGame {
     this.sameRowCount = 0;
     this.nextAction = null;
     this.cardReadyAt = {};
-    this.plantIds = PLANT_ORDER.filter((pid) => (this.level.plants || []).includes(pid));
+    this.plantIds = this.cheatUnlockPlants
+      ? PLANT_ORDER.slice()
+      : PLANT_ORDER.filter((pid) => (this.level.plants || []).includes(pid));
     this.cardScroll = 0;
     this._layoutCards();
     this._buildBackground();
@@ -1124,6 +1130,15 @@ class PvZGame {
     }));
   }
 
+  _refreshPlantBar() {
+    this.plantIds = this.cheatUnlockPlants
+      ? PLANT_ORDER.slice()
+      : PLANT_ORDER.filter((pid) => (this.level.plants || []).includes(pid));
+    if (this.selected && !this.plantIds.includes(this.selected)) this.selected = null;
+    this.cardScroll = 0;
+    this._layoutCards();
+  }
+
   _onPointerDown(e) {
     if (this.phase !== "playing" || this.paused) return;
     e.preventDefault();
@@ -1148,12 +1163,16 @@ class PvZGame {
 
     // 顶部种子卡区域：拖动横向滚动，轻点选择植物，长按查看说明
     if (p.y >= 20 && p.y <= 120 && p.x >= CARD.x && p.x <= 1200) {
-      this.cardDrag = { startX: p.x, startScroll: this.cardScroll, moved: false, longPressed: false };
+      const card = this._cardAt(p.x, p.y);
+      this.cardDrag = {
+        startX: p.x, startY: p.y, startScroll: this.cardScroll,
+        moved: false, longPressed: false, planting: false,
+        cardId: card ? card.id : null,
+      };
       this.canvas.setPointerCapture?.(e.pointerId);
       this._clearLongPress();
       this.longPressTimer = setTimeout(() => {
-        if (!this.cardDrag || this.cardDrag.moved || this.paused) return;
-        const card = this._cardAt(p.x, p.y);
+        if (!this.cardDrag || this.cardDrag.moved || this.cardDrag.planting || this.paused) return;
         if (card) {
           this.cardDrag.longPressed = true;
           this._showPlantInfo(card.id);
@@ -1185,6 +1204,20 @@ class PvZGame {
     const p = this._canvasPoint(e);
     if (this.cardDrag) {
       const dx = p.x - this.cardDrag.startX;
+      const dy = p.y - this.cardDrag.startY;
+      // 从种子卡向下拖：进入“拖着植物走”的种植模式
+      if (!this.cardDrag.planting && this.cardDrag.cardId
+        && dy > 16 && dy > Math.abs(dx) * 0.8) {
+        this.cardDrag.planting = true;
+        this.cardDrag.moved = true;
+        this._clearLongPress();
+        this.shovel = false;
+        this.selected = this.cardDrag.cardId;
+      }
+      if (this.cardDrag.planting) {
+        this.hoverCell = this._cellAt(p.x, p.y);
+        return;
+      }
       if (Math.abs(dx) > 6) {
         this.cardDrag.moved = true;
         this._clearLongPress();
@@ -1205,6 +1238,13 @@ class PvZGame {
     const p = this._canvasPoint(e);
     const drag = this.cardDrag;
     this.cardDrag = null;
+
+    if (drag.planting) {
+      const cell = this._cellAt(p.x, p.y);
+      if (cell) this._tryPlant(cell.row, cell.col);
+      else this._showToastSafe("把植物拖到草坪格子里才能种植");
+      return;
+    }
     if (drag.moved || drag.longPressed) return;
     const card = this._cardAt(p.x, p.y);
     if (card) this._selectCard(card.id);
@@ -1304,7 +1344,8 @@ class PvZGame {
     const plant = new Plant(this, id, row, col);
     this.grid[row][col] = plant;
     this.plants.push(plant);
-    this.selected = null;
+    // 保持当前植物卡选中，方便连续点下一个格子继续种
+    this.selected = id;
     this.sfx.plant();
     this.spawnParticles(plant.x, plant.y - 20, 10, "#c9e88a", "leaf");
     this.addText(plant.x, plant.y - 70, `-${def.cost}`, "#ffe08a");
@@ -1684,6 +1725,7 @@ class PvZGame {
   _toggleSound() {
     this.soundOn = !(this.soundOn !== false);
     this.sfx.enabled = this.soundOn;
+    audio.setEnabled(this.soundOn);
     this.store.update((p) => { p.sound = this.soundOn; });
     this._updateSoundButtons();
     if (this.soundOn) {
@@ -1944,6 +1986,8 @@ class PvZGame {
     if (inf) inf.textContent = `无限阳光：${this.cheatInfiniteSun ? "开" : "关"}`;
     const cd = document.getElementById("cheatNoCdText");
     if (cd) cd.textContent = `植物无冷却：${this.cheatNoCooldown ? "开" : "关"}`;
+    const plants = document.getElementById("cheatPlantsText");
+    if (plants) plants.textContent = `解锁全部植物：${this.cheatUnlockPlants ? "开" : "关"}`;
   }
 
   _spawnCheatZombie(type, count) {
@@ -1976,6 +2020,10 @@ class PvZGame {
       this.cheatNoCooldown = !this.cheatNoCooldown;
       if (this.cheatNoCooldown) this.cardReadyAt = {};
       toast(`植物无冷却：${this.cheatNoCooldown ? "开" : "关"}`, "ok");
+    } else if (action === "unlockPlants") {
+      this.cheatUnlockPlants = !this.cheatUnlockPlants;
+      this._refreshPlantBar();
+      toast(`解锁全部植物：${this.cheatUnlockPlants ? "开" : "关"}`, "ok");
     } else if (action === "spawnNormal") {
       this._spawnCheatZombie("normal", 5);
     } else if (action === "spawnBucket") {
