@@ -1,7 +1,7 @@
 /**
  * 植物大战僵尸 · 加强版
  * ------------------------------------------------------------
- * 5 行 × 9 列草坪，12 种植物 + 12 个关卡 + 无尽尸潮。
+ * 6 行 × 11 列草坪，20 种植物 + 12 个关卡 + 无尽尸潮。
  * 全部画面由 Canvas 程序化绘制，无外部素材依赖。
  */
 import { isMobile } from "../../assets/js/device.js";
@@ -15,7 +15,7 @@ import {
 
 const W = 1280;
 const H = 720;
-const GRID = { x: 292, y: 146, cell: 104, cols: 9, rows: 5 };
+const GRID = { x: 292, y: 146, cell: 84, cols: 11, rows: 6 };
 const GRID_W = GRID.cell * GRID.cols;
 const GRID_H = GRID.cell * GRID.rows;
 const CARD = { x: 160, y: 26, w: 82, h: 92, gap: 5 };
@@ -102,7 +102,25 @@ class PvzSfx {
   }
   click() { this.tone(640, 0.04, "square", 0.035); }
   plant() { this.tone(320, 0.12, "sine", 0.1, 480); this.noise(0.08, 0.05, 800); }
-  shoot() { this.tone(760, 0.05, "square", 0.035, 520); }
+  shoot(kind = "pea") {
+    if (kind === "fire") {
+      this.tone(520, 0.06, "sawtooth", 0.045, 260);
+      this.noise(0.07, 0.05, 1600);
+    } else if (kind === "ice") {
+      this.tone(980, 0.07, "sine", 0.035, 620);
+    } else {
+      this.tone(760, 0.05, "square", 0.035, 520);
+    }
+  }
+  shootHeavy() {
+    this.noise(0.1, 0.1, 1400);
+    this.tone(180, 0.09, "sawtooth", 0.06, 70);
+    this.tone(1100, 0.04, "square", 0.03, 500);
+  }
+  laser() {
+    this.tone(1600, 0.18, "sawtooth", 0.05, 220);
+    this.tone(720, 0.14, "square", 0.035, 1600);
+  }
   sun() { this.tone(880, 0.09, "sine", 0.08); setTimeout(() => this.tone(1180, 0.12, "sine", 0.06), 70); }
   boom() { this.noise(0.4, 0.26, 500); this.tone(80, 0.35, "sine", 0.22, 40); }
   mower() { this.noise(0.5, 0.12, 1200); this.tone(120, 0.5, "sawtooth", 0.06, 90); }
@@ -139,6 +157,8 @@ class Plant {
     this.stateT = 0;
     this.shootPulse = 0;
     this.flash = 0;
+    this.burstLeft = 0;
+    this.burstT = 0;
   }
 
   update(dt) {
@@ -156,13 +176,30 @@ class Plant {
       }
     }
     if (def.fireRate) {
+      // 爆发射击：加特林一轮触发多次连射
+      if (this.burstLeft > 0) {
+        this.burstT -= dt;
+        if (this.burstT <= 0) {
+          this.burstLeft -= 1;
+          this.burstT = def.burstGap || 0.09;
+          if (this._hasTarget()) this._fire();
+        }
+      }
       this.timer -= dt;
       if (this.timer <= 0 && this._hasTarget()) {
         this.timer = def.fireRate;
-        this._fire();
+        if (def.laser) {
+          this._fireLaser();
+        } else {
+          this._fire();
+          if (def.burst) {
+            this.burstLeft = def.burst - 1;
+            this.burstT = def.burstGap || 0.09;
+          }
+        }
       }
     }
-    if (this.id === "spikeweed") {
+    if (this.id === "spikeweed" || this.id === "spikerock") {
       this.timer -= dt;
       if (this.timer <= 0) {
         this.timer = def.tick;
@@ -271,25 +308,47 @@ class Plant {
     const def = this.def;
     const rows = def.lanes === 3 ? [this.row - 1, this.row, this.row + 1] : [this.row];
     const shots = def.shots || 1;
+    const kind = this.id === "melon" ? "melon"
+      : this.id === "wintermelon" ? "ice"
+        : this.id === "firepea" ? "fire" : "pea";
     for (const row of rows) {
       if (row < 0 || row >= GRID.rows) continue;
       for (let i = 0; i < shots; i++) {
         this.game.peas.push(new Pea(
           this.game,
-          this.x + 34 + i * 7,
-          groundY(row) - 56 + (i % 2) * 2,
+          this.x + 34 + i * 8,
+          groundY(row) - 54 + ((i % 3) - 1) * 3,
           row,
           def.damage,
           Boolean(def.slow),
           Boolean(def.splash),
           def.splash || 0,
-          this.id === "melon" ? "melon" : "pea"
+          kind,
+          Boolean(def.burn)
         ));
       }
     }
-    this.shootPulse = 0.16;
-    this.game.sfx.shoot();
-    this.game.spawnParticles(this.x + 38, this.y - 52, 4, "#bfe87a", "spark");
+    this.shootPulse = this.id === "gatling" ? 0.24 : 0.16;
+    this.game.muzzleFlash(this.x + 40, this.y - 52, kind, this.id === "gatling" ? 1.8 : 1);
+    if (this.id === "gatling") {
+      // 加特林：炮管余焰、弹壳、后坐力与轻微震屏
+      this.game.spawnParticles(this.x + 24, this.y - 50, 4, "#ffd35e", "spark");
+      this.game.spawnParticles(this.x + 16, this.y - 42, 2, "#c9a05b", "shell");
+      this.game.spawnParticles(this.x + 46, this.y - 54, 2, "#d8d2c2", "smoke");
+      this.game.shake = Math.max(this.game.shake, 3.2);
+      this.game.sfx.shootHeavy();
+    } else {
+      this.game.sfx.shoot(kind);
+    }
+    if (kind === "fire") this.game.spawnParticles(this.x + 38, this.y - 52, 3, "#ff8a3a", "spark");
+    if (kind === "ice") this.game.spawnParticles(this.x + 38, this.y - 52, 3, "#bdf3ff", "spark");
+  }
+
+  /** 激光豆：整行穿透光束 */
+  _fireLaser() {
+    const def = this.def;
+    this.shootPulse = 0.26;
+    this.game.fireLaser(this.x + 30, this.y - 54, this.row, def.damage);
   }
 
   takeDamage(amount) {
@@ -344,6 +403,8 @@ class Zombie {
     this.flash = 0;
     this.phase = rand(0, TAU);
     this.groanT = rand(2, 7);
+    this.burnT = 0;
+    this.burnTick = 0;
   }
 
   update(dt) {
@@ -355,6 +416,20 @@ class Zombie {
     this.flash = Math.max(0, this.flash - dt);
     this.slowT = Math.max(0, this.slowT - dt);
     this.freezeT = Math.max(0, this.freezeT - dt);
+    // 烈焰灼烧：持续掉血并冒火星
+    if (this.burnT > 0) {
+      this.burnT -= dt;
+      this.burnTick -= dt;
+      if (this.burnTick <= 0) {
+        this.burnTick = 0.18;
+        this.hp -= 3;
+        this.game.spawnParticles(this.x + rand(-10, 10), this.y - rand(20, 70), 1, Math.random() < 0.5 ? "#ff8a3a" : "#ffd35e", "spark");
+        if (this.hp <= 0) {
+          this.die();
+          return;
+        }
+      }
+    }
     if (this.freezeT > 0) {
       this.eating = false;
       return;
@@ -595,7 +670,7 @@ class Zombie {
 
 // ---------------------------------------------------------------- 豌豆
 class Pea {
-  constructor(game, x, y, row, damage, snow, splash = false, splashDamage = 0, kind = "pea") {
+  constructor(game, x, y, row, damage, snow, splash = false, splashDamage = 0, kind = "pea", burn = false) {
     this.game = game;
     this.x = x;
     this.y = y;
@@ -605,39 +680,62 @@ class Pea {
     this.splash = splash;
     this.splashDamage = splashDamage;
     this.kind = kind;
+    this.burn = burn;
+    this.speed = kind === "melon" ? 360 : kind === "ice" ? 330 : 450;
     this.alive = true;
     this.age = 0;
+    this.trailT = 0;
   }
   update(dt) {
     if (!this.alive) return;
     this.age += dt;
-    this.x += (this.kind === "melon" ? 360 : 450) * dt;
+    this.x += this.speed * dt;
     if (this.x > W + 30) {
       this.alive = false;
       return;
     }
+    // 弹道拖尾
+    this.trailT -= dt;
+    if (this.trailT <= 0 && this.kind !== "melon" && this.kind !== "ice") {
+      this.trailT = 0.045;
+      const color = this.kind === "fire" ? "#ff8a3a" : this.snow ? "#bdf3ff" : "#a9e36a";
+      this.game.particles.push({
+        x: this.x - 8 + rand(-2, 2), y: this.y + rand(-2, 2),
+        vx: rand(-20, 10), vy: rand(-16, 16),
+        life: 0.18, maxLife: 0.18, size: rand(1.5, 3),
+        color, kind: "spark", gravity: 0,
+      });
+    }
     const target = this.game.zombies.find((z) => z.alive && z.row === this.row && z.x - this.x < 26 && z.x - this.x > -20);
     if (target) {
       target.takeDamage(this.damage);
-      if (this.snow) target.slowT = 3;
+      if (this.snow) target.slowT = 4;
+      if (this.burn) target.burnT = 3;
       if (this.splash) this.game.splashDamage(target.x, target.y - 46, 120, this.splashDamage, target);
-      this.game.spawnParticles(this.x, this.y, this.kind === "melon" ? 10 : 5, this.snow ? "#bdf3ff" : "#a9e36a", "spark");
+      const color = this.kind === "fire" ? "#ff8a3a" : this.kind === "ice" ? "#c9f4ff" : this.snow ? "#bdf3ff" : "#a9e36a";
+      this.game.spawnParticles(this.x, this.y, this.kind === "melon" || this.kind === "ice" ? 12 : 6, color, "spark");
+      this.game.particles.push({
+        x: this.x, y: this.y, vx: 0, vy: 0, life: 0.14, maxLife: 0.14,
+        size: 9, color: "#fff6c8", kind: "flash", gravity: 0,
+      });
+      if (this.kind === "fire") this.game.sfx.noise(0.05, 0.03, 1800);
       this.alive = false;
     }
   }
   draw(ctx) {
     ctx.save();
     ctx.translate(this.x, this.y);
-    if (this.kind === "melon") {
+    if (this.kind === "melon" || this.kind === "ice") {
+      const ice = this.kind === "ice";
       ctx.rotate(this.age * 8);
-      ctx.fillStyle = "#4f9a3a";
-      ctx.strokeStyle = "#2f6b23";
+      ctx.fillStyle = ice ? "#8fd7f0" : "#4f9a3a";
+      ctx.strokeStyle = ice ? "#4a9fb8" : "#2f6b23";
       ctx.lineWidth = 1.8;
       ctx.beginPath();
-      ctx.ellipse(0, 0, 11, 8, 0, 0, TAU);
+      ctx.ellipse(0, 0, ice ? 13 : 11, ice ? 10 : 8, 0, 0, TAU);
       ctx.fill();
       ctx.stroke();
-      ctx.strokeStyle = "#2f6b23";
+      ctx.strokeStyle = ice ? "#e9fbff" : "#2f6b23";
       ctx.lineWidth = 1.4;
       for (let i = -1; i <= 1; i++) {
         ctx.beginPath();
@@ -645,17 +743,34 @@ class Pea {
         ctx.lineTo(i * 4, 7);
         ctx.stroke();
       }
+      if (ice) {
+        ctx.fillStyle = "rgba(255,255,255,.8)";
+        ctx.beginPath();
+        ctx.arc(-4, -4, 2.4, 0, TAU);
+        ctx.fill();
+      }
       ctx.restore();
       return;
     }
     const r = this.snow ? 7 : 6.5;
-    ctx.fillStyle = this.snow ? "#a9e7ff" : "#7ed957";
-    ctx.strokeStyle = this.snow ? "#5aa9c7" : "#4b9a34";
+    if (this.kind === "fire") {
+      ctx.shadowColor = "rgba(255,120,40,.9)";
+      ctx.shadowBlur = 12;
+      ctx.fillStyle = "#ff8a3a";
+      ctx.strokeStyle = "#c94a1e";
+    } else if (this.snow) {
+      ctx.fillStyle = "#a9e7ff";
+      ctx.strokeStyle = "#5aa9c7";
+    } else {
+      ctx.fillStyle = "#7ed957";
+      ctx.strokeStyle = "#4b9a34";
+    }
     ctx.lineWidth = 1.6;
     ctx.beginPath();
     ctx.arc(0, 0, r, 0, TAU);
     ctx.fill();
     ctx.stroke();
+    ctx.shadowBlur = 0;
     ctx.fillStyle = "rgba(255,255,255,.65)";
     ctx.beginPath();
     ctx.arc(-2, -2, 2, 0, TAU);
@@ -819,6 +934,7 @@ class PvZGame {
     this.suns = [];
     this.particles = [];
     this.texts = [];
+    this.beams = [];
     this.mowers = [];
     this.grid = [];
     this.cardRects = [];
@@ -1069,6 +1185,7 @@ class PvZGame {
     this.suns = [];
     this.particles = [];
     this.texts = [];
+    this.beams = [];
     this.grid = Array.from({ length: GRID.rows }, () => Array(GRID.cols).fill(null));
     this.mowers = [];
     for (let r = 0; r < GRID.rows; r++) this.mowers.push(new Mower(this, r));
@@ -1454,7 +1571,7 @@ class PvZGame {
   eatTargetFor(zombie) {
     let best = null;
     for (const p of this.plants) {
-      if (!p.alive || p.row !== zombie.row || p.id === "potatomine" || p.id === "spikeweed") continue;
+      if (!p.alive || p.row !== zombie.row || p.id === "potatomine" || p.id === "spikeweed" || p.id === "spikerock") continue;
       if (zombie.x - 20 <= p.x + 28 && zombie.x - 20 >= p.x - 34) {
         if (!best || p.x > best.x) best = p;
       }
@@ -1541,6 +1658,41 @@ class PvZGame {
     }
   }
 
+  /** 枪口焰：每次射击都有一团闪焰和火星，加特林更夸张 */
+  muzzleFlash(x, y, kind = "pea", scale = 1) {
+    const color = kind === "fire" ? "#ff9a3a" : kind === "ice" ? "#bdf3ff" : "#eaffb0";
+    this.particles.push({
+      x, y, vx: 0, vy: 0, life: 0.1, maxLife: 0.1,
+      size: 17 * scale, color: "#fff6c8", kind: "flash", gravity: 0,
+    });
+    for (let i = 0; i < Math.round(4 * scale); i++) {
+      this.particles.push({
+        x: x + rand(-3, 3), y: y + rand(-4, 4),
+        vx: rand(60, 220) * scale, vy: rand(-70, 70),
+        life: rand(0.08, 0.22), maxLife: 0.22, size: rand(1.5, 3.6),
+        color, kind: "spark", gravity: 0,
+      });
+    }
+  }
+
+  /** 激光豆的穿透光束 */
+  fireLaser(x, y, row, damage) {
+    this.beams.push({
+      x1: x, y1: y, x2: W, y2: y,
+      life: 0.24, maxLife: 0.24,
+    });
+    let hit = false;
+    for (const z of this.zombies) {
+      if (!z.alive || z.row !== row || z.x < x - 30) continue;
+      z.takeDamage(damage);
+      z.slowT = Math.max(z.slowT, 0.6);
+      this.spawnParticles(z.x, z.y - 48, 6, "#bdf3ff", "spark");
+      hit = true;
+    }
+    this.shake = Math.max(this.shake, hit ? 4.5 : 2);
+    this.sfx.laser();
+  }
+
   addText(x, y, text, color) {
     this.texts.push({ x, y, text, color, life: 0.8, maxLife: 0.8 });
   }
@@ -1585,6 +1737,11 @@ class PvZGame {
   }
 
   _updateEffects(dt) {
+    for (let i = this.beams.length - 1; i >= 0; i--) {
+      const b = this.beams[i];
+      b.life -= dt;
+      if (b.life <= 0) this.beams.splice(i, 1);
+    }
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const p = this.particles[i];
       p.life -= dt;
@@ -1772,14 +1929,14 @@ class PvZGame {
     g.fillStyle = sky;
     g.fillRect(0, TOP_H, W, GRID.y - TOP_H + 8);
     g.fillStyle = "#5a9c45";
-    for (let i = 0; i < 42; i++) {
+    for (let i = 0; i < Math.ceil(GRID_W / 23); i++) {
       g.beginPath();
-      g.arc(292 + i * 23, GRID.y - 2, 16, Math.PI, TAU);
+      g.arc(GRID.x + i * 23, GRID.y - 2, 16, Math.PI, TAU);
       g.fill();
     }
     // 栅栏
     g.fillStyle = "#efe2c2";
-    for (let x = 292; x < 1230; x += 34) {
+    for (let x = GRID.x; x < GRID.x + GRID_W; x += 34) {
       g.fillRect(x, GRID.y - 18, 8, 26);
       g.beginPath();
       g.moveTo(x, GRID.y - 18);
@@ -1789,7 +1946,7 @@ class PvZGame {
       g.fill();
     }
     g.fillStyle = "#d9c8a2";
-    g.fillRect(292, GRID.y - 12, 938, 5);
+    g.fillRect(GRID.x, GRID.y - 12, GRID_W, 5);
 
     // 草坪
     const lawn = g.createLinearGradient(0, GRID.y, 0, GRID.y + GRID_H);
@@ -1803,10 +1960,10 @@ class PvZGame {
         const x = GRID.x + col * GRID.cell;
         const y = GRID.y + r * GRID.cell;
         if ((r + col) % 2 === 0) {
-          g.fillStyle = "rgba(255,255,255,.045)";
+          g.fillStyle = "rgba(255,255,255,.065)";
           g.fillRect(x, y, GRID.cell, GRID.cell);
         }
-        g.strokeStyle = "rgba(30,80,20,.09)";
+        g.strokeStyle = "rgba(30,80,20,.12)";
         g.lineWidth = 1;
         g.strokeRect(x + 0.5, y + 0.5, GRID.cell - 1, GRID.cell - 1);
       }
@@ -1815,6 +1972,9 @@ class PvZGame {
     g.fillStyle = "rgba(30,70,20,.18)";
     g.fillRect(GRID.x, GRID.y, GRID_W, 3);
     g.fillRect(GRID.x, GRID.y + GRID_H - 3, GRID_W, 3);
+    // 草坪与底部 HUD 之间的草土过渡
+    g.fillStyle = "#4f9636";
+    g.fillRect(GRID.x, GRID.y + GRID_H, GRID_W, 666 - (GRID.y + GRID_H));
 
     // 左侧房屋
     const wall = g.createLinearGradient(0, TOP_H, 220, 0);
@@ -1896,11 +2056,11 @@ class PvZGame {
 
     // 右侧小路
     g.fillStyle = "#c9b98f";
-    g.fillRect(1230, TOP_H, 50, H - TOP_H);
+    g.fillRect(GRID.x + GRID_W + 6, TOP_H, W - GRID.x - GRID_W - 6, H - TOP_H);
     g.fillStyle = "rgba(90,70,40,.16)";
     for (let y = TOP_H + 30; y < H; y += 52) {
       g.beginPath();
-      g.arc(1256, y, 3, 0, TAU);
+      g.arc(GRID.x + GRID_W + 28, y, 3, 0, TAU);
       g.fill();
     }
 
@@ -1926,7 +2086,7 @@ class PvZGame {
       };
     };
     const r = rng(97);
-    for (let i = 0; i < 20; i++) {
+    for (let i = 0; i < 34; i++) {
       const x = GRID.x + r() * GRID_W;
       const y = GRID.y + r() * GRID_H;
       g.fillStyle = "rgba(60,110,35,.5)";
@@ -1935,7 +2095,7 @@ class PvZGame {
       g.fill();
     }
     // 小花
-    for (let i = 0; i < 12; i++) {
+    for (let i = 0; i < 20; i++) {
       const x = GRID.x + 30 + r() * (GRID_W - 60);
       const y = GRID.y + 20 + r() * (GRID_H - 40);
       const color = ["#fff3a8", "#ffb8d0", "#ffe27a"][Math.floor(r() * 3)];
@@ -2113,6 +2273,7 @@ class PvZGame {
     const zombies = this.zombies.slice().sort((a, b) => a.row - b.row || a.x - b.x);
     for (const z of zombies) z.draw(ctx, this);
     for (const p of this.peas) p.draw(ctx);
+    this._drawBeams(ctx);
     for (const s of this.suns) s.draw(ctx);
 
     this._drawParticles(ctx);
@@ -2413,6 +2574,30 @@ class PvZGame {
     ctx.restore();
   }
 
+  _drawBeams(ctx) {
+    if (!this.beams.length) return;
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    for (const b of this.beams) {
+      const k = clamp(b.life / b.maxLife, 0, 1);
+      ctx.globalAlpha = 0.32 * k;
+      ctx.strokeStyle = "#6fe6ff";
+      ctx.lineWidth = 14 * k + 3;
+      ctx.beginPath();
+      ctx.moveTo(b.x1, b.y1);
+      ctx.lineTo(b.x2, b.y2);
+      ctx.stroke();
+      ctx.globalAlpha = 0.95 * k;
+      ctx.strokeStyle = "#eafcff";
+      ctx.lineWidth = 4 * k + 1;
+      ctx.beginPath();
+      ctx.moveTo(b.x1, b.y1);
+      ctx.lineTo(b.x2, b.y2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   _drawParticles(ctx) {
     for (const p of this.particles) {
       const a = clamp(p.life / p.maxLife, 0, 1);
@@ -2422,6 +2607,23 @@ class PvZGame {
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.size * (2 - a), 0, TAU);
         ctx.fill();
+      } else if (p.kind === "flash") {
+        const r = p.size * (1.6 - a * 0.6);
+        const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
+        g.addColorStop(0, "rgba(255,255,235,.95)");
+        g.addColorStop(0.45, "rgba(255,220,120,.65)");
+        g.addColorStop(1, "rgba(255,150,60,0)");
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, r, 0, TAU);
+        ctx.fill();
+      } else if (p.kind === "shell") {
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.life * 22);
+        ctx.fillStyle = p.color;
+        ctx.fillRect(-2.5, -1.5, 5, 3);
+        ctx.restore();
       } else if (p.kind === "spark" || p.kind === "confetti") {
         ctx.fillStyle = p.color;
         ctx.beginPath();
@@ -2570,19 +2772,49 @@ class PvZGame {
       ctx.arc(0, -48, 20, 0, TAU);
       ctx.fill();
       ctx.stroke();
-      ctx.fillStyle = "#8b98a2";
-      roundRect(ctx, 10, -60, 9, 26, 4);
-      ctx.fill();
-      ctx.fillStyle = "#5f6c76";
-      for (let i = 0; i < 4; i++) {
-        roundRect(ctx, 19, -61 + i * 7, 22, 5, 2.5);
+      // 旋转的六管弹巢：开火时高速转动
+      const spin = t * (plant && plant.shootPulse > 0 ? 30 : 1.4);
+      ctx.save();
+      ctx.translate(29, -50);
+      ctx.rotate(spin);
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * TAU;
+        ctx.fillStyle = i % 2 ? "#6f7c86" : "#8b98a2";
+        ctx.beginPath();
+        ctx.arc(Math.cos(a) * 5.5, Math.sin(a) * 5.5, 4.2, 0, TAU);
         ctx.fill();
       }
+      ctx.fillStyle = "#39434b";
+      ctx.beginPath();
+      ctx.arc(0, 0, 3, 0, TAU);
+      ctx.fill();
+      ctx.restore();
+      // 双枪管
+      ctx.fillStyle = "#8b98a2";
+      roundRect(ctx, 18, -59, 30, 7, 3.5);
+      ctx.fill();
+      roundRect(ctx, 18, -47, 30, 7, 3.5);
+      ctx.fill();
+      ctx.fillStyle = "#4e5a63";
+      ctx.beginPath();
+      ctx.arc(48, -55.5, 3, 0, TAU);
+      ctx.arc(48, -43.5, 3, 0, TAU);
+      ctx.fill();
       eyes(-3, -52, 2.2);
       ctx.fillStyle = "#ffd35e";
       ctx.beginPath();
       ctx.arc(6, -64, 2, 0, TAU);
       ctx.fill();
+      // 开火时的枪口辉光
+      if (plant && plant.shootPulse > 0.06) {
+        const glow = ctx.createRadialGradient(54, -51, 0, 54, -51, 16);
+        glow.addColorStop(0, "rgba(255,246,200,.95)");
+        glow.addColorStop(1, "rgba(255,160,60,0)");
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.arc(54, -51, 16, 0, TAU);
+        ctx.fill();
+      }
     } else if (id === "wallnut") {
       ctx.fillStyle = "#c08a4e";
       ctx.strokeStyle = "#8a5a2e";
@@ -2893,6 +3125,144 @@ class PvZGame {
       ctx.arc(14, -46, 3, 0, TAU);
       ctx.fill();
       eyes(0, -34, 2.2);
+    } else if (id === "firepea") {
+      stem(0, 0, 0, -30, 6, "#8a4a1e");
+      leaf(-10, -14, -0.5, "#c9762e");
+      leaf(10, -22, 0.45, "#c9762e");
+      // 火焰冠
+      for (let i = -1; i <= 1; i++) {
+        const flick = Math.sin(t * 12 + i) * 3;
+        ctx.fillStyle = i === 0 ? "#ffca4a" : "#ff8a3a";
+        ctx.beginPath();
+        ctx.moveTo(i * 7 - 5, -66);
+        ctx.quadraticCurveTo(i * 7 + flick, -84 - Math.abs(i) * 4, i * 7 + 5, -64);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.fillStyle = "#e8702e";
+      ctx.strokeStyle = "#a83f1e";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, -48, 19, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+      roundRect(ctx, 12, -58, 26, 20, 9);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "#7a2a12";
+      ctx.beginPath();
+      ctx.ellipse(37, -48, 4, 6, 0, 0, TAU);
+      ctx.fill();
+      eyes(-2, -52, 2.4);
+      // 胸口余火
+      ctx.fillStyle = "rgba(255,180,60,.55)";
+      ctx.beginPath();
+      ctx.ellipse(0, -34, 8, 4 + Math.sin(t * 8) * 1.4, 0, 0, TAU);
+      ctx.fill();
+    } else if (id === "laserbean") {
+      stem(0, 0, 0, -32, 7, "#2f7a5c");
+      leaf(-12, -14, -0.5, "#3f9a72");
+      leaf(12, -20, 0.45, "#3f9a72");
+      ctx.fillStyle = "#63c98f";
+      ctx.strokeStyle = "#2f7a5c";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.ellipse(0, -48, 20, 18, 0, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+      eyes(-4, -52, 2.4);
+      // 发射器与镜片
+      ctx.fillStyle = "#9fb6c4";
+      ctx.strokeStyle = "#5d6f7c";
+      ctx.lineWidth = 1.6;
+      roundRect(ctx, 12, -60, 30, 24, 7);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "#24343d";
+      ctx.beginPath();
+      ctx.ellipse(40, -48, 4, 8, 0, 0, TAU);
+      ctx.fill();
+      const pulse = 0.55 + 0.45 * Math.sin(t * 6);
+      ctx.fillStyle = `rgba(120,240,255,${pulse})`;
+      ctx.shadowColor = "rgba(120,240,255,.9)";
+      ctx.shadowBlur = 10;
+      ctx.beginPath();
+      ctx.ellipse(41, -48, 2.6, 6, 0, 0, TAU);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      // 能量环
+      ctx.strokeStyle = `rgba(120,240,255,${0.3 + pulse * 0.5})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(40, -48, 11 + pulse * 2, -0.9, 0.9);
+      ctx.stroke();
+    } else if (id === "wintermelon") {
+      stem(0, 0, 0, -22, 5, "#3f8f6a");
+      leaf(-12, -12, -0.5, "#4aa67a");
+      leaf(12, -16, 0.45, "#4aa67a");
+      ctx.fillStyle = "#8fd7f0";
+      ctx.strokeStyle = "#4a9fb8";
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.ellipse(0, -40, 27, 23, 0, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+      ctx.strokeStyle = "#e9fbff";
+      ctx.lineWidth = 2;
+      for (let i = -1; i <= 1; i++) {
+        ctx.beginPath();
+        ctx.moveTo(i * 8, -60);
+        ctx.quadraticCurveTo(i * 11, -40, i * 8, -20);
+        ctx.stroke();
+      }
+      // 冰霜覆盖
+      ctx.fillStyle = "rgba(255,255,255,.75)";
+      ctx.beginPath();
+      ctx.ellipse(-8, -54, 10, 5, -0.35, 0, TAU);
+      ctx.fill();
+      eyes(0, -42, 2.4);
+      ctx.strokeStyle = "#2f6b7a";
+      ctx.beginPath();
+      ctx.arc(0, -34, 6, 0.2, Math.PI - 0.2);
+      ctx.stroke();
+    } else if (id === "spikerock") {
+      ctx.fillStyle = "#46603a";
+      ctx.strokeStyle = "#2c3f25";
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.ellipse(0, -6, 30, 10, 0, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "#9fb0a0";
+      ctx.strokeStyle = "#6d7a6d";
+      ctx.lineWidth = 1;
+      for (let i = -2; i <= 2; i++) {
+        for (let k = 0; k < 2; k++) {
+          const bx = i * 11 + (k ? 5 : 0);
+          const h = 26 + (k ? 10 : 0);
+          ctx.beginPath();
+          ctx.moveTo(bx - 5, -8);
+          ctx.lineTo(bx, -8 - h);
+          ctx.lineTo(bx + 5, -8);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+        }
+      }
+      ctx.fillStyle = "#d7e2d8";
+      for (let i = -2; i <= 2; i++) {
+        ctx.beginPath();
+        ctx.moveTo(i * 11 - 2, -30);
+        ctx.lineTo(i * 11, -42);
+        ctx.lineTo(i * 11 + 2, -30);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.fillStyle = "#2c3f25";
+      ctx.beginPath();
+      ctx.arc(-8, -11, 1.8, 0, TAU);
+      ctx.arc(8, -11, 1.8, 0, TAU);
+      ctx.fill();
     }
     ctx.restore();
   }

@@ -1,7 +1,7 @@
 /**
  * 《植物大战僵尸 · 加强版》配置
  * - 12 个关卡 + 无尽尸潮
- * - 12 种植物，包含加特林豌豆、樱桃炸弹、火爆辣椒等
+ * - 20 种植物，包含加特林豌豆、激光豆、冰瓜投手等
  */
 
 export const PLANTS = {
@@ -51,7 +51,8 @@ export const PLANTS = {
   },
   gatling: {
     id: "gatling", name: "加特林豌豆", cost: 450, hp: 140, recharge: 35,
-    damage: 20, fireRate: 1.4, shots: 4, desc: "加强版核心：一次四连发",
+    damage: 20, fireRate: 1.9, shots: 5, burst: 3, burstGap: 0.09,
+    desc: "三连爆发扫射，一轮倾泻 15 发豌豆",
   },
   melon: {
     id: "melon", name: "西瓜投手", cost: 300, hp: 120, recharge: 12,
@@ -69,12 +70,33 @@ export const PLANTS = {
     id: "iceshroom", name: "寒冰菇", cost: 75, hp: 9999, recharge: 30,
     fuse: 0.8, freeze: 5, desc: "冻结全场僵尸 5 秒",
   },
+  firepea: {
+    id: "firepea", name: "烈焰射手", cost: 200, hp: 120, recharge: 14,
+    damage: 24, fireRate: 1.8, shots: 3, burn: true,
+    desc: "三连发火豆，命中后持续燃烧",
+  },
+  laserbean: {
+    id: "laserbean", name: "激光豆", cost: 250, hp: 110, recharge: 16,
+    damage: 55, fireRate: 2.0, laser: true,
+    desc: "向整行发射穿透激光，无视距离",
+  },
+  wintermelon: {
+    id: "wintermelon", name: "冰瓜投手", cost: 350, hp: 120, recharge: 18,
+    damage: 90, splash: 55, fireRate: 2.6, slow: true,
+    desc: "投掷冰西瓜，范围伤害并减速",
+  },
+  spikerock: {
+    id: "spikerock", name: "地刺王", cost: 150, hp: 900, recharge: 16,
+    damage: 45, tick: 0.45,
+    desc: "强化地刺，持续重创经过的僵尸",
+  },
 };
 
 export const PLANT_ORDER = [
   "sunflower", "peashooter", "wallnut", "potatomine", "snowpea", "repeater",
   "cherrybomb", "chomper", "threepeater", "jalapeno", "squash", "gatling",
   "melon", "spikeweed", "magnet", "iceshroom",
+  "firepea", "laserbean", "wintermelon", "spikerock",
 ];
 
 export const ZOMBIES = {
@@ -148,7 +170,7 @@ export const LEVELS = [
   },
   {
     id: 6, name: "双重火力", sub: "双发射手，让火力翻倍",
-    startSun: 200, plants: ["sunflower", "peashooter", "wallnut", "potatomine", "snowpea", "cherrybomb", "repeater", "spikeweed"],
+    startSun: 200, plants: ["sunflower", "peashooter", "wallnut", "potatomine", "snowpea", "cherrybomb", "repeater", "spikeweed", "firepea"],
     waves: [
       { t: 7, list: [Z("normal", 2)] },
       { t: 19, list: [Z("cone", 2)] },
@@ -161,7 +183,7 @@ export const LEVELS = [
   },
   {
     id: 7, name: "烈焰走廊", sub: "一整行僵尸，交给火爆辣椒",
-    startSun: 225, plants: ["sunflower", "peashooter", "wallnut", "potatomine", "snowpea", "cherrybomb", "repeater", "jalapeno"],
+    startSun: 225, plants: ["sunflower", "peashooter", "wallnut", "potatomine", "snowpea", "cherrybomb", "repeater", "jalapeno", "firepea", "laserbean"],
     waves: [
       { t: 7, list: [Z("normal", 2)] },
       { t: 19, list: [Z("cone", 2), Z("normal", 1)] },
@@ -174,7 +196,7 @@ export const LEVELS = [
   },
   {
     id: 8, name: "三线压制", sub: "三线射手覆盖三条战线",
-    startSun: 250, plants: ["sunflower", "peashooter", "wallnut", "potatomine", "snowpea", "cherrybomb", "repeater", "jalapeno", "threepeater", "melon"],
+    startSun: 250, plants: ["sunflower", "peashooter", "wallnut", "potatomine", "snowpea", "cherrybomb", "repeater", "jalapeno", "threepeater", "melon", "firepea", "laserbean", "spikerock"],
     waves: [
       { t: 7, list: [Z("normal", 3)] },
       { t: 20, list: [Z("cone", 3)] },
@@ -187,7 +209,7 @@ export const LEVELS = [
   },
   {
     id: 9, name: "血盆大口", sub: "大嘴花一口一个，但要小心咀嚼时间",
-    startSun: 250, plants: ["sunflower", "peashooter", "wallnut", "potatomine", "snowpea", "cherrybomb", "repeater", "jalapeno", "threepeater", "chomper"],
+    startSun: 250, plants: ["sunflower", "peashooter", "wallnut", "potatomine", "snowpea", "cherrybomb", "repeater", "jalapeno", "threepeater", "chomper", "firepea", "laserbean", "spikerock"],
     waves: [
       { t: 7, list: [Z("normal", 3)] },
       { t: 19, list: [Z("cone", 2), Z("bucket", 1)] },
@@ -200,7 +222,7 @@ export const LEVELS = [
   },
   {
     id: 10, name: "窝瓜突袭", sub: "窝瓜专治各种铁桶",
-    startSun: 275, plants: ["sunflower", "peashooter", "wallnut", "potatomine", "snowpea", "cherrybomb", "repeater", "jalapeno", "threepeater", "chomper", "squash", "magnet"],
+    startSun: 275, plants: ["sunflower", "peashooter", "wallnut", "potatomine", "snowpea", "cherrybomb", "repeater", "jalapeno", "threepeater", "chomper", "squash", "magnet", "firepea", "laserbean", "wintermelon", "spikerock"],
     waves: [
       { t: 7, list: [Z("normal", 3)] },
       { t: 19, list: [Z("cone", 3), Z("bucket", 1)] },
@@ -212,8 +234,8 @@ export const LEVELS = [
     duration: 108,
   },
   {
-    id: 11, name: "加特林登场", sub: "加强版核心植物：四连发加特林",
-    startSun: 300, plants: ["sunflower", "peashooter", "wallnut", "potatomine", "snowpea", "cherrybomb", "repeater", "jalapeno", "threepeater", "chomper", "squash", "gatling", "melon", "spikeweed", "magnet", "iceshroom"],
+    id: 11, name: "加特林登场", sub: "加强版核心植物：三连爆发扫射",
+    startSun: 300, plants: PLANT_ORDER.slice(),
     waves: [
       { t: 7, list: [Z("normal", 3)] },
       { t: 19, list: [Z("cone", 3), Z("bucket", 1)] },
@@ -227,7 +249,7 @@ export const LEVELS = [
   },
   {
     id: 12, name: "加强版终局", sub: "五波尸潮 + 橄榄球队，守住最后草坪",
-    startSun: 325, plants: ["sunflower", "peashooter", "wallnut", "potatomine", "snowpea", "cherrybomb", "repeater", "jalapeno", "threepeater", "chomper", "squash", "gatling", "melon", "spikeweed", "magnet", "iceshroom"],
+    startSun: 325, plants: PLANT_ORDER.slice(),
     waves: [
       { t: 6, list: [Z("normal", 3)] },
       { t: 18, list: [Z("cone", 3), Z("bucket", 1)] },
