@@ -8,6 +8,7 @@ import "../../assets/js/device.js";
 import { ProgressStore } from "../../assets/js/progress.js";
 import { initAccount } from "../../assets/js/account.js";
 import { toast, icon } from "../../assets/js/ui.js";
+import { audio } from "../../assets/js/audio.js";
 import {
   W, H, TOWERS, TOWER_ORDER, ENEMIES, LEVELS, TOTAL_LEVELS, getLevel,
 } from "./levels.js";
@@ -131,7 +132,7 @@ class Sfx {
       if (!AC) return null;
       this.ctx = new AC();
       this.master = this.ctx.createGain();
-      this.master.gain.value = 0.22;
+      this.master.gain.value = 0.5;
       this.master.connect(this.ctx.destination);
     }
     if (this.ctx.state === "suspended") this.ctx.resume();
@@ -655,6 +656,8 @@ class CarrotGame {
     await this.store.init();
     this.soundOn = this.store.state.sound !== false;
     this.sfx.enabled = this.soundOn;
+    audio.setEnabled(this.soundOn);
+    audio.setMusic("carrot");
     this._updateSoundButtons();
     this._refreshSummary();
     this.store.onChange(() => this._refreshSummary());
@@ -1351,6 +1354,7 @@ class CarrotGame {
   _toggleSound() {
     this.soundOn = !(this.soundOn !== false);
     this.sfx.enabled = this.soundOn;
+    audio.setEnabled(this.soundOn);
     this.store.update((p) => { p.sound = this.soundOn; });
     this._updateSoundButtons();
     if (this.soundOn) { this.sfx.ensure(); this.sfx.coin(); }
