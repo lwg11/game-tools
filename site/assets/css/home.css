@@ -151,6 +151,16 @@
 }
 .game-card:hover .play-fab { transform: scale(1.08); }
 
+/* 触屏设备：取消粘滞 hover，改为按下的即时反馈 */
+@media (hover: none) {
+  .game-card:hover { transform: none; border-color: var(--line); box-shadow: none; }
+  .game-card:hover .cover > svg,
+  .game-card:hover .play-fab { transform: none; }
+  .game-card:active { transform: translateY(-2px); border-color: rgba(255, 181, 71, 0.34); }
+  .game-card:active .cover > svg { transform: scale(1.02); }
+  .game-card:active .play-fab { transform: scale(0.96); }
+}
+
 .card-body { padding: 18px 20px 20px; }
 .card-title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .card-title-row h3 { font-size: 20px; font-weight: 900; letter-spacing: -0.01em; }
