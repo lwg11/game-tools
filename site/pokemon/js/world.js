@@ -1,7 +1,8 @@
 /**
  * 精灵宝可梦 · 丰缘草地
  * ------------------------------------------------------------
- * 开放世界地图、草丛遭遇、博士委托。
+ * 开放世界地图、草丛遭遇、野生宝可梦游走、浆果采集、博士委托。
+ * 地图为 2560×1600 的大世界，相机跟随玩家滚动查看。
  * 调研结论（Bulbapedia / 官方训练家指南 / Pokemon GO 研究任务）：
  * - 野生宝可梦栖息在草丛，玩家在草丛中行走时按步触发随机遭遇；
  * - 遭遇后可以战斗、捕捉或逃跑，HP 越低越容易捕获；
@@ -10,54 +11,155 @@
  */
 import { SPECIES, TYPE_NAMES } from "./data.js";
 
-export const WORLD_W = 1280;
-export const WORLD_H = 720;
+export const WORLD_W = 2560;
+export const WORLD_H = 1600;
 
-export const PROFESSOR = { x: 205, y: 330, name: "枫木博士" };
+export const PROFESSOR = { x: 220, y: 360, name: "枫木博士" };
 
 export const ZONES = [
   {
-    id: "meadow", name: "101号草地", x: 390, y: 400, w: 250, h: 190,
+    id: "meadow", name: "101号草地", x: 520, y: 640, w: 340, h: 250,
     theme: "route", baseLevel: 3, tier: 1,
     species: ["poochyena", "zigzagoon", "wurmple", "taillow", "marill"],
   },
   {
-    id: "forest", name: "橙华森林", x: 740, y: 90, w: 270, h: 190,
+    id: "flowerfield", name: "花田小径", x: 900, y: 250, w: 320, h: 230,
+    theme: "flower", baseLevel: 5, tier: 1,
+    species: ["ralts", "beautifly", "taillow", "zigzagoon", "marill"],
+  },
+  {
+    id: "forest", name: "橙华森林", x: 1460, y: 230, w: 400, h: 320,
     theme: "forest", baseLevel: 8, tier: 2,
     species: ["treecko", "cacnea", "ralts", "beautifly", "sableye"],
   },
   {
-    id: "pond", name: "池畔草丛", x: 610, y: 520, w: 190, h: 130,
+    id: "pond", name: "池畔草丛", x: 1400, y: 1070, w: 330, h: 230,
     theme: "cave", baseLevel: 7, tier: 2,
     species: ["marill", "mudkip", "azumarill", "poochyena"],
   },
   {
-    id: "rocky", name: "岩石坡", x: 1010, y: 400, w: 210, h: 180,
+    id: "wetland", name: "湖畔湿地", x: 600, y: 1170, w: 320, h: 240,
+    theme: "water", baseLevel: 7, tier: 2,
+    species: ["mudkip", "marill", "wurmple", "zigzagoon"],
+  },
+  {
+    id: "rocky", name: "岩石坡", x: 2060, y: 800, w: 340, h: 300,
     theme: "gym", baseLevel: 13, tier: 3,
     species: ["geodude", "numel", "mawile", "electrike", "graveler"],
   },
+  {
+    id: "grove", name: "古树秘境", x: 2060, y: 180, w: 320, h: 260,
+    theme: "ancient", baseLevel: 15, tier: 3,
+    species: ["sableye", "mawile", "ralts", "graveler", "numel"],
+  },
 ];
 
-const LAB = { x: 80, y: 90, w: 260, h: 180 };
-const POND = { x: 900, y: 592, rx: 158, ry: 78 };
+const LAB = { x: 70, y: 110, w: 300, h: 200 };
+const POND = { x: 1780, y: 1390, rx: 230, ry: 105 };
 
-const TREES = [
-  [60, 60], [150, 55], [245, 62], [345, 55], [440, 58], [540, 56], [640, 62],
-  [760, 52], [865, 55], [975, 58], [1080, 52], [1180, 58], [1240, 96],
-  [60, 360], [62, 455], [58, 550], [62, 645], [120, 690], [230, 696], [345, 690],
-  [470, 700], [575, 694], [700, 700], [810, 694], [930, 700], [1040, 694], [1160, 700], [1242, 650],
-  [1240, 300], [1242, 205], [1240, 480], [1238, 560],
-  [380, 310], [670, 300], [700, 380], [860, 330], [980, 300], [980, 640], [1140, 300],
+// 主路与支路（静态烘焙到背景缓存）
+const PATH_MAIN = [
+  [290, 400], [480, 520], [720, 610], [980, 660], [1230, 590], [1440, 480],
+  [1650, 520], [1880, 660], [2120, 790], [2330, 930],
+];
+const PATH_BRANCHES = [
+  [[1440, 480], [1540, 420], [1640, 380], [1720, 360]],
+  [[1650, 520], [1760, 700], [1740, 900], [1660, 1060]],
+  [[980, 660], [900, 900], [800, 1120], [760, 1200]],
+  [[2120, 790], [2200, 600], [2240, 430], [2220, 330]],
+  [[480, 520], [380, 620], [300, 720]],
 ];
 
-const ROCKS = [
-  [355, 470, 18], [675, 560, 16], [980, 430, 20], [1190, 600, 24], [560, 230, 18],
-  [840, 500, 16], [1240, 380, 20],
-];
+// ---------------------------------------------------------------- 地形数据
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const wrnd = mulberry32(20260317);
 
 function inRect(x, y, r, pad = 0) {
   return x >= r.x - pad && x <= r.x + r.w + pad && y >= r.y - pad && y <= r.y + r.h + pad;
 }
+
+function distToSegment(px, py, ax, ay, bx, by) {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const len = dx * dx + dy * dy || 1;
+  let t = ((px - ax) * dx + (py - ay) * dy) / len;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(px - (ax + dx * t), py - (ay + dy * t));
+}
+
+function nearPath(x, y, d) {
+  const all = [PATH_MAIN, ...PATH_BRANCHES];
+  for (const pts of all) {
+    for (let i = 0; i < pts.length - 1; i++) {
+      if (distToSegment(x, y, pts[i][0], pts[i][1], pts[i + 1][0], pts[i + 1][1]) < d) return true;
+    }
+  }
+  return false;
+}
+
+function blockedForTree(x, y) {
+  if (x < 34 || x > WORLD_W - 34 || y < 50 || y > WORLD_H - 28) return true;
+  if (inRect(x, y, LAB, 46)) return true;
+  if (zonesNear(x, y, 40)) return true;
+  if (Math.hypot((x - POND.x) / (POND.rx + 55), (y - POND.y) / (POND.ry + 55)) < 1) return true;
+  if (nearPath(x, y, 54)) return true;
+  if (Math.hypot(x - PROFESSOR.x, y - PROFESSOR.y) < 70) return true;
+  return false;
+}
+
+function zonesNear(x, y, pad) {
+  return ZONES.some((z) => inRect(x, y, z, pad));
+}
+
+const TREES = [];
+// 边界林带
+for (let x = 46; x < WORLD_W - 30; x += 86 + wrnd() * 26) {
+  TREES.push([x, 58 + wrnd() * 26]);
+  TREES.push([x + 20, WORLD_H - 40 - wrnd() * 18]);
+}
+for (let y = 120; y < WORLD_H - 70; y += 92 + wrnd() * 24) {
+  TREES.push([46 + wrnd() * 26, y]);
+  TREES.push([WORLD_W - 46 - wrnd() * 26, y + 20]);
+}
+// 内部树丛
+let guard = 0;
+while (TREES.length < 170 && guard < 3000) {
+  guard += 1;
+  const x = 90 + wrnd() * (WORLD_W - 180);
+  const y = 100 + wrnd() * (WORLD_H - 170);
+  if (blockedForTree(x, y)) continue;
+  if (TREES.some(([tx, ty]) => Math.hypot(x - tx, y - ty) < 80)) continue;
+  TREES.push([x, y]);
+  if (wrnd() < 0.4) TREES.push([x + 34 + wrnd() * 20, y + 20 + wrnd() * 18]);
+}
+
+const ROCKS = [];
+for (let i = 0; i < 18; i++) {
+  const x = 80 + wrnd() * (WORLD_W - 160);
+  const y = 90 + wrnd() * (WORLD_H - 160);
+  if (blockedForTree(x, y)) continue;
+  if (Math.hypot(x - 255, y - 385) < 80) continue;
+  ROCKS.push([x, y, 12 + wrnd() * 12]);
+}
+// 岩石坡附近的石群
+[[2040, 860], [2120, 960], [2330, 850], [2350, 990], [2080, 1080]].forEach(([x, y]) => {
+  ROCKS.push([x, y, 16 + wrnd() * 10]);
+});
+
+export const BERRY_SPOTS = [
+  [486, 604], [610, 780], [944, 300], [1130, 430], [1500, 300], [1580, 500],
+  [1440, 1120], [1660, 1240], [700, 1230], [860, 1360], [2100, 860], [2260, 990],
+  [2140, 260], [2290, 380], [366, 600], [430, 990],
+];
 
 export function canWalk(x, y) {
   if (x < 30 || x > WORLD_W - 30 || y < 62 || y > WORLD_H - 26) return false;
@@ -162,7 +264,7 @@ export function createQuest(active, done) {
   return pool[Math.floor(Math.random() * pool.length)]();
 }
 
-// ---------------------------------------------------------------- 绘制
+// ---------------------------------------------------------------- 静态绘制
 function roundRect(ctx, x, y, w, h, r) {
   const rr = Math.min(r, w / 2, h / 2);
   ctx.beginPath();
@@ -174,126 +276,88 @@ function roundRect(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
+// 草丛内的草叶（动态摆动）
 const BLADES = [];
+const FG_BLADES = [];
 for (const zone of ZONES) {
-  for (let i = 0; i < 60; i++) {
+  for (let i = 0; i < 34; i++) {
     BLADES.push({
       zone: zone.id,
-      x: zone.x + 8 + Math.random() * (zone.w - 16),
-      y: zone.y + 10 + Math.random() * (zone.h - 18),
-      h: 7 + Math.random() * 8,
+      x: zone.x + 10 + Math.random() * (zone.w - 20),
+      y: zone.y + 12 + Math.random() * (zone.h - 20),
+      h: 9 + Math.random() * 10,
+      phase: Math.random() * 6,
+    });
+  }
+  for (let i = 0; i < 22; i++) {
+    FG_BLADES.push({
+      zone: zone.id,
+      x: zone.x + 10 + Math.random() * (zone.w - 20),
+      y: zone.y + 14 + Math.random() * (zone.h - 22),
+      h: 12 + Math.random() * 12,
       phase: Math.random() * 6,
     });
   }
 }
 
 const FLOWERS = [];
-for (let i = 0; i < 46; i++) {
-  let x = 40 + Math.random() * (WORLD_W - 80);
-  let y = 80 + Math.random() * (WORLD_H - 120);
-  if (x > LAB.x - 20 && x < LAB.x + LAB.w + 20 && y > LAB.y - 20 && y < LAB.y + LAB.h + 20) continue;
-  FLOWERS.push({ x, y, c: Math.random() < 0.5 ? "#ffe27a" : "#ffb4d8", s: 2 + Math.random() * 2 });
+for (let i = 0; i < 130; i++) {
+  const x = 40 + wrnd() * (WORLD_W - 80);
+  const y = 80 + wrnd() * (WORLD_H - 120);
+  if (inRect(x, y, LAB, 30)) continue;
+  if (Math.hypot((x - POND.x) / POND.rx, (y - POND.y) / POND.ry) < 1.15) continue;
+  FLOWERS.push({ x, y, c: ["#ffe27a", "#ffb4d8", "#fff3c8", "#c9b8ff"][Math.floor(wrnd() * 4)], s: 2 + wrnd() * 2 });
 }
 
-export function drawWorld(ctx, game) {
-  const t = game.worldTime;
-  const w = game.world;
+const TUFTS = [];
+for (let i = 0; i < 220; i++) {
+  const x = 40 + wrnd() * (WORLD_W - 80);
+  const y = 80 + wrnd() * (WORLD_H - 120);
+  if (inRect(x, y, LAB, 24)) continue;
+  if (Math.hypot((x - POND.x) / POND.rx, (y - POND.y) / POND.ry) < 1.1) continue;
+  TUFTS.push({ x, y, s: 4 + wrnd() * 6 });
+}
 
-  // 草地底色
-  const sky = ctx.createLinearGradient(0, 0, 0, WORLD_H);
-  sky.addColorStop(0, "#8fd8ff");
-  sky.addColorStop(0.18, "#c9edff");
-  sky.addColorStop(0.62, "#8ed06a");
-  sky.addColorStop(1, "#5aa84c");
-  ctx.fillStyle = sky;
-  ctx.fillRect(0, 0, WORLD_W, WORLD_H);
-
-  // 远处山丘
-  ctx.save();
-  ctx.globalAlpha = 0.5;
-  ctx.fillStyle = "#5f9f74";
-  ctx.beginPath();
-  ctx.moveTo(0, 230);
-  for (let x = 0; x <= WORLD_W; x += 80) {
-    ctx.lineTo(x, 190 + Math.sin(x * 0.012) * 34 + Math.cos(x * 0.031) * 16);
-  }
-  ctx.lineTo(WORLD_W, 260);
-  ctx.lineTo(0, 260);
-  ctx.closePath();
-  ctx.fill();
-  ctx.restore();
-
-  // 草纹
-  ctx.save();
-  ctx.globalAlpha = 0.1;
-  ctx.strokeStyle = "#2f7c3a";
-  ctx.lineWidth = 2;
-  for (let y = 250; y < WORLD_H; y += 48) {
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(WORLD_W, y + 16);
-    ctx.stroke();
-  }
-  ctx.restore();
-
-  drawPaths(ctx);
-
-  // 荷叶与水面
-  drawPond(ctx, t);
-
-  // 草丛
-  for (const z of ZONES) drawGrassZone(ctx, z, t, w);
-
-  // 树木与石头
-  for (const [x, y] of TREES) drawTree(ctx, x, y, t);
-  for (const [x, y, r] of ROCKS) drawRock(ctx, x, y, r);
-
-  drawFlowers(ctx, t);
-  drawLab(ctx, t);
-  drawSigns(ctx);
-  drawProfessor(ctx, game, t);
-  drawPlayer(ctx, game);
-  drawAmbient(ctx, t);
+const MUSHROOMS = [];
+for (let i = 0; i < 26; i++) {
+  const z = ZONES[Math.floor(wrnd() * ZONES.length)];
+  MUSHROOMS.push({
+    x: z.x + 20 + wrnd() * (z.w - 40),
+    y: z.y + 20 + wrnd() * (z.h - 40),
+    s: 2 + wrnd() * 2,
+  });
 }
 
 function drawPaths(ctx) {
-  const pts = [
-    [270, 340], [400, 388], [520, 430], [680, 420], [820, 390],
-    [950, 440], [1090, 500], [1220, 540],
-  ];
+  const strokePath = (pts, width) => {
+    ctx.beginPath();
+    pts.forEach(([x, y], i) => (i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)));
+    ctx.lineWidth = width;
+    ctx.stroke();
+  };
   ctx.save();
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
-  ctx.strokeStyle = "#a87a45";
-  ctx.lineWidth = 58;
-  ctx.beginPath();
-  pts.forEach(([x, y], i) => (i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)));
-  ctx.stroke();
-  ctx.strokeStyle = "#d9b47c";
-  ctx.lineWidth = 46;
-  ctx.stroke();
-  ctx.strokeStyle = "rgba(255,245,210,.5)";
+  const all = [PATH_MAIN, ...PATH_BRANCHES];
+  for (const pts of all) {
+    ctx.strokeStyle = "#a87a45";
+    strokePath(pts, 62);
+  }
+  for (const pts of all) {
+    ctx.strokeStyle = "#d9b47c";
+    strokePath(pts, 50);
+  }
+  ctx.strokeStyle = "rgba(255,245,210,.45)";
   ctx.lineWidth = 2;
   ctx.setLineDash([10, 16]);
-  ctx.stroke();
-  ctx.restore();
-
-  // 从主路到研究所
-  ctx.save();
-  ctx.lineCap = "round";
-  ctx.strokeStyle = "#d9b47c";
-  ctx.lineWidth = 40;
-  ctx.beginPath();
-  ctx.moveTo(280, 345);
-  ctx.quadraticCurveTo(270, 300, 250, 280);
-  ctx.stroke();
+  for (const pts of all) strokePath(pts, 2);
   ctx.restore();
 }
 
-function drawPond(ctx, t) {
+function drawPondBase(ctx) {
   ctx.save();
   ctx.beginPath();
-  ctx.ellipse(POND.x, POND.y, POND.rx + 12, POND.ry + 10, 0, 0, Math.PI * 2);
+  ctx.ellipse(POND.x, POND.y, POND.rx + 16, POND.ry + 12, 0, 0, Math.PI * 2);
   ctx.fillStyle = "#5f9f5a";
   ctx.fill();
   const g = ctx.createLinearGradient(POND.x, POND.y - POND.ry, POND.x, POND.y + POND.ry);
@@ -303,19 +367,14 @@ function drawPond(ctx, t) {
   ctx.ellipse(POND.x, POND.y, POND.rx, POND.ry, 0, 0, Math.PI * 2);
   ctx.fillStyle = g;
   ctx.fill();
-  ctx.strokeStyle = "rgba(255,255,255,.5)";
-  ctx.lineWidth = 2;
-  for (let i = 0; i < 3; i++) {
-    const k = 0.35 + i * 0.2;
-    ctx.globalAlpha = 0.35 - i * 0.08;
-    ctx.beginPath();
-    ctx.ellipse(POND.x + Math.sin(t * 1.2 + i) * 8, POND.y + i * 16 - 14,
-      POND.rx * k, POND.ry * k * 0.5, 0, 0, Math.PI * 2);
-    ctx.stroke();
-  }
-  ctx.globalAlpha = 1;
+  // 岸边浅水
+  ctx.strokeStyle = "rgba(180,240,255,.5)";
+  ctx.lineWidth = 8;
+  ctx.beginPath();
+  ctx.ellipse(POND.x, POND.y, POND.rx - 8, POND.ry - 8, 0, 0, Math.PI * 2);
+  ctx.stroke();
   // 荷叶
-  for (const [dx, dy, r] of [[-70, -20, 16], [40, 20, 13], [82, -26, 11]]) {
+  for (const [dx, dy, r] of [[-90, -24, 18], [50, 26, 14], [104, -32, 12], [-20, 42, 10]]) {
     ctx.fillStyle = "#4f9a3a";
     ctx.beginPath();
     ctx.ellipse(POND.x + dx, POND.y + dy, r, r * 0.65, 0.3, 0, Math.PI * 2);
@@ -328,46 +387,7 @@ function drawPond(ctx, t) {
   ctx.restore();
 }
 
-function drawGrassZone(ctx, zone, t, w) {
-  ctx.save();
-  roundRect(ctx, zone.x, zone.y, zone.w, zone.h, 24);
-  const g = ctx.createLinearGradient(zone.x, zone.y, zone.x, zone.y + zone.h);
-  g.addColorStop(0, "rgba(47,124,58,.82)");
-  g.addColorStop(1, "rgba(31,92,44,.9)");
-  ctx.fillStyle = g;
-  ctx.fill();
-  ctx.strokeStyle = "rgba(210,255,180,.35)";
-  ctx.lineWidth = 3;
-  ctx.stroke();
-
-  for (const b of BLADES) {
-    if (b.zone !== zone.id) continue;
-    const sway = Math.sin(t * 2.2 + b.phase) * 4;
-    ctx.strokeStyle = "rgba(154,226,110,.8)";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(b.x, b.y);
-    ctx.quadraticCurveTo(b.x + sway, b.y - b.h * 0.6, b.x + sway * 1.6, b.y - b.h);
-    ctx.stroke();
-  }
-
-  // 玩家在草丛里时显示沙沙声波
-  if (w && zoneAt(w.player.x, w.player.y) === zone) {
-    ctx.strokeStyle = "rgba(255,255,200,.55)";
-    ctx.lineWidth = 2;
-    for (let i = 0; i < 3; i++) {
-      const r = 12 + i * 9 + Math.sin(t * 8 + i) * 3;
-      ctx.globalAlpha = 0.45 - i * 0.12;
-      ctx.beginPath();
-      ctx.arc(w.player.x, w.player.y + 8, r, 0.2, Math.PI - 0.2);
-      ctx.stroke();
-    }
-    ctx.globalAlpha = 1;
-  }
-  ctx.restore();
-}
-
-function drawTree(ctx, x, y, t) {
+function drawTree(ctx, x, y) {
   ctx.save();
   ctx.fillStyle = "rgba(20,50,20,.18)";
   ctx.beginPath();
@@ -375,19 +395,18 @@ function drawTree(ctx, x, y, t) {
   ctx.fill();
   ctx.fillStyle = "#6f4a2a";
   ctx.fillRect(x - 5, y - 2, 10, 24);
-  const sway = Math.sin(t * 1.2 + x * 0.02) * 2;
   ctx.fillStyle = "#2f7c3a";
   ctx.beginPath();
-  ctx.arc(x + sway, y - 18, 26, 0, Math.PI * 2);
+  ctx.arc(x, y - 18, 26, 0, Math.PI * 2);
   ctx.fill();
   ctx.fillStyle = "#4f9f48";
   ctx.beginPath();
-  ctx.arc(x - 16 + sway, y - 8, 19, 0, Math.PI * 2);
-  ctx.arc(x + 17 + sway, y - 6, 18, 0, Math.PI * 2);
+  ctx.arc(x - 16, y - 8, 19, 0, Math.PI * 2);
+  ctx.arc(x + 17, y - 6, 18, 0, Math.PI * 2);
   ctx.fill();
   ctx.fillStyle = "rgba(255,255,200,.22)";
   ctx.beginPath();
-  ctx.arc(x - 7 + sway, y - 24, 10, 0, Math.PI * 2);
+  ctx.arc(x - 7, y - 24, 10, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
 }
@@ -413,23 +432,22 @@ function drawRock(ctx, x, y, r) {
   ctx.restore();
 }
 
-function drawFlowers(ctx, t) {
+function drawFlowers(ctx) {
   ctx.save();
   for (const f of FLOWERS) {
-    const sway = Math.sin(t * 2 + f.x) * 1.2;
     ctx.fillStyle = f.c;
     ctx.beginPath();
-    ctx.arc(f.x + sway, f.y, f.s, 0, Math.PI * 2);
+    ctx.arc(f.x, f.y, f.s, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = "#fff8c8";
     ctx.beginPath();
-    ctx.arc(f.x + sway, f.y, f.s * 0.4, 0, Math.PI * 2);
+    ctx.arc(f.x, f.y, f.s * 0.4, 0, Math.PI * 2);
     ctx.fill();
   }
   ctx.restore();
 }
 
-function drawLab(ctx, t) {
+function drawLab(ctx) {
   ctx.save();
   ctx.fillStyle = "rgba(20,40,30,.2)";
   roundRect(ctx, LAB.x + 8, LAB.y + LAB.h - 6, LAB.w, 26, 12);
@@ -451,7 +469,6 @@ function drawLab(ctx, t) {
   ctx.fill();
   ctx.stroke();
 
-  // 窗户
   for (const wx of [LAB.x + 32, LAB.x + LAB.w - 92]) {
     ctx.fillStyle = "#8fd8ff";
     ctx.strokeStyle = "#8a6a3e";
@@ -467,7 +484,6 @@ function drawLab(ctx, t) {
     ctx.stroke();
   }
 
-  // 门
   ctx.fillStyle = "#8a5a2a";
   roundRect(ctx, LAB.x + LAB.w / 2 - 26, LAB.y + 122, 52, 58, 6);
   ctx.fill();
@@ -476,7 +492,6 @@ function drawLab(ctx, t) {
   ctx.arc(LAB.x + LAB.w / 2 + 12, LAB.y + 152, 3, 0, Math.PI * 2);
   ctx.fill();
 
-  // 招牌
   ctx.fillStyle = "#fff8e2";
   ctx.strokeStyle = "#8a6a3e";
   ctx.lineWidth = 2;
@@ -489,7 +504,6 @@ function drawLab(ctx, t) {
   ctx.textBaseline = "middle";
   ctx.fillText("枫木研究所", LAB.x + LAB.w / 2, LAB.y + 56);
 
-  // 门前的台阶
   ctx.fillStyle = "#c9b184";
   roundRect(ctx, LAB.x + LAB.w / 2 - 34, LAB.y + 180, 68, 10, 4);
   ctx.fill();
@@ -498,10 +512,13 @@ function drawLab(ctx, t) {
 
 function drawSigns(ctx) {
   const signs = [
-    [358, 604, "101号草地"],
-    [706, 288, "橙华森林"],
-    [585, 656, "池畔草丛"],
-    [990, 608, "岩石坡"],
+    [480, 612, "101号草地"],
+    [884, 470, "花田小径"],
+    [1408, 520, "橙华森林"],
+    [1380, 1050, "池畔草丛"],
+    [588, 1150, "湖畔湿地"],
+    [2050, 785, "岩石坡"],
+    [2048, 172, "古树秘境"],
   ];
   ctx.save();
   for (const [x, y, label] of signs) {
@@ -522,6 +539,245 @@ function drawSigns(ctx) {
   ctx.restore();
 }
 
+/** 把静态地形烘焙到离屏画布，滚动时只做一次贴图，稳定帧率 */
+let cache = null;
+function buildWorldCache() {
+  if (cache) return cache;
+  const c = document.createElement("canvas");
+  c.width = WORLD_W;
+  c.height = WORLD_H;
+  const g = c.getContext("2d");
+
+  const sky = g.createLinearGradient(0, 0, 0, WORLD_H);
+  sky.addColorStop(0, "#8fd8ff");
+  sky.addColorStop(0.1, "#c9edff");
+  sky.addColorStop(0.34, "#9ad973");
+  sky.addColorStop(1, "#5aa84c");
+  g.fillStyle = sky;
+  g.fillRect(0, 0, WORLD_W, WORLD_H);
+
+  // 远处山丘
+  g.save();
+  g.globalAlpha = 0.5;
+  g.fillStyle = "#5f9f74";
+  g.beginPath();
+  g.moveTo(0, 330);
+  for (let x = 0; x <= WORLD_W; x += 80) {
+    g.lineTo(x, 290 + Math.sin(x * 0.008) * 42 + Math.cos(x * 0.021) * 18);
+  }
+  g.lineTo(WORLD_W, 380);
+  g.lineTo(0, 380);
+  g.closePath();
+  g.fill();
+  g.restore();
+
+  // 草地纹理：深浅斑块
+  for (let i = 0; i < 220; i++) {
+    const x = wrnd() * WORLD_W;
+    const y = 360 + wrnd() * (WORLD_H - 380);
+    const r = 24 + wrnd() * 90;
+    g.fillStyle = wrnd() < 0.5 ? "rgba(90,170,80,.16)" : "rgba(50,120,55,.12)";
+    g.beginPath();
+    g.ellipse(x, y, r, r * 0.45, wrnd() * Math.PI, 0, Math.PI * 2);
+    g.fill();
+  }
+  // 草纹
+  g.save();
+  g.globalAlpha = 0.1;
+  g.strokeStyle = "#2f7c3a";
+  g.lineWidth = 2;
+  for (let y = 400; y < WORLD_H; y += 48) {
+    g.beginPath();
+    g.moveTo(0, y);
+    g.lineTo(WORLD_W, y + 16);
+    g.stroke();
+  }
+  g.restore();
+
+  drawPaths(g);
+  drawPondBase(g);
+
+  // 草丛底色
+  const ZONE_TINT = {
+    route: ["rgba(52,132,62,.88)", "rgba(39,110,52,.9)", "rgba(28,88,44,.92)"],
+    flower: ["rgba(74,148,60,.88)", "rgba(58,126,48,.9)", "rgba(42,104,42,.92)"],
+    forest: ["rgba(38,112,52,.92)", "rgba(27,90,44,.93)", "rgba(18,70,38,.94)"],
+    cave: ["rgba(46,124,80,.88)", "rgba(35,102,66,.9)", "rgba(24,84,56,.92)"],
+    water: ["rgba(48,128,84,.88)", "rgba(38,108,70,.9)", "rgba(28,88,60,.92)"],
+    gym: ["rgba(74,132,58,.88)", "rgba(58,110,48,.9)", "rgba(44,92,40,.92)"],
+    ancient: ["rgba(36,104,54,.92)", "rgba(26,84,46,.93)", "rgba(18,66,38,.94)"],
+  };
+  for (const z of ZONES) {
+    g.save();
+    roundRect(g, z.x, z.y, z.w, z.h, 26);
+    const cols = ZONE_TINT[z.theme] || ZONE_TINT.route;
+    const grad = g.createLinearGradient(z.x, z.y, z.x, z.y + z.h);
+    grad.addColorStop(0, cols[0]);
+    grad.addColorStop(0.55, cols[1]);
+    grad.addColorStop(1, cols[2]);
+    g.fillStyle = grad;
+    g.fill();
+    g.strokeStyle = "rgba(30,90,40,.35)";
+    g.lineWidth = 2;
+    g.stroke();
+    // 边缘草簇：打散矩形轮廓，让草丛和野地自然衔接
+    for (let i = 0; i < 70; i++) {
+      const side = Math.floor(wrnd() * 4);
+      let px;
+      let py;
+      if (side === 0) { px = z.x + wrnd() * z.w; py = z.y + wrnd() * 16 - 8; }
+      else if (side === 1) { px = z.x + wrnd() * z.w; py = z.y + z.h + wrnd() * 14 - 8; }
+      else if (side === 2) { px = z.x + wrnd() * 14 - 8; py = z.y + wrnd() * z.h; }
+      else { px = z.x + z.w + wrnd() * 14 - 8; py = z.y + wrnd() * z.h; }
+      g.strokeStyle = wrnd() < 0.5 ? "rgba(70,150,58,.55)" : "rgba(120,190,85,.45)";
+      g.lineWidth = 2;
+      const bh = 6 + wrnd() * 10;
+      g.beginPath();
+      g.moveTo(px, py);
+      g.quadraticCurveTo(px + 2, py - bh * 0.6, px + 5, py - bh);
+      g.stroke();
+    }
+    // 草丛内部深浅起伏
+    for (let i = 0; i < 14; i++) {
+      g.fillStyle = i % 2 ? "rgba(20,70,30,.18)" : "rgba(150,220,120,.1)";
+      const px = z.x + 18 + wrnd() * (z.w - 36);
+      const py = z.y + 18 + wrnd() * (z.h - 36);
+      g.beginPath();
+      g.ellipse(px, py, 26 + wrnd() * 34, 10 + wrnd() * 14, wrnd() * Math.PI, 0, Math.PI * 2);
+      g.fill();
+    }
+    // 静态底层草簇
+    g.strokeStyle = "rgba(120,200,95,.55)";
+    g.lineWidth = 2;
+    for (let i = 0; i < 46; i++) {
+      const bx = z.x + 8 + wrnd() * (z.w - 16);
+      const by = z.y + 10 + wrnd() * (z.h - 16);
+      const bh = 7 + wrnd() * 9;
+      g.beginPath();
+      g.moveTo(bx, by);
+      g.quadraticCurveTo(bx + 2, by - bh * 0.6, bx + 4, by - bh);
+      g.stroke();
+    }
+    g.restore();
+  }
+
+  // 草簇与蘑菇
+  g.save();
+  g.strokeStyle = "rgba(70,150,70,.5)";
+  g.lineWidth = 2;
+  for (const t of TUFTS) {
+    g.beginPath();
+    g.moveTo(t.x, t.y);
+    g.quadraticCurveTo(t.x + t.s * 0.2, t.y - t.s, t.x + t.s * 0.7, t.y - t.s * 1.4);
+    g.moveTo(t.x, t.y);
+    g.quadraticCurveTo(t.x - t.s * 0.3, t.y - t.s, t.x - t.s * 0.8, t.y - t.s * 1.1);
+    g.stroke();
+  }
+  g.restore();
+  for (const m of MUSHROOMS) {
+    g.fillStyle = "#e8e0c8";
+    g.fillRect(m.x - 1, m.y - 4, 2, 5);
+    g.fillStyle = "#d8604a";
+    g.beginPath();
+    g.arc(m.x, m.y - 5, m.s, Math.PI, Math.PI * 2);
+    g.fill();
+    g.fillStyle = "#fff4e2";
+    g.beginPath();
+    g.arc(m.x - 1, m.y - 6, m.s * 0.3, 0, Math.PI * 2);
+    g.fill();
+  }
+
+  // 树木 / 石头 / 花 / 研究所 / 路牌
+  for (const [x, y] of TREES) drawTree(g, x, y);
+  for (const [x, y, r] of ROCKS) drawRock(g, x, y, r);
+  drawFlowers(g);
+  drawLab(g);
+  drawSigns(g);
+
+  cache = c;
+  return c;
+}
+
+// ---------------------------------------------------------------- 逐帧绘制
+export function drawWorld(ctx, game) {
+  const t = game.worldTime;
+  const w = game.world;
+  ctx.drawImage(buildWorldCache(), 0, 0);
+
+  // 水面涟漪
+  ctx.save();
+  ctx.strokeStyle = "rgba(255,255,255,.45)";
+  ctx.lineWidth = 2;
+  for (let i = 0; i < 3; i++) {
+    const k = 0.35 + i * 0.2;
+    ctx.globalAlpha = 0.35 - i * 0.08;
+    ctx.beginPath();
+    ctx.ellipse(POND.x + Math.sin(t * 1.2 + i) * 8, POND.y + i * 20 - 18,
+      POND.rx * k, POND.ry * k * 0.5, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+  ctx.restore();
+
+  // 动态草叶
+  for (const b of BLADES) {
+    const sway = Math.sin(t * 2.2 + b.phase) * 4;
+    ctx.strokeStyle = "rgba(154,226,110,.85)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(b.x, b.y);
+    ctx.quadraticCurveTo(b.x + sway, b.y - b.h * 0.6, b.x + sway * 1.6, b.y - b.h);
+    ctx.stroke();
+  }
+
+  // 玩家在草丛里时显示沙沙声波
+  if (w) {
+    const zone = zoneAt(w.player.x, w.player.y);
+    if (zone) {
+      ctx.save();
+      ctx.strokeStyle = "rgba(255,255,200,.55)";
+      ctx.lineWidth = 2;
+      for (let i = 0; i < 3; i++) {
+        const r = 12 + i * 9 + Math.sin(t * 8 + i) * 3;
+        ctx.globalAlpha = 0.45 - i * 0.12;
+        ctx.beginPath();
+        ctx.arc(w.player.x, w.player.y + 8, r, 0.2, Math.PI - 0.2);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+  }
+
+  if (game.drawBerries) game.drawBerries(ctx, t);
+  drawProfessor(ctx, game, t);
+  if (game.drawWilds) game.drawWilds(ctx, t);
+  if (w && w.dust && w.dust.length) {
+    ctx.save();
+    for (const d of w.dust) {
+      ctx.globalAlpha = Math.max(0, d.life / d.max) * 0.4;
+      ctx.fillStyle = "#d8c49a";
+      ctx.beginPath();
+      ctx.arc(d.x, d.y, d.size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+  drawPlayer(ctx, game);
+
+  // 前景草叶遮住脚踝，增加层次
+  for (const b of FG_BLADES) {
+    const sway = Math.sin(t * 2.4 + b.phase) * 5;
+    ctx.strokeStyle = "rgba(96,190,90,.8)";
+    ctx.lineWidth = 2.4;
+    ctx.beginPath();
+    ctx.moveTo(b.x, b.y);
+    ctx.quadraticCurveTo(b.x + sway, b.y - b.h * 0.6, b.x + sway * 1.7, b.y - b.h);
+    ctx.stroke();
+  }
+
+  drawAmbient(ctx, t);
+}
+
 function drawProfessor(ctx, game, t) {
   const x = PROFESSOR.x;
   const y = PROFESSOR.y + Math.sin(t * 2) * 1.5;
@@ -531,24 +787,20 @@ function drawProfessor(ctx, game, t) {
   ctx.ellipse(x, y + 22, 18, 6, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // 白大褂
   ctx.fillStyle = "#f4f4f0";
   ctx.strokeStyle = "#cfd4d8";
   ctx.lineWidth = 2;
   roundRect(ctx, x - 13, y - 10, 26, 32, 8);
   ctx.fill();
   ctx.stroke();
-  // 头
   ctx.fillStyle = "#e2a06b";
   ctx.beginPath();
   ctx.arc(x, y - 22, 12, 0, Math.PI * 2);
   ctx.fill();
-  // 灰发
   ctx.fillStyle = "#c8c8c8";
   ctx.beginPath();
   ctx.arc(x, y - 26, 12, Math.PI, Math.PI * 2);
   ctx.fill();
-  // 眼镜
   ctx.strokeStyle = "#4a4a4a";
   ctx.lineWidth = 1.6;
   ctx.beginPath();
@@ -557,14 +809,12 @@ function drawProfessor(ctx, game, t) {
   ctx.moveTo(x - 1, y - 22);
   ctx.lineTo(x + 1, y - 22);
   ctx.stroke();
-  // 眼睛
   ctx.fillStyle = "#2a2a2a";
   ctx.beginPath();
   ctx.arc(x - 5, y - 22, 1.6, 0, Math.PI * 2);
   ctx.arc(x + 5, y - 22, 1.6, 0, Math.PI * 2);
   ctx.fill();
 
-  // 任务可领取时头顶感叹号
   const claimable = (game.p.quests || []).some((q) => q.progress >= q.goal);
   if (claimable) {
     const bob = Math.sin(t * 5) * 2;
@@ -582,7 +832,6 @@ function drawProfessor(ctx, game, t) {
     ctx.fillText("!", x, y - 57 + bob);
   }
 
-  // 名字
   ctx.fillStyle = "rgba(20,34,24,.55)";
   roundRect(ctx, x - 36, y + 32, 72, 18, 8);
   ctx.fill();
@@ -606,7 +855,6 @@ function drawPlayer(ctx, game) {
   ctx.fill();
 
   const swing = moving ? Math.sin(phase) * 4 : 0;
-  // 腿
   ctx.strokeStyle = "#3f5f8f";
   ctx.lineWidth = 6;
   ctx.lineCap = "round";
@@ -617,22 +865,18 @@ function drawPlayer(ctx, game) {
   ctx.lineTo(p.x + 6 - swing, p.y + 20);
   ctx.stroke();
 
-  // 背包
   ctx.fillStyle = "#e8b23a";
   roundRect(ctx, p.x - 14, p.y - 10, 28, 20, 7);
   ctx.fill();
-  // 身体
   ctx.fillStyle = "#e8504a";
   roundRect(ctx, p.x - 11, p.y - 8, 22, 20, 8);
   ctx.fill();
   ctx.fillStyle = "#fff4e2";
   ctx.fillRect(p.x - 5, p.y - 6, 10, 14);
-  // 头
   ctx.fillStyle = "#e2a06b";
   ctx.beginPath();
   ctx.arc(p.x, p.y - 20, 11, 0, Math.PI * 2);
   ctx.fill();
-  // 帽子
   ctx.fillStyle = "#e8504a";
   ctx.beginPath();
   ctx.arc(p.x, p.y - 24, 11, Math.PI, Math.PI * 2);
@@ -642,7 +886,6 @@ function drawPlayer(ctx, game) {
   ctx.beginPath();
   ctx.arc(p.x, p.y - 24, 4, 0, Math.PI * 2);
   ctx.fill();
-  // 眼睛
   ctx.fillStyle = "#2a2a2a";
   ctx.beginPath();
   ctx.arc(p.x + (p.dir >= 0 ? 4 : -4), p.y - 19, 1.7, 0, Math.PI * 2);
@@ -653,9 +896,9 @@ function drawPlayer(ctx, game) {
 function drawAmbient(ctx, t) {
   ctx.save();
   ctx.globalAlpha = 0.75;
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < 16; i++) {
     const x = ((t * (18 + i * 4) + i * 173) % (WORLD_W + 120)) - 60;
-    const y = 160 + Math.sin(t * 1.5 + i) * 40 + i * 42;
+    const y = 160 + Math.sin(t * 1.5 + i) * 40 + i * 78;
     ctx.fillStyle = i % 3 === 0 ? "#fff6b0" : "#d8ffb0";
     ctx.beginPath();
     ctx.arc(x, y, 2.2, 0, Math.PI * 2);

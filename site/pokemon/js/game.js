@@ -17,12 +17,23 @@ import {
 } from "./data.js";
 import { monsterSVG } from "./sprites.js";
 import {
-  WORLD_W, WORLD_H, PROFESSOR, canWalk, zoneAt, pickWild, drawWorld,
+  WORLD_W, WORLD_H, PROFESSOR, ZONES, BERRY_SPOTS, canWalk, zoneAt, pickWild, drawWorld,
   initialQuests, createQuest,
 } from "./world.js";
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+function roundRect(ctx, x, y, w, h, r) {
+  const rr = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + rr, y);
+  ctx.arcTo(x + w, y, x + w, y + h, rr);
+  ctx.arcTo(x + w, y + h, x, y + h, rr);
+  ctx.arcTo(x, y + h, x, y, rr);
+  ctx.arcTo(x, y, x + w, y, rr);
+  ctx.closePath();
+}
 
 const STATUS_NAMES = { psn: "中毒", brn: "灼伤", par: "麻痹", slp: "睡眠", frz: "冰冻" };
 const STAGE_MULT = [2 / 8, 2 / 7, 2 / 6, 2 / 5, 2 / 4, 2 / 3, 1, 3 / 2, 4 / 2, 5 / 2, 6 / 2, 7 / 2, 8 / 2];
@@ -128,6 +139,9 @@ class PokemonGame {
     this.worldLastTs = 0;
     this.worldCtx = null;
     this.worldView = { w: 1, h: 1, scale: 1, camX: 0, camY: 0 };
+    this.wildImages = null;
+    this.nearBerry = null;
+    this.lastZoneId = null;
     this.keys = {};
     this.joystick = { active: false, x: 0, y: 0, pointerId: null };
     this.encounterGrace = 0;
@@ -176,10 +190,78 @@ class PokemonGame {
     let x = Number(pos.x) || 255;
     let y = Number(pos.y) || 385;
     if (!canWalk(x, y)) { x = 255; y = 385; }
-    this.world = { player: { x, y, dir: 1, walkPhase: 0 }, moving: false };
+    this.world = {
+      player: { x, y, dir: 1, walkPhase: 0 },
+      moving: false,
+      wilds: [],
+      dust: [],
+      berries: BERRY_SPOTS.map(([bx, by]) => ({ x: bx, y: by, active: true, timer: 0, phase: Math.random() * 6 })),
+    };
+    this._spawnWorldWilds();
+    this._ensureWildImages();
     this.p.pos = { x, y };
     if (this.p.starter && (!Array.isArray(this.p.quests) || !this.p.quests.length)) {
       this.store.update((p) => { p.quests = initialQuests(); });
+    }
+  }
+
+  /** 每个草丛生成 2 只可见的野生宝可梦 */
+  _spawnWorldWilds() {
+    for (const zone of ZONES) {
+      for (let i = 0; i < 2; i++) this._spawnWild(zone);
+    }
+  }
+
+  _spawnWild(zone) {
+    if (!this.world) return;
+    const wild = pickWild(zone, this._avgTeamLevel());
+    if (!wild) return;
+    const spot = this._wildSpot(zone);
+    this.world.wilds.push({
+      zoneId: zone.id,
+      species: wild.species,
+      level: wild.level,
+      x: spot.x,
+      y: spot.y,
+      dir: Math.random() < 0.5 ? -1 : 1,
+      target: { x: spot.x, y: spot.y },
+      waitT: 0.4 + Math.random() * 1.6,
+      speed: 24 + Math.random() * 12,
+      bob: Math.random() * Math.PI * 2,
+      stuck: 0,
+      hidden: 0,
+    });
+  }
+
+  _wildSpot(zone) {
+    for (let i = 0; i < 16; i++) {
+      const x = zone.x + 40 + Math.random() * (zone.w - 80);
+      const y = zone.y + 48 + Math.random() * (zone.h - 72);
+      if (canWalk(x, y)) return { x, y };
+    }
+    return { x: zone.x + zone.w / 2, y: zone.y + zone.h / 2 };
+  }
+
+  /** 载入野生宝可梦的 SVG 图像（按种类缓存） */
+  _ensureWildImages() {
+    if (this.wildImages) return;
+    this.wildImages = {};
+    const make = (id) => {
+      const img = new Image();
+      // 独立 SVG 图片必须带 xmlns，否则浏览器无法解码
+      const svg = monsterSVG(id).replace("<svg ", '<svg xmlns="http://www.w3.org/2000/svg" ');
+      img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+      return img;
+    };
+    for (const zone of ZONES) {
+      for (const id of zone.species) {
+        if (this.wildImages[id]) continue;
+        this.wildImages[id] = make(id);
+      }
+    }
+    for (const id of STARTERS) {
+      if (this.wildImages[id]) continue;
+      this.wildImages[id] = make(id);
     }
   }
 
@@ -205,7 +287,11 @@ class PokemonGame {
     $("worldHelp").addEventListener("click", () => this._showTutorial(false));
     $("worldCheat").addEventListener("click", () => { this.sfx.ensure(); this._openCheat(); });
     $("worldSound").addEventListener("click", () => this._toggleSound());
-    $("interactTip").addEventListener("click", () => { this.sfx.click(); this._openQuests(); });
+    $("interactTip").addEventListener("click", () => {
+      this.sfx.click();
+      if (this.nearProfessor) this._openQuests();
+      else if (this.nearBerry) this._collectBerry(this.nearBerry);
+    });
 
     $("questClose").addEventListener("click", () => this._closeQuests());
     $("questScreen").addEventListener("click", (e) => {
@@ -337,6 +423,9 @@ class PokemonGame {
         if (this.nearProfessor) {
           e.preventDefault();
           this._openQuests();
+        } else if (this.nearBerry) {
+          e.preventDefault();
+          this._collectBerry(this.nearBerry);
         }
       }
     });
@@ -447,6 +536,13 @@ class PokemonGame {
       if (Math.hypot(w.x - PROFESSOR.x, w.y - PROFESSOR.y) < 50) {
         this.sfx.click();
         this._openQuests();
+        return;
+      }
+      const berry = (this.world.berries || []).find((b) => b.active
+        && Math.hypot(w.x - b.x, w.y - b.y) < 50);
+      if (berry) {
+        this.sfx.click();
+        this._collectBerry(berry);
       }
     });
   }
@@ -463,7 +559,8 @@ class PokemonGame {
     this.worldDpr = dpr;
     this.worldView.w = w;
     this.worldView.h = h;
-    this.worldView.scale = Math.max(w / WORLD_W, h / WORLD_H);
+    // 固定视距：屏幕上大约显示 1280×720 的世界范围，大地图靠相机滚动
+    this.worldView.scale = Math.max(w / 1280, h / 720);
   }
 
   _screenToWorld(e) {
@@ -515,19 +612,49 @@ class PokemonGame {
       this.world.moving = false;
     }
 
+    // 野生宝可梦游走 / 浆果刷新 / 踩草尘土
+    this._updateWilds(dt);
+    this._updateBerryState(dt);
+    if (moved > 0.1) {
+      this.world.dustT = (this.world.dustT || 0) + dt;
+      if (this.world.dustT > 0.22) {
+        this.world.dustT = 0;
+        this.world.dust.push({
+          x: p.x + (Math.random() * 8 - 4), y: p.y + 16 + (Math.random() * 4 - 2),
+          life: 0.5, max: 0.5, size: 1.6 + Math.random() * 2.2,
+        });
+      }
+    }
+    for (let i = this.world.dust.length - 1; i >= 0; i--) {
+      const d = this.world.dust[i];
+      d.life -= dt;
+      d.y -= 8 * dt;
+      if (d.life <= 0) this.world.dust.splice(i, 1);
+    }
+
     this.nearProfessor = Math.hypot(p.x - PROFESSOR.x, p.y - PROFESSOR.y) < 78;
+    const nearBerry = this._nearestBerry();
+    this.nearBerry = nearBerry;
     const claimable = (this.p.quests || []).some((q) => q.progress >= q.goal);
     const tip = document.getElementById("interactTip");
-    tip.classList.toggle("show", this.nearProfessor);
+    tip.classList.toggle("show", this.nearProfessor || Boolean(nearBerry));
     if (this.nearProfessor) {
       tip.textContent = claimable ? "按 E / 点击找枫木博士领取奖励" : "按 E / 点击与枫木博士对话";
       document.getElementById("worldHint").classList.add("hide");
+    } else if (nearBerry) {
+      tip.textContent = "按 E / 点击采摘树果";
+      document.getElementById("worldHint").classList.add("hide");
+    }
+
+    const zoneNow = zoneAt(p.x, p.y);
+    if (zoneNow && zoneNow.id !== this.lastZoneId) {
+      this.lastZoneId = zoneNow.id;
+      toast(`进入 ${zoneNow.name}`, "", 1400);
     }
 
     if (moved > 0.1) {
       this.p.steps = (Number(this.p.steps) || 0) + moved;
       this.p.pos = { x: p.x, y: p.y };
-      const zoneNow = zoneAt(p.x, p.y);
       this.world.stepAccum = (this.world.stepAccum || 0) + moved;
       while (this.world.stepAccum >= 26) {
         this.world.stepAccum -= 26;
@@ -537,6 +664,207 @@ class PokemonGame {
           break;
         }
       }
+    }
+  }
+
+  /** 地图上可见的野生宝可梦：在所属草丛里随机游走，撞到就进入遭遇 */
+  _updateWilds(dt) {
+    if (!this.world || !this.world.wilds) return;
+    const p = this.world.player;
+    for (const w of this.world.wilds) {
+      if (w.hidden > 0) {
+        w.hidden -= dt;
+        if (w.hidden <= 0) this._relocateWild(w);
+        continue;
+      }
+      const zone = ZONES.find((z) => z.id === w.zoneId) || ZONES[0];
+      w.bob += dt * 3;
+      const dx = w.target.x - w.x;
+      const dy = w.target.y - w.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist < 6) {
+        w.waitT -= dt;
+        if (w.waitT <= 0) {
+          w.waitT = 0.8 + Math.random() * 2.2;
+          w.target = this._wildSpot(zone);
+        }
+      } else {
+        const sp = w.speed * dt;
+        const nx = w.x + (dx / dist) * sp;
+        const ny = w.y + (dy / dist) * sp;
+        const bx = canWalk(nx, w.y);
+        const by = canWalk(w.x, ny);
+        if (bx) w.x = nx;
+        if (by) w.y = ny;
+        if (Math.abs(dx) > 2) w.dir = dx > 0 ? 1 : -1;
+        // 被树石挡住时重新选点，避免一直卡住
+        w.stuck = (!bx && !by) ? (w.stuck || 0) + dt : 0;
+        if (w.stuck > 1.2) {
+          w.stuck = 0;
+          w.target = this._wildSpot(zone);
+          w.waitT = 0.3;
+        }
+      }
+      if (this.encounterGrace <= 0 && !this._overlayOpen()
+        && Math.hypot(p.x - w.x, p.y - w.y) < 32) {
+        this._triggerWildEncounter(w);
+        return;
+      }
+    }
+  }
+
+  _relocateWild(w) {
+    const zone = ZONES.find((z) => z.id === w.zoneId) || ZONES[0];
+    const spot = this._wildSpot(zone);
+    w.x = spot.x;
+    w.y = spot.y;
+    w.target = { x: spot.x, y: spot.y };
+    w.hidden = 0;
+    w.stuck = 0;
+    w.waitT = 0.5 + Math.random();
+  }
+
+  _triggerWildEncounter(wild) {
+    const zone = ZONES.find((z) => z.id === wild.zoneId) || ZONES[0];
+    this.lastEncounter = { species: wild.species, level: wild.level, zone };
+    this.encounterGrace = 2.8;
+    this.world.moving = false;
+    wild.hidden = 14;
+    this._saveWorldPos();
+    this.sfx.ensure();
+    this.sfx.encounter();
+    this.startEncounter(wild.species, wild.level, zone);
+  }
+
+  _updateBerryState(dt) {
+    if (!this.world || !this.world.berries) return;
+    for (const b of this.world.berries) {
+      b.phase += dt;
+      if (!b.active) {
+        b.timer -= dt;
+        if (b.timer <= 0) b.active = true;
+      }
+    }
+  }
+
+  _nearestBerry() {
+    if (!this.world || !this.world.berries) return null;
+    const p = this.world.player;
+    let best = null;
+    let bestD = 58;
+    for (const b of this.world.berries) {
+      if (!b.active) continue;
+      const d = Math.hypot(p.x - b.x, p.y - b.y);
+      if (d < bestD) { bestD = d; best = b; }
+    }
+    return best;
+  }
+
+  _collectBerry(berry) {
+    if (!berry || !berry.active) return;
+    berry.active = false;
+    berry.timer = 40;
+    const money = 30 + Math.floor(Math.random() * 30);
+    const getBall = Math.random() < 0.45;
+    this.store.update((p) => {
+      p.money = (Number(p.money) || 0) + money;
+      p.items = p.items || {};
+      if (getBall) p.items.pokeBall = (Number(p.items.pokeBall) || 0) + 1;
+      else p.items.potion = (Number(p.items.potion) || 0) + 1;
+    });
+    this.sfx.ensure();
+    this.sfx.heal();
+    toast(`采摘树果：+${money} 金币${getBall ? " · 精灵球 +1" : " · 伤药 +1"}`, "ok", 2000);
+    this._refreshWorldHUD();
+  }
+
+  /** 绘制野生宝可梦（世界坐标） */
+  drawWilds(ctx, t) {
+    if (!this.world || !this.world.wilds) return;
+    this._ensureWildImages();
+    const p = this.world.player;
+    for (const w of this.world.wilds) {
+      if (w.hidden > 0) continue;
+      const img = this.wildImages[w.species];
+      const bob = Math.sin(w.bob) * 2;
+      ctx.save();
+      // 柔光衬托，避免宝可梦融进深色草丛
+      const glow = ctx.createRadialGradient(w.x, w.y - 16, 4, w.x, w.y - 16, 36);
+      glow.addColorStop(0, "rgba(255,255,235,.26)");
+      glow.addColorStop(1, "rgba(255,255,235,0)");
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(w.x, w.y - 16, 36, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "rgba(20,50,25,.22)";
+      ctx.beginPath();
+      ctx.ellipse(w.x, w.y + 18, 17, 6, 0, 0, Math.PI * 2);
+      ctx.fill();
+      if (img && img.complete && img.naturalWidth) {
+        const size = 56;
+        ctx.translate(w.x, w.y - 22 + bob);
+        ctx.scale(w.dir, 1);
+        ctx.drawImage(img, -size / 2, -size / 2, size, size);
+      } else {
+        ctx.fillStyle = "#7ac06a";
+        ctx.beginPath();
+        ctx.ellipse(w.x, w.y - 8 + bob, 14, 16, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+      const near = Math.hypot(p.x - w.x, p.y - w.y) < 150;
+      if (near) {
+        ctx.save();
+        ctx.fillStyle = "rgba(18,30,22,.62)";
+        const label = `Lv.${w.level} ${SPECIES[w.species] ? SPECIES[w.species].name : ""}`;
+        ctx.font = "700 10px 'PingFang SC','Microsoft YaHei',sans-serif";
+        const tw = ctx.measureText(label).width + 12;
+        roundRect(ctx, w.x - tw / 2, w.y - 66, tw, 16, 8);
+        ctx.fill();
+        ctx.fillStyle = "#f8f4e2";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(label, w.x, w.y - 58);
+        ctx.restore();
+      }
+    }
+  }
+
+  /** 绘制树果丛：可采摘时果实晃动，采完只剩枝叶 */
+  drawBerries(ctx, t) {
+    if (!this.world || !this.world.berries) return;
+    for (const b of this.world.berries) {
+      ctx.save();
+      ctx.translate(b.x, b.y);
+      ctx.fillStyle = "rgba(20,40,20,.2)";
+      ctx.beginPath();
+      ctx.ellipse(0, 10, 16, 5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#2f7c3a";
+      ctx.beginPath();
+      ctx.arc(0, -2, 12, 0, Math.PI * 2);
+      ctx.arc(-9, 3, 9, 0, Math.PI * 2);
+      ctx.arc(9, 3, 9, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#4f9f48";
+      ctx.beginPath();
+      ctx.arc(-3, -7, 7, 0, Math.PI * 2);
+      ctx.fill();
+      if (b.active) {
+        for (let i = 0; i < 3; i++) {
+          const a = (i / 3) * Math.PI * 2 + t * 0.6;
+          const sway = Math.sin(t * 2.5 + b.phase + i) * 1.5;
+          ctx.fillStyle = i === 0 ? "#ff6b6b" : "#e8504a";
+          ctx.beginPath();
+          ctx.arc(Math.cos(a) * 8 + sway, Math.sin(a) * 6 + 1, 3.4, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = "rgba(255,255,255,.6)";
+          ctx.beginPath();
+          ctx.arc(Math.cos(a) * 8 + sway - 1, Math.sin(a) * 6, 1.1, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      ctx.restore();
     }
   }
 
