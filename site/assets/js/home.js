@@ -39,12 +39,21 @@ function starCount(stars) {
 }
 
 function paint(gameId, progress, isGuest) {
+  const el = els[gameId];
+  if (!el) return;
+  if (gameId === "pokemon") {
+    const caught = Object.keys(progress.caught || {}).length;
+    const questsDone = Number(progress.questsDone) || 0;
+    el.bar.style.width = Math.round((caught / 31) * 100) + "%";
+    el.text.textContent = `图鉴 ${caught}/31 · 已完成委托 ${questsDone}`;
+    el.sync.textContent = isGuest ? "游客进度 · 登录可同步" : "已登录 · 云端存档";
+    el.enter.textContent = caught > 0 || questsDone > 0 ? "继续冒险" : "开始冒险";
+    return;
+  }
   const total = TOTAL[gameId];
   const unlocked = Math.max(1, Math.min(total, Number(progress.unlocked) || 1));
   const stars = starCount(progress.stars);
   const cleared = Object.keys(progress.stars || {}).length;
-  const el = els[gameId];
-  if (!el) return;
   const pct = Math.round((unlocked / total) * 100);
   el.bar.style.width = pct + "%";
   let text = `已解锁 ${unlocked}/${total} · ${stars}★`;
@@ -52,13 +61,10 @@ function paint(gameId, progress, isGuest) {
     text += ` · 无尽 ${progress.endlessBest} 波`;
   }
   if (gameId === "stone-wars" && Number(progress.endlessBest) > 0) {
-    text += ` · 无限 ${progress.endlessBest} 波`;
+    text += " · 无限模式已通关";
   }
   if (gameId === "carrot" && Number(progress.endlessBest) > 0) {
     text += ` · 无尽 ${progress.endlessBest} 波`;
-  }
-  if (gameId === "pokemon") {
-    text += ` · 图鉴 ${Object.keys(progress.caught || {}).length}/31`;
   }
   el.text.textContent = text;
   el.sync.textContent = isGuest ? "游客进度 · 登录可同步" : "已登录 · 云端存档";
