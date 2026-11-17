@@ -11,7 +11,8 @@ import { initAccount } from "../../assets/js/account.js";
 import { icon, toast } from "../../assets/js/ui.js";
 import { audio } from "../../assets/js/audio.js";
 import {
-  WORLD, LEVELS, WEAPONS, WEAPON_ORDER, ENEMY_TYPES, THEMES, getLevel, getEndlessLevel,
+  WORLD, LEVELS, WEAPONS, ENEMY_TYPES, THEMES, ERAS, ERA_WEAPONS,
+  getLevel, getEndlessLevel, getEra, ammoFor,
 } from "./levels.js";
 import { Terrain, mulberry32 } from "./terrain.js";
 
@@ -37,7 +38,7 @@ class Sfx {
       if (!AC) return null;
       this.ctx = new AC();
       this.master = this.ctx.createGain();
-      this.master.gain.value = 0.5;
+      this.master.gain.value = 0.72;
       this.master.connect(this.ctx.destination);
     }
     if (this.ctx.state === "suspended") this.ctx.resume();
@@ -152,9 +153,12 @@ class Unit {
     this.aiMoveDir = 0;
     this.aiAim = null;
     const cfg = ENEMY_TYPES[type] || ENEMY_TYPES.grunt;
+    this.era = game.era ? game.era.id : "stone";
+    this.mount = team === 1 && Boolean(cfg.mount);
+    this.visor = Boolean(cfg.visor);
     if (team === 0) {
       this.skin = "#e2a06b";
-      this.cloth = "#e8892c";
+      this.cloth = { stone: "#e8892c", iron: "#8c99a6", gun: "#b5533a", mech: "#2f7f8c" }[this.era] || "#e8892c";
       this.band = "#ffcf7a";
       this.scale = 1;
     } else {
@@ -261,9 +265,10 @@ class Unit {
     ctx.save();
     ctx.globalAlpha = fade;
     // 脚下阴影
+    const mounted = this.mount && this.alive;
     ctx.fillStyle = "rgba(0,0,0,.28)";
     ctx.beginPath();
-    ctx.ellipse(this.x, this.y + 1, 17 * this.scale, 5, 0, 0, TAU);
+    ctx.ellipse(this.x, this.y + 1, (mounted ? 25 : 17) * this.scale, 5, 0, 0, TAU);
     ctx.fill();
 
     ctx.translate(this.x, this.y);
@@ -274,6 +279,10 @@ class Unit {
     ctx.scale(face * this.scale, this.scale);
 
     const moving = this.onGround && Math.abs(this.moveSpeed) > 3;
+    if (mounted) {
+      this._drawMount(ctx, moving, t);
+      ctx.translate(0, -26);
+    }
     const swing = moving ? Math.sin(this.walkPhase) * 7 : 0;
     const skin = this.skin;
     const cloth = this.cloth;
@@ -305,6 +314,35 @@ class Unit {
       ctx.moveTo(i * 4, -38);
       ctx.lineTo(i * 3 + 2, -30);
       ctx.stroke();
+    }
+
+    // 时代装束：铁甲肩甲 / 火器军装 / 机械外骨骼
+    if (this.era === "iron" || this.era === "gun" || this.era === "mech") {
+      ctx.fillStyle = this.era === "mech" ? "#3d6d78" : this.era === "iron" ? "#7d8894" : "#8f4335";
+      ctx.strokeStyle = outline;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.ellipse(-11, -36, 6.5, 4.5, -0.3, 0, TAU);
+      ctx.ellipse(11, -36, 6.5, 4.5, 0.3, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+      if (this.era === "gun") {
+        // 军装排扣
+        ctx.fillStyle = "#ffcf7a";
+        for (let i = 0; i < 3; i++) {
+          ctx.beginPath();
+          ctx.arc(0, -34 + i * 6, 1.4, 0, TAU);
+          ctx.fill();
+        }
+      } else if (this.era === "mech") {
+        // 胸口能量核心
+        ctx.fillStyle = "#7ff0ff";
+        ctx.globalAlpha = fade * (0.65 + Math.sin(t * 5) * 0.2);
+        ctx.beginPath();
+        ctx.arc(0, -31, 3.2, 0, TAU);
+        ctx.fill();
+        ctx.globalAlpha = fade;
+      }
     }
 
     // 兽皮短裤
@@ -370,27 +408,92 @@ class Unit {
     ctx.fill();
     ctx.stroke();
 
-    // 头发
-    ctx.fillStyle = this.team === 0 ? "#3a2417" : "#241512";
-    ctx.beginPath();
-    ctx.arc(0, -50, 11.8, Math.PI * 1.02, Math.PI * 2.02);
-    ctx.lineTo(9, -54);
-    ctx.lineTo(5, -57);
-    ctx.lineTo(1, -54);
-    ctx.lineTo(-3, -58);
-    ctx.lineTo(-7, -54);
-    ctx.lineTo(-11, -56);
-    ctx.closePath();
-    ctx.fill();
+    if (this.era === "iron") {
+      // 铁盔 + 护鼻
+      ctx.fillStyle = this.team === 0 ? "#a9b6c3" : "#67737f";
+      ctx.strokeStyle = outline;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, -52, 12, Math.PI * 1.03, Math.PI * 1.97);
+      ctx.lineTo(-11, -45);
+      ctx.lineTo(11, -45);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.strokeStyle = "#4d5964";
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      ctx.moveTo(0, -59);
+      ctx.lineTo(0, -50);
+      ctx.lineTo(4, -47);
+      ctx.stroke();
+      ctx.fillStyle = this.team === 0 ? "#ffcf7a" : "#c96a5a";
+      ctx.beginPath();
+      ctx.moveTo(-11, -50);
+      ctx.lineTo(-18, -56);
+      ctx.lineTo(-13, -57);
+      ctx.closePath();
+      ctx.fill();
+    } else if (this.era === "gun") {
+      // 军帽 + 帽檐
+      ctx.fillStyle = this.team === 0 ? "#7c3b2c" : "#3f3f46";
+      ctx.strokeStyle = outline;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(-12, -54);
+      ctx.quadraticCurveTo(0, -66, 12, -54);
+      ctx.lineTo(13, -49);
+      ctx.lineTo(-13, -49);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = this.team === 0 ? "#5f2a1e" : "#2b2b30";
+      ctx.beginPath();
+      ctx.ellipse(3, -49, 15, 3.6, 0, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = "#ffd58a";
+      ctx.beginPath();
+      ctx.arc(0, -56, 2, 0, TAU);
+      ctx.fill();
+    } else if (this.era === "mech") {
+      // 全封闭头盔与发光面罩
+      ctx.fillStyle = this.team === 0 ? "#3f8794" : "#4d5b6b";
+      ctx.strokeStyle = outline;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, -50, 12.4, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = this.visor ? "#ff6f8a" : "#7ff0ff";
+      ctx.shadowColor = ctx.fillStyle;
+      ctx.shadowBlur = 10;
+      ctx.beginPath();
+      ctx.roundRect ? ctx.roundRect(-8, -53, 16, 5, 2.5) : ctx.rect(-8, -53, 16, 5);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    } else {
+      // 石器时代：野人头发与头带
+      ctx.fillStyle = this.team === 0 ? "#3a2417" : "#241512";
+      ctx.beginPath();
+      ctx.arc(0, -50, 11.8, Math.PI * 1.02, Math.PI * 2.02);
+      ctx.lineTo(9, -54);
+      ctx.lineTo(5, -57);
+      ctx.lineTo(1, -54);
+      ctx.lineTo(-3, -58);
+      ctx.lineTo(-7, -54);
+      ctx.lineTo(-11, -56);
+      ctx.closePath();
+      ctx.fill();
 
-    // 头带
-    ctx.strokeStyle = this.team === 0 ? "#d97722" : "#6b2e24";
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.arc(0, -50, 11.6, Math.PI * 1.08, Math.PI * 1.92);
-    ctx.stroke();
+      ctx.strokeStyle = this.team === 0 ? "#d97722" : "#6b2e24";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(0, -50, 11.6, Math.PI * 1.08, Math.PI * 1.92);
+      ctx.stroke();
+    }
 
-    // 眼睛 / 眉毛 / 鼻子 / 胡子
+    // 眼睛 / 眉毛 / 鼻子 / 胡子（机械头盔用面罩替代五官）
+    if (this.era !== "mech") {
     ctx.fillStyle = "#1a100c";
     ctx.beginPath();
     ctx.arc(4.6, -50, 1.8, 0, TAU);
@@ -412,6 +515,7 @@ class Unit {
     ctx.quadraticCurveTo(7, -40, 10, -45);
     ctx.quadraticCurveTo(6, -43, 2, -44);
     ctx.fill();
+    }
 
     // 酋长骨冠
     if (this.type === "chief") {
@@ -434,7 +538,7 @@ class Unit {
     if (this.alive) {
       const bw = 46;
       const bx = this.x - bw / 2;
-      const by = this.y - (this.type === "chief" ? 96 : 86);
+      const by = this.y - (this.mount ? 106 : this.type === "chief" ? 96 : 86);
       ctx.fillStyle = "rgba(8,8,10,.62)";
       this._roundRect(ctx, bx - 1, by - 1, bw + 2, 7, 3);
       ctx.fill();
@@ -472,6 +576,68 @@ class Unit {
     }
   }
 
+  /** 铁骑时代的战马：四腿交替、鬃毛与鞍具 */
+  _drawMount(ctx, moving, t) {
+    const gait = moving ? Math.sin(this.walkPhase * 1.35) : Math.sin(t * 2) * 0.25;
+    ctx.strokeStyle = "#4a3426";
+    ctx.lineCap = "round";
+    for (let i = 0; i < 4; i++) {
+      const lx = -14 + i * 9;
+      const swing = (i % 2 === 0 ? gait : -gait) * 7;
+      ctx.lineWidth = i < 2 ? 4.4 : 3.8;
+      ctx.beginPath();
+      ctx.moveTo(lx, -20);
+      ctx.lineTo(lx + swing, -3);
+      ctx.stroke();
+    }
+    ctx.fillStyle = "#6b4a33";
+    ctx.strokeStyle = "#2f2018";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.ellipse(0, -24, 21, 11, 0, 0, TAU);
+    ctx.fill();
+    ctx.stroke();
+    // 颈与头
+    ctx.beginPath();
+    ctx.moveTo(13, -30);
+    ctx.quadraticCurveTo(24, -40, 23, -48);
+    ctx.lineTo(30, -47);
+    ctx.quadraticCurveTo(31, -38, 22, -27);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "#3a281c";
+    ctx.beginPath();
+    ctx.moveTo(23, -48);
+    ctx.lineTo(30, -47);
+    ctx.lineTo(31, -43);
+    ctx.lineTo(24, -43);
+    ctx.closePath();
+    ctx.fill();
+    // 鬃毛
+    ctx.strokeStyle = "#2b1c14";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(10, -32);
+    ctx.quadraticCurveTo(18, -42, 23, -46);
+    ctx.stroke();
+    // 尾巴
+    ctx.beginPath();
+    ctx.moveTo(-20, -27);
+    ctx.quadraticCurveTo(-30, -24, -28, -14);
+    ctx.stroke();
+    // 鞍毯与铁甲
+    ctx.fillStyle = "#a3442e";
+    ctx.beginPath();
+    ctx.ellipse(0, -32, 10, 5, 0, 0, TAU);
+    ctx.fill();
+    ctx.strokeStyle = "#7d8894";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, -30, 9, Math.PI * 1.1, Math.PI * 1.9);
+    ctx.stroke();
+  }
+
   _limb(ctx, x1, y1, x2, y2, width, color) {
     ctx.strokeStyle = color;
     ctx.lineWidth = width;
@@ -506,6 +672,7 @@ class Projectile {
     this.weapon = type === "bananaSmall"
       ? { ...WEAPONS.banana, damage: 24, blast: 48, speed: 600, gravity: 960 }
       : WEAPONS[type];
+    this.kind = this.weapon.kind || type;
     this.dead = false;
     this.age = 0;
     this.rotation = Math.atan2(vy, vx);
@@ -513,18 +680,20 @@ class Projectile {
     this.lastBounce = 0;
     this.hitSet = new Set();
     this.returned = false;
-    this.fuse = type === "grenade" ? WEAPONS.grenade.fuse : type === "bananaSmall" ? 0.9 : null;
-    this.r = type === "boulder" ? 8 : type === "spike" ? 9 : type === "spear" ? 4 : 6;
+    this.smokeT = 0;
+    this.fuse = this.kind === "grenade" ? this.weapon.fuse
+      : type === "bananaSmall" ? 0.9 : null;
+    this.r = this.kind === "boulder" ? 8 : this.kind === "spike" ? 9 : this.kind === "spear" ? 4 : 6;
   }
 
   update(dt) {
     if (this.dead) return;
     this.age += dt;
-    if (this.type === "spike") {
+    if (this.kind === "spike") {
       this.updateSpike(dt);
       return;
     }
-    if (this.type === "boomerang") {
+    if (this.kind === "boomerang") {
       this.updateBoomerang(dt);
       return;
     }
@@ -549,19 +718,30 @@ class Projectile {
         return;
       }
       // 命中敌对单位
+      let pierced = false;
       for (const u of this.game.units) {
         if (!u.alive || u.team === this.team) continue;
         const dx = nx - u.x;
         const dy = ny - (u.y - 28);
         if (dx * dx + dy * dy < 20 * 20) {
+          if (w.pierce) {
+            // 电磁炮：贯穿沿途敌人，每个目标只结算一次
+            if (!this.hitSet.has(u)) {
+              this.hitSet.add(u);
+              u.takeDamage(w.damage * 0.85, this.team);
+              this.game.spawnParticles(u.x, u.y - 30, 8, w.color, "spark");
+            }
+            pierced = true;
+            continue;
+          }
           this.x = nx;
           this.y = ny;
           this.explode();
           return;
         }
       }
-      if (this.game.terrain.circleHit(nx, ny, 3)) {
-        if (this.type === "grenade") {
+      if (!pierced && this.game.terrain.circleHit(nx, ny, 3)) {
+        if (this.kind === "grenade") {
           // 反弹：按命中轴分别处理
           const hitX = this.game.terrain.circleHit(nx, this.y, 3);
           const hitY = this.game.terrain.circleHit(this.x, ny, 3);
@@ -595,7 +775,21 @@ class Projectile {
       this.y = ny;
       this.rotation = Math.atan2(this.vy, this.vx);
       this.trail.push({ x: nx, y: ny });
-      if (this.trail.length > 14) this.trail.shift();
+      if (this.trail.length > (this.kind === "laser" ? 8 : 14)) this.trail.shift();
+      // 火箭 / 陨石留下烟尾，强化“重火力”观感
+      if (this.kind === "rocket" || this.type === "meteor" || this.weapon.id === "cannon") {
+        this.smokeT -= h;
+        if (this.smokeT <= 0) {
+          this.smokeT = 0.03;
+          this.game.particles.push({
+            x: nx + rand(-3, 3), y: ny + rand(-3, 3),
+            vx: rand(-26, 26), vy: rand(-30, 10),
+            life: rand(0.25, 0.55), maxLife: 0.55, size: rand(3, 6),
+            color: this.kind === "rocket" ? "rgba(255,150,90,.55)" : "rgba(190,180,170,.45)",
+            kind: "smoke", gravity: -30,
+          });
+        }
+      }
     }
   }
 
@@ -679,15 +873,15 @@ class Projectile {
     this.dead = true;
     const g = this.game;
     if (this.type === "banana") {
-      g.explode(this.x, this.y, this.weapon.blast, this.weapon.damage, this.team);
+      g.explode(this.x, this.y, this.weapon.blast, this.weapon.damage, this.team, "blast");
       for (let i = 0; i < 3; i++) {
         const p = new Projectile(g, "bananaSmall", this.x + rand(-6, 6), this.y - 4, rand(-230, 230), rand(-390, -160), this.team);
         g.projectiles.push(p);
       }
-    } else if (this.type === "spear") {
+    } else if (this.kind === "spear") {
       g.explode(this.x, this.y, 22, this.weapon.damage, this.team, "spear");
     } else {
-      g.explode(this.x, this.y, this.weapon.blast, this.weapon.damage, this.team);
+      g.explode(this.x, this.y, this.weapon.blast, this.weapon.damage, this.team, this.kind);
     }
   }
 
@@ -697,10 +891,14 @@ class Projectile {
     const w = this.weapon;
     // 拖尾
     if (this.trail.length > 1) {
+      const beam = this.kind === "laser";
       ctx.save();
+      if (beam) ctx.globalCompositeOperation = "lighter";
       ctx.strokeStyle = w.color;
-      ctx.globalAlpha = 0.28;
-      ctx.lineWidth = type === "spear" ? 2 : 3;
+      ctx.globalAlpha = beam ? 0.8 : 0.3;
+      ctx.lineWidth = beam ? 3 : this.kind === "spear" ? 2 : 3;
+      ctx.shadowColor = w.color;
+      ctx.shadowBlur = beam ? 14 : 0;
       ctx.beginPath();
       this.trail.forEach((p, i) => {
         if (i === 0) ctx.moveTo(p.x, p.y);
@@ -814,6 +1012,131 @@ class Projectile {
         ctx.lineTo(Math.cos(a) * 12, Math.sin(a) * 12);
         ctx.stroke();
       }
+    } else if (type === "crossbow") {
+      ctx.rotate(this.rotation);
+      ctx.strokeStyle = "#c7d3dd";
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      ctx.moveTo(-16, 0);
+      ctx.lineTo(10, 0);
+      ctx.stroke();
+      ctx.fillStyle = "#eef3f7";
+      ctx.beginPath();
+      ctx.moveTo(10, -3);
+      ctx.lineTo(20, 0);
+      ctx.lineTo(10, 3);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = "#7d8a96";
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(-16, 0);
+      ctx.lineTo(-21, -5);
+      ctx.moveTo(-16, 0);
+      ctx.lineTo(-21, 5);
+      ctx.stroke();
+    } else if (type === "cannon") {
+      ctx.rotate(this.rotation);
+      ctx.fillStyle = "#3d4550";
+      ctx.strokeStyle = "#161b21";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, 9, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "rgba(220,235,255,.35)";
+      ctx.beginPath();
+      ctx.arc(-3, -3, 3, 0, TAU);
+      ctx.fill();
+    } else if (type === "firebomb") {
+      ctx.rotate(this.rotation);
+      ctx.fillStyle = "#b5542f";
+      ctx.strokeStyle = "#3a1c12";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, 8, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "#ffb04a";
+      ctx.globalCompositeOperation = "lighter";
+      ctx.beginPath();
+      ctx.arc(0, -11, 4 + Math.random() * 2.5, 0, TAU);
+      ctx.fill();
+      ctx.globalCompositeOperation = "source-over";
+    } else if (type === "rifle") {
+      ctx.rotate(this.rotation);
+      ctx.fillStyle = "#ffe6a8";
+      ctx.shadowColor = "#ffd27c";
+      ctx.shadowBlur = 8;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 7, 2.2, 0, 0, TAU);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    } else if (type === "mortar") {
+      ctx.rotate(this.rotation);
+      ctx.fillStyle = "#6d7a86";
+      ctx.strokeStyle = "#232a31";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(-11, -4);
+      ctx.lineTo(6, -4);
+      ctx.lineTo(12, 0);
+      ctx.lineTo(6, 4);
+      ctx.lineTo(-11, 4);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.strokeStyle = "#aab6c2";
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(-8, -4);
+      ctx.lineTo(-8, 4);
+      ctx.stroke();
+    } else if (type === "rocket") {
+      ctx.rotate(this.rotation);
+      ctx.fillStyle = "#e8ecf2";
+      ctx.strokeStyle = "#4c5661";
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.moveTo(-12, -4);
+      ctx.lineTo(6, -4);
+      ctx.lineTo(14, 0);
+      ctx.lineTo(6, 4);
+      ctx.lineTo(-12, 4);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "#e8503a";
+      ctx.beginPath();
+      ctx.moveTo(6, -4);
+      ctx.lineTo(14, 0);
+      ctx.lineTo(6, 4);
+      ctx.closePath();
+      ctx.fill();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.fillStyle = "#ffb04a";
+      ctx.beginPath();
+      ctx.moveTo(-12, -3);
+      ctx.lineTo(-24 - Math.random() * 8, 0);
+      ctx.lineTo(-12, 3);
+      ctx.closePath();
+      ctx.fill();
+      ctx.globalCompositeOperation = "source-over";
+    } else if (type === "laser" || type === "railgun") {
+      ctx.rotate(this.rotation);
+      ctx.globalCompositeOperation = "lighter";
+      ctx.shadowColor = w.color;
+      ctx.shadowBlur = 18;
+      ctx.fillStyle = w.color;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, type === "railgun" ? 20 : 13, type === "railgun" ? 3.4 : 4.4, 0, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath();
+      ctx.ellipse(0, 0, type === "railgun" ? 10 : 6, 1.7, 0, 0, TAU);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.globalCompositeOperation = "source-over";
     }
     ctx.restore();
   }
@@ -849,8 +1172,10 @@ class StoneWars {
     this.maxMove = 150;
     this.activePlayerIndex = 0;
     this.activeEnemyIndex = 0;
+    this.era = ERAS.stone;
+    this.weaponIds = [...ERA_WEAPONS.stone];
     this.selectedWeapon = "spear";
-    this.ammo = { ...WEAPONS };
+    this.ammo = {};
     this.weaponReadyAt = {};
     this.endlessWave = 0;
     this.endlessWaveTimer = 0;
@@ -873,7 +1198,13 @@ class StoneWars {
     this.lastTs = 0;
     this.cheatGod = false;
     this.cheatInfiniteAmmo = false;
+    this.cheatRealtime = false;
+    this.cheatDifficulty = 0;
     this.cheatOpen = false;
+    this.muzzleFlashes = [];
+    this.glows = [];
+    this.screenFlash = 0;
+    this.flashColor = "#ffd08a";
     this.bg = null;
     this.terrainDirty = false;
     this.terrainDrawnFor = null;
@@ -946,7 +1277,7 @@ class StoneWars {
       if (e.target.id === "tutorialScreen") this._startFromTutorial();
     });
     $("continueBtn").addEventListener("click", () => {
-      const id = clamp(Number(this.store.state.unlocked) || 1, 1, 14);
+      const id = clamp(Number(this.store.state.unlocked) || 1, 1, LEVELS.length);
       this.startLevel(id);
     });
     $("levelGrid").addEventListener("click", (e) => {
@@ -1036,7 +1367,7 @@ class StoneWars {
         }
       }
       if (/^[1-7]$/.test(k)) {
-        const id = WEAPON_ORDER[Number(k) - 1];
+        const id = this.weaponIds[Number(k) - 1];
         if (id && (this.ammo[id] || 0) > 0) {
           this.selectedWeapon = id;
           this._refreshWeaponBar();
@@ -1066,9 +1397,10 @@ class StoneWars {
       const locked = lv.id > unlocked;
       const s = Number(stars[lv.id]) || 0;
       const themeClass = "theme-" + (lv.theme || "dawn");
+      const era = getEra(lv.era);
       const current = !locked && lv.id === unlocked && !this.store.state.cleared[lv.id];
-      return `<button class="level-card ${themeClass} ${locked ? "locked" : ""} ${current ? "current" : ""}" data-level="${lv.id}" ${locked ? "aria-disabled=\"true\"" : ""}>
-        <div class="lv-top"><span class="lv-num">${String(lv.id).padStart(2, "0")}<small>关</small></span>${locked ? icon("lock") : ""}</div>
+      return `<button class="level-card ${themeClass} era-${era.id} ${locked ? "locked" : ""} ${current ? "current" : ""}" data-level="${lv.id}" ${locked ? "aria-disabled=\"true\"" : ""}>
+        <div class="lv-top"><span class="lv-num">${String(lv.id).padStart(2, "0")}<small>关</small></span><span class="lv-era" style="--era:${era.accent}">${era.short}</span>${locked ? icon("lock") : ""}</div>
         <div>
           <div class="lv-name">${lv.name}</div>
           <div class="lv-stars">${[1, 2, 3].map((i) => `<span class="${s >= i ? "on" : ""}">★</span>`).join("")}</div>
@@ -1098,7 +1430,7 @@ class StoneWars {
       `已解锁 ${unlocked} / ${LEVELS.length} 关 · 已获得 ${total} / ${LEVELS.length * 3} 星`;
     const btn = document.getElementById("continueBtn");
     if (total === 0 && cleared === 0) btn.textContent = "开始第 1 关";
-    else if (cleared >= LEVELS.length) btn.textContent = "再战第 14 关";
+    else if (cleared >= LEVELS.length) btn.textContent = `再战第 ${LEVELS.length} 关`;
     else btn.textContent = `继续第 ${unlocked} 关`;
     this._renderLevelGrid();
   }
@@ -1137,6 +1469,7 @@ class StoneWars {
   startLevel(id) {
     this._hideScreens();
     this.level = id === 0 ? getEndlessLevel() : getLevel(id);
+    this.era = getEra(this.level.era || "stone");
     this.theme = THEMES[this.level.theme] || THEMES.dawn;
     this.terrain = new Terrain(this.level);
     this.terrainDirty = false;
@@ -1145,6 +1478,9 @@ class StoneWars {
     this.rings = [];
     this.texts = [];
     this.timers = [];
+    this.muzzleFlashes = [];
+    this.glows = [];
+    this.screenFlash = 0;
     this.units = [];
     this.players = [];
     this.enemies = [];
@@ -1177,37 +1513,33 @@ class StoneWars {
     this.cheatOpen = false;
     document.getElementById("cheatScreen").classList.remove("show");
 
-    const ammo = {
-      spear: Infinity, boulder: 0, grenade: 0, banana: 0, spike: 0,
-      boomerang: 0, meteor: 0,
-    };
-    Object.keys(this.level.ammo || {}).forEach((k) => { ammo[k] = this.level.ammo[k]; });
-    // 新武器从第一关就提供少量弹药，让玩家能直接体验
-    if (!this.level.endless) {
-      ammo.boomerang = Math.max(Number(ammo.boomerang) || 0, 3);
-      ammo.meteor = Math.max(Number(ammo.meteor) || 0, 1);
-    }
-    // 中后期逐步增加新武器弹药
-    if (this.level.id >= 4) ammo.boomerang = Math.max(Number(ammo.boomerang) || 0, 4);
-    if (this.level.id >= 8) ammo.meteor = Math.max(Number(ammo.meteor) || 0, 2);
-    this.ammo = ammo;
-    this.selectedWeapon = WEAPON_ORDER.find((k) => (ammo[k] || 0) > 0) || "spear";
+    this.weaponIds = (this.level.weapons || ERA_WEAPONS[this.era.id] || ERA_WEAPONS.stone).slice(0, 7);
+    this.ammo = ammoFor(this.level, this.weaponIds);
+    this.selectedWeapon = this.weaponIds.find((k) => (this.ammo[k] || 0) > 0) || this.weaponIds[0];
 
-    const names = ["阿石", "阿木", "阿火"];
+    const nameSets = {
+      stone: ["阿石", "阿木", "阿火"],
+      iron: ["铁牙", "铁盾", "铁锤"],
+      gun: ["老枪", "快枪", "炮手"],
+      mech: ["零式", "壹式", "贰式"],
+    };
+    const names = nameSets[this.era.id] || nameSets.stone;
+    const playerHp = this.era.playerHp || 100;
     (this.level.player || []).forEach((p, i) => {
       const x = clamp(p.x, 20, W - 20);
       const y = this._spawnY(x);
-      const u = new Unit(this, 0, x, y, "player", p.hp || 100, i, names[i] || "族人" + (i + 1));
+      const u = new Unit(this, 0, x, y, "player", p.hp || playerHp, i, names[i] || "族人" + (i + 1));
       this.players.push(u);
       this.units.push(u);
     });
-    const hpMul = this.level.endless ? 1.35 : 1.25;
+    const hpMul = (this.level.endless ? 1.35 : 1.25) * this._difficulty().hp;
     (this.level.enemies || []).forEach((e, i) => {
       const cfg = ENEMY_TYPES[e.type] || ENEMY_TYPES.grunt;
       const x = clamp(e.x, 20, W - 20);
       const y = this._spawnY(x);
-      const hp = Math.round((e.hp || cfg.hp) * hpMul);
-      const u = new Unit(this, 1, x, y, e.type || "grunt", hp, i, cfg.name + " " + (i + 1));
+      const baseHp = e.hp || cfg.hp;
+      const u = new Unit(this, 1, x, y, e.type || "grunt", Math.round(baseHp * hpMul), i, cfg.name + " " + (i + 1));
+      u.baseHp = baseHp;
       u.aiTimer = rand(0.9, 2.2) + i * 0.18;
       u.aiMoveTimer = rand(0.8, 2.0);
       this.enemies.push(u);
@@ -1226,6 +1558,7 @@ class StoneWars {
     this._clearTimers();
     this.sfx.ensure();
     this._beginPlayerTurn();
+    if (this.cheatRealtime) this._syncRealtimeMode(true);
   }
 
   _spawnY(x) {
@@ -1278,7 +1611,7 @@ class StoneWars {
     this.aim.currentWorld = { x: p.x, y: p.y };
     this.aim.dragLen = 0;
     this.aim.maxDrag = 0;
-    this.aim.power = 0.12;
+    this.aim.power = 0.1;
   }
 
   _onPointerMove(e) {
@@ -1338,16 +1671,17 @@ class StoneWars {
     const len = Math.hypot(dx, dy);
     this.aim.dragLen = len;
     this.aim.maxDrag = Math.max(this.aim.maxDrag || 0, len);
-    // 角度死区 + 平滑：轻微手抖不会让准星乱跳
-    if (len >= 26) {
+    // 角度死区 + 更慢的平滑：轻微手抖不会让准星乱跳
+    if (len >= 32) {
       const raw = Math.atan2(dy, dx);
       let delta = raw - this.aim.angle;
       while (delta > Math.PI) delta -= TAU;
       while (delta < -Math.PI) delta += TAU;
-      this.aim.angle += delta * 0.35;
+      this.aim.angle += delta * 0.22;
     }
-    // 世界坐标下拖动 44~374px 映射为 12%~100% 力度，拉长映射降低灵敏度
-    this.aim.power = clamp((len - 44) / 330, 0.12, 1);
+    // 世界坐标下拖动 58~528px 映射为 10%~100% 力度：
+    // 拉长行程后，手指移动同样的距离，抛物线变化更细腻
+    this.aim.power = clamp((len - 58) / 470, 0.1, 1);
     u.facing = Math.cos(this.aim.angle) >= 0 ? 1 : -1;
   }
 
@@ -1401,7 +1735,7 @@ class StoneWars {
     if (!u || !u.alive) return false;
     let id = this.selectedWeapon;
     if ((this.ammo[id] || 0) <= 0) {
-      id = "spear";
+      id = this._fallbackWeapon();
       this.selectedWeapon = id;
     }
     const w = WEAPONS[id];
@@ -1422,7 +1756,6 @@ class StoneWars {
       Math.cos(angle) * speed, Math.sin(angle) * speed, 0
     ));
     u.facing = Math.cos(angle) >= 0 ? 1 : -1;
-    // 回合制：发射后进入飞行结算，弹道结束后轮到敌方
     this.aim.angle = angle;
     this.aim.power = power;
     this.aim.active = false;
@@ -1431,16 +1764,107 @@ class StoneWars {
     this.aim.currentWorld = null;
     this.aim.dragLen = 0;
     this.aim.maxDrag = 0;
+    this.shotReadyT = 0.55;
+    // 枪口焰、后坐与震屏，让每种武器的“威力”看得见
+    const mx = ox + Math.cos(angle) * 32;
+    const my = oy + Math.sin(angle) * 32;
+    this.muzzleFlashes.push({ x: mx, y: my, angle, t: 0.14, max: 0.14, color: w.color, size: 10 + w.blast * 0.12 });
+    this.glows.push({ x: mx, y: my, r: 24 + w.blast * 0.4, life: 0.22, max: 0.22, color: w.color });
+    this.spawnParticles(mx, my, 8 + Math.round(w.blast / 16), w.color, "spark");
+    if (w.blast >= 70) {
+      this.shake = Math.max(this.shake, 3 + w.blast * 0.05);
+      u.recoil = 0.18;
+      u.vx -= Math.cos(angle) * 115;
+    } else {
+      this.shake = Math.max(this.shake, 1.6);
+    }
+    this.sfx.shoot(id);
+    if (this.cheatRealtime) {
+      // 实时开火：不进入飞行结算，也不切换回合
+      this.phase = "aim";
+      this.turnTeam = 0;
+      this.moveBudget = this.maxMove;
+      this._refreshWeaponBar();
+      this._refreshFireButton();
+      this._updateHUD();
+      this._hideAimHint();
+      return true;
+    }
+    // 回合制：发射后进入飞行结算，弹道结束后轮到敌方
     this.phase = "flying";
     this.turnTeam = 0;
-    this.shotReadyT = 0.55;
-    this.sfx.shoot(id);
-    this.spawnParticles(ox + Math.cos(angle) * 30, oy + Math.sin(angle) * 30, 6, w.color, "spark");
     this._refreshWeaponBar();
     this._refreshFireButton();
     this._updateHUD();
     this._hideAimHint();
     return true;
+  }
+
+  _fallbackWeapon() {
+    return this.weaponIds.find((k) => (this.ammo[k] || 0) > 0) || this.weaponIds[0] || "spear";
+  }
+
+  // ------------------------------------------------------------ 难度 / 实时模式
+  _difficulty() {
+    const list = [
+      { name: "普通", acc: 0, rate: 1, dmg: 1, hp: 1 },
+      { name: "困难", acc: 0.12, rate: 0.8, dmg: 1.15, hp: 1.2 },
+      { name: "噩梦", acc: 0.24, rate: 0.62, dmg: 1.3, hp: 1.45 },
+    ];
+    return list[this.cheatDifficulty] || list[0];
+  }
+
+  _toggleDifficulty() {
+    this.cheatDifficulty = (this.cheatDifficulty + 1) % 3;
+    this._applyDifficulty();
+    const d = this._difficulty();
+    this._showBanner(`难度：${d.name}`, `敌方命中 +${Math.round(d.acc * 100)}% · 血量 ×${d.hp}`, true);
+    this._refreshCheatUI();
+    this._updateHUD();
+  }
+
+  _applyDifficulty() {
+    if (!this.level) return;
+    const mul = (this.level.endless ? 1.35 : 1.25) * this._difficulty().hp;
+    for (const u of this.enemies) {
+      if (!u.alive) continue;
+      const ratio = u.maxHp ? u.hp / u.maxHp : 1;
+      u.maxHp = Math.max(1, Math.round((u.baseHp || u.maxHp) * mul));
+      u.hp = Math.max(1, Math.round(u.maxHp * ratio));
+    }
+  }
+
+  _toggleRealtime() {
+    this.cheatRealtime = !this.cheatRealtime;
+    this._syncRealtimeMode(true);
+    this._refreshCheatUI();
+  }
+
+  _syncRealtimeMode(announce) {
+    if (!this.level) return;
+    if (this.cheatRealtime) {
+      this._clearTimers();
+      this.enemyMove = null;
+      this.aiMove = null;
+      this.enemyAim = null;
+      this.phase = "aim";
+      this.turnTeam = 0;
+      this.moveBudget = this.maxMove;
+      for (const u of this.enemies) {
+        u.aiAim = null;
+        u.aiTimer = rand(0.6, 1.6);
+        u.aiMoveTimer = rand(0.3, 1.2);
+      }
+      if (announce) this._showBanner("实时开火", "取消回合制 · 双方自由移动与射击", true);
+    } else if (this.phase === "aim" || this.phase === "flying" || this.phase === "enemyWait") {
+      this.enemyMove = null;
+      this.aiMove = null;
+      this.enemyAim = null;
+      for (const u of this.enemies) u.aiAim = null;
+      this._beginPlayerTurn();
+      if (announce) this._showBanner("恢复回合制", "重新按回合轮流开火", true);
+    }
+    this._updateHUD();
   }
 
   // ------------------------------------------------------------ 回合推进
@@ -1465,7 +1889,7 @@ class StoneWars {
     this.aim.dragLen = 0;
     this.aim.maxDrag = 0;
     this._activePlayer();
-    if ((this.ammo[this.selectedWeapon] || 0) <= 0) this.selectedWeapon = "spear";
+    if ((this.ammo[this.selectedWeapon] || 0) <= 0) this.selectedWeapon = this._fallbackWeapon();
     this._updateHUD();
     this._refreshWeaponBar();
     this._refreshFireButton();
@@ -1477,7 +1901,7 @@ class StoneWars {
   }
 
   _beginEnemyTurn() {
-    if (this.phase === "over") return;
+    if (this.phase === "over" || this.cheatRealtime) return;
     if (!this.enemies.some((u) => u.alive)) { this.finish(true); return; }
     if (!this.players.some((u) => u.alive)) { this.finish(false, "族人全部倒下"); return; }
     this.turnTeam = 1;
@@ -1551,7 +1975,7 @@ class StoneWars {
     if (!u) { this.finish(true); return; }
     const targets = this.players.filter((p) => p.alive);
     if (!targets.length) { this.finish(false, "族人全部倒下"); return; }
-    const accuracy = clamp(Number(this.level.ai) || 0.4, 0, 0.95);
+    const accuracy = clamp((Number(this.level.ai) || 0.4) + this._difficulty().acc, 0, 0.98);
     targets.sort((a, b) => a.hp - b.hp || Math.abs(a.x - u.x) - Math.abs(b.x - u.x));
     // 关卡越靠后，AI 越倾向于集火残血目标
     const focus = accuracy > 0.6 && Math.random() < accuracy * 0.7;
@@ -1570,7 +1994,7 @@ class StoneWars {
     const sy = u.y - 44;
     const best = this._findBestShot(sx, sy, target, weapon);
     const cfg = ENEMY_TYPES[u.type] || ENEMY_TYPES.grunt;
-    const accuracy = clamp((Number(this.level.ai) || 0.4) + (cfg.aiBonus || 0), 0, 0.96);
+    const accuracy = clamp((Number(this.level.ai) || 0.4) + (cfg.aiBonus || 0) + this._difficulty().acc, 0, 0.98);
     const err = (1 - accuracy) * 0.16;
     const angle = best.angle + rand(-err, err);
     const power = clamp(best.power + rand(-err * 0.6, err * 0.6), 0.2, 1);
@@ -1590,6 +2014,10 @@ class StoneWars {
     const ox = u.x + Math.cos(angle) * 26;
     const oy = u.y - 44 + Math.sin(angle) * 26;
     this.projectiles.push(new Projectile(this, weapon.id, ox, oy, Math.cos(angle) * speed, Math.sin(angle) * speed, 1));
+    this.muzzleFlashes.push({
+      x: ox + Math.cos(angle) * 8, y: oy + Math.sin(angle) * 8,
+      angle, t: 0.12, max: 0.12, color: weapon.color, size: 9 + weapon.blast * 0.1,
+    });
     this.phase = "flying";
     this.turnTeam = 1;
     this.enemyAim = null;
@@ -1601,14 +2029,40 @@ class StoneWars {
 
   _chooseEnemyWeapon(u, target) {
     const dist = Math.abs(target.x - u.x);
-    const lv = this.level.endless ? 14 : this.level.id;
+    const lv = this.level.endless ? 20 : this.level.id;
+    const era = this.era.id;
+    const roll = Math.random();
+    if (era === "mech") {
+      if (roll < 0.1) return WEAPONS.meteor;
+      if (roll < 0.32) return WEAPONS.railgun;
+      if (dist > 520 && roll < 0.55) return WEAPONS.rocket;
+      if (dist < 240 && roll < 0.55) return WEAPONS.cannon;
+      if (dist > 420 && roll < 0.7) return WEAPONS.mortar;
+      return WEAPONS.laser;
+    }
+    if (era === "gun") {
+      if (roll < 0.08) return WEAPONS.meteor;
+      if (dist > 500) return roll < 0.55 ? WEAPONS.rocket : WEAPONS.mortar;
+      if (dist < 250) return roll < 0.5 ? WEAPONS.firebomb : WEAPONS.rifle;
+      if (roll < 0.38) return WEAPONS.rifle;
+      if (roll < 0.58) return WEAPONS.grenade;
+      return WEAPONS.mortar;
+    }
+    if (era === "iron") {
+      if (lv >= 9 && roll < 0.08) return WEAPONS.meteor;
+      if (dist > 480) return roll < 0.55 ? WEAPONS.cannon : WEAPONS.crossbow;
+      if (dist < 250) return roll < 0.5 ? WEAPONS.firebomb : WEAPONS.crossbow;
+      if (roll < 0.15) return WEAPONS.boomerang;
+      return WEAPONS.crossbow;
+    }
+    // 石器时代
     if (lv <= 1) return Math.random() < 0.4 ? WEAPONS.boulder : WEAPONS.spear;
-    if (lv >= 11 && Math.random() < 0.09) return WEAPONS.meteor;
+    if (lv >= 5 && Math.random() < 0.07) return WEAPONS.meteor;
     if (lv >= 5 && Math.random() < 0.16) return WEAPONS.boomerang;
     if (dist > 500) return Math.random() < 0.75 ? WEAPONS.boulder : WEAPONS.spear;
     if (dist < 260) return Math.random() < 0.45 ? WEAPONS.grenade : WEAPONS.spear;
-    if (lv >= 7 && Math.random() < 0.16) return WEAPONS.banana;
-    if (lv >= 9 && Math.random() < 0.14) return WEAPONS.spike;
+    if (lv >= 4 && Math.random() < 0.16) return WEAPONS.banana;
+    if (lv >= 4 && Math.random() < 0.14) return WEAPONS.spike;
     return Math.random() < 0.35 ? WEAPONS.grenade : WEAPONS.spear;
   }
 
@@ -1689,18 +2143,21 @@ class StoneWars {
     const target = targets[Math.floor(Math.random() * targets.length)];
     let weapon = this._chooseEnemyWeapon(u, target);
     let best = this._findBestShot(u.x, u.y - 44, target, weapon);
-    // 直线武器被地形挡住时，改换抛物线武器翻过去
-    if (weapon.id === "spear") {
-      const arc = this._findBestShot(u.x, u.y - 44, target, WEAPONS.boulder);
+    // 直线 / 激光武器被地形挡住时，改换抛物线武器翻过去
+    if (weapon.kind === "spear" || weapon.kind === "laser") {
+      const arcWeapon = this.era.id === "stone" ? WEAPONS.boulder : WEAPONS.mortar;
+      const arc = this._findBestShot(u.x, u.y - 44, target, arcWeapon);
       if (arc.score + 35 < best.score) {
-        weapon = WEAPONS.boulder;
+        weapon = arcWeapon;
         best = arc;
       }
     }
     const baseAccuracy = clamp(
-      (Number(this.level.ai) || 0.4) + (this.level.endless ? Math.min(0.3, this.endlessWave * 0.02) : 0.08),
+      (Number(this.level.ai) || 0.4)
+        + (this.level.endless ? Math.min(0.3, this.endlessWave * 0.02) : 0.08)
+        + this._difficulty().acc,
       0,
-      0.94
+      0.97
     );
     const err = (1 - baseAccuracy) * 0.16;
     u.aiAim = {
@@ -1710,7 +2167,7 @@ class StoneWars {
       hold: 0.55,
     };
     u.facing = Math.cos(u.aiAim.angle) >= 0 ? 1 : -1;
-    u.aiTimer = rand(2.0, 3.4);
+    u.aiTimer = rand(2.0, 3.4) * this._difficulty().rate;
   }
 
   _enemyFireNow(u) {
@@ -1721,8 +2178,13 @@ class StoneWars {
     const ox = u.x + Math.cos(angle) * 26;
     const oy = u.y - 44 + Math.sin(angle) * 26;
     this.projectiles.push(new Projectile(this, weapon.id, ox, oy, Math.cos(angle) * speed, Math.sin(angle) * speed, 1));
+    this.muzzleFlashes.push({
+      x: ox + Math.cos(angle) * 8, y: oy + Math.sin(angle) * 8,
+      angle, t: 0.12, max: 0.12, color: weapon.color, size: 9 + weapon.blast * 0.1,
+    });
     this.sfx.shoot(weapon.id);
-    u.aiTimer = rand(2.0, 3.4) * (this.level.endless ? Math.max(0.65, 1 - this.endlessWave * 0.015) : 1);
+    const baseGap = rand(2.0, 3.4) * this._difficulty().rate;
+    u.aiTimer = baseGap * (this.level.endless ? Math.max(0.65, 1 - this.endlessWave * 0.015) : 1);
   }
 
   // ------------------------------------------------------------ 弹道结算
@@ -1780,7 +2242,17 @@ class StoneWars {
       return;
     }
     if (this.phase === "aim" || this.phase === "flying") this.battleTime += dt;
-    if (this.phase === "aim") {
+    if (this.cheatRealtime) {
+      // 实时开火：双方同时行动，不再进入敌方回合状态机
+      this.phase = "aim";
+      this.turnTeam = 0;
+      this.moveBudget = this.maxMove;
+      const u = this._activePlayer();
+      if (u) this._updatePlayingMovement(u, dt);
+      for (const e of this.enemies) {
+        if (e.alive) this._updateEnemyAI(e, dt);
+      }
+    } else if (this.phase === "aim") {
       const u = this._activePlayer();
       if (u) this._updatePlayingMovement(u, dt);
     }
@@ -1808,10 +2280,12 @@ class StoneWars {
       return;
     }
     if (!this.enemies.some((e) => e.alive)) {
-      this.finish(true);
-      return;
+      if (this.level.endless) this._updateEndless(dt);
+      else { this.finish(true); return; }
+    } else if (this.level.endless) {
+      this._updateEndless(dt);
     }
-    if ((this.ammo[this.selectedWeapon] || 0) <= 0) this.selectedWeapon = "spear";
+    if ((this.ammo[this.selectedWeapon] || 0) <= 0) this.selectedWeapon = this._fallbackWeapon();
     this._refreshWeaponBar();
     this._refreshFireButton();
     this._updateHUD();
@@ -1856,16 +2330,25 @@ class StoneWars {
   _spawnEndlessWave() {
     this.endlessWave += 1;
     const wave = this.endlessWave;
-    const count = Math.min(6, 1 + Math.floor(wave * 0.6));
-    const types = ["grunt", "grunt", "thrower", "brute", "chief"];
+    const count = Math.min(7, 1 + Math.floor(wave * 0.6));
+    const pools = [
+      ["grunt", "thrower", "brute"],
+      ["raider", "shield", "brute"],
+      ["gunner", "grenadier", "shield"],
+      ["mech", "gunner", "grenadier"],
+      ["mech", "warlord", "mech"],
+    ];
+    const pool = pools[Math.min(pools.length - 1, Math.floor((wave - 1) / 2))];
     for (let i = 0; i < count; i++) {
-      const type = types[Math.min(types.length - 1, Math.floor((wave + i) / 3))];
+      const type = pool[Math.floor(Math.random() * pool.length)];
       const cfg = ENEMY_TYPES[type] || ENEMY_TYPES.grunt;
       const x = clamp(880 + (i % 4) * 78 + rand(-20, 20), 840, W - 40);
       const y = this._spawnY(x);
-      const hp = Math.round(cfg.hp * (1 + wave * 0.18));
+      const baseHp = cfg.hp;
+      const hp = Math.round(baseHp * (1 + wave * 0.18) * this._difficulty().hp);
       const index = this.enemies.length;
       const u = new Unit(this, 1, x, y, type, hp, index, `${cfg.name} ${wave}-${i + 1}`);
+      u.baseHp = baseHp;
       u.aiTimer = rand(1.0, 2.4) + i * 0.2;
       u.aiMoveTimer = rand(0.8, 2.0);
       this.enemies.push(u);
@@ -1925,6 +2408,18 @@ class StoneWars {
       if (t.life <= 0) this.texts.splice(i, 1);
     }
     this.shake = Math.max(0, this.shake - 58 * dt);
+    this.screenFlash = Math.max(0, this.screenFlash - dt * 2.8);
+    for (let i = this.muzzleFlashes.length - 1; i >= 0; i--) {
+      const f = this.muzzleFlashes[i];
+      f.t -= dt;
+      if (f.t <= 0) this.muzzleFlashes.splice(i, 1);
+    }
+    for (let i = this.glows.length - 1; i >= 0; i--) {
+      const g = this.glows[i];
+      g.life -= dt;
+      if (g.life <= 0) this.glows.splice(i, 1);
+    }
+    if (this.particles.length > 420) this.particles.splice(0, this.particles.length - 420);
     if (this.ambient.length) {
       const isFire = this.theme.id === "volcano";
       for (const p of this.ambient) {
@@ -1947,37 +2442,63 @@ class StoneWars {
   // ------------------------------------------------------------ 爆炸 / 伤害
   explode(x, y, radius, damage, team, kind = "blast") {
     if (!this.terrain) return;
+    const beam = kind === "laser";
     this.terrain.carve(x, y, radius * 0.8);
     this.terrainDirty = true;
-    this.shake = Math.max(this.shake, Math.min(20, radius * 0.16));
-    this.rings.push({ x, y, r: radius * 0.3, max: radius * 1.8, t: 0, life: 0.48 });
-    const dirtCount = kind === "spear" ? 8 : Math.min(30, 10 + Math.floor(radius * 0.22));
+    this.shake = Math.max(this.shake, Math.min(26, radius * 0.19));
+    // 双层冲击波 + 中心辉光，强武器一眼能看出威力
+    this.rings.push({ x, y, r: radius * 0.25, max: radius * 1.55, t: 0, life: 0.34, color: beam ? "#9ff4ff" : "#ffe0a0" });
+    this.rings.push({ x, y, r: radius * 0.1, max: radius * 2.1, t: 0, life: 0.55, color: beam ? "rgba(110,230,255,.7)" : "rgba(255,170,90,.7)" });
+    this.glows.push({
+      x, y, r: radius * 1.15, life: 0.34, max: 0.34,
+      color: beam ? "rgba(120,240,255,.75)" : "rgba(255,190,110,.75)",
+    });
+    if (radius >= 80) {
+      this.screenFlash = Math.max(this.screenFlash, Math.min(0.42, radius / 420));
+      this.flashColor = beam ? "#9ff4ff" : "#ffd08a";
+    }
+    const dirtCount = kind === "spear" ? 10 : Math.min(44, 12 + Math.floor(radius * 0.32));
     for (let i = 0; i < dirtCount; i++) {
       this.particles.push({
         x: x + rand(-6, 6), y: y + rand(-6, 6),
-        vx: rand(-220, 220), vy: rand(-300, -40),
-        life: rand(0.5, 1.2), maxLife: 1.2, size: rand(2, 6),
+        vx: rand(-280, 280), vy: rand(-360, -40),
+        life: rand(0.5, 1.3), maxLife: 1.3, size: rand(2, 7),
         color: this.theme.dirt[1], kind: "dirt", gravity: 900,
       });
     }
-    const fireCount = kind === "spear" ? 4 : Math.min(24, 8 + Math.floor(radius * 0.18));
+    const fireCount = kind === "spear" ? 6 : Math.min(38, 10 + Math.floor(radius * 0.26));
     for (let i = 0; i < fireCount; i++) {
       this.particles.push({
         x: x + rand(-8, 8), y: y + rand(-8, 8),
-        vx: rand(-170, 170), vy: rand(-240, 20),
-        life: rand(0.2, 0.55), maxLife: 0.55, size: rand(3, 9),
-        color: Math.random() < 0.5 ? "#ffb14a" : "#ff6a2a", kind: "fire", gravity: -60,
+        vx: rand(-230, 230), vy: rand(-300, 20),
+        life: rand(0.24, 0.7), maxLife: 0.7, size: rand(3, 11),
+        color: beam
+          ? (Math.random() < 0.5 ? "#9ff4ff" : "#5fd4ff")
+          : (Math.random() < 0.5 ? "#ffd15c" : "#ff6a2a"),
+        kind: "fire", gravity: -60,
       });
     }
-    for (let i = 0; i < 8; i++) {
+    // 高速火星：加色混合，让爆炸更“炸”
+    const sparkCount = Math.min(30, 6 + Math.floor(radius * 0.2));
+    for (let i = 0; i < sparkCount; i++) {
+      const a = rand(0, TAU);
+      const sp = rand(160, 520);
       this.particles.push({
-        x: x + rand(-14, 14), y: y + rand(-14, 14),
-        vx: rand(-60, 60), vy: rand(-90, -10),
-        life: rand(0.5, 1), maxLife: 1, size: rand(8, 18),
-        color: "rgba(60,55,50,.5)", kind: "smoke", gravity: -30,
+        x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 60,
+        life: rand(0.18, 0.42), maxLife: 0.42, size: rand(1.2, 2.6),
+        color: beam ? "#d8fbff" : "#ffe8a8", kind: "spark", gravity: 260,
+      });
+    }
+    for (let i = 0; i < (kind === "spear" ? 3 : 12); i++) {
+      this.particles.push({
+        x: x + rand(-18, 18), y: y + rand(-18, 18),
+        vx: rand(-80, 80), vy: rand(-120, -10),
+        life: rand(0.6, 1.2), maxLife: 1.2, size: rand(10, 24),
+        color: "rgba(60,55,50,.45)", kind: "smoke", gravity: -30,
       });
     }
     // 伤害与击退（含友军误伤）
+    const diff = this._difficulty();
     for (const u of this.units) {
       if (!u.alive) continue;
       const dx = u.x - x;
@@ -1986,11 +2507,13 @@ class StoneWars {
       const reach = radius + 16;
       if (d < reach) {
         const f = 1 - d / reach;
-        const dmg = Math.max(4, Math.round(damage * (0.35 + 0.65 * f)));
+        let dmg = Math.max(4, Math.round(damage * (0.35 + 0.65 * f)));
+        if (team === 1 && u.team === 0) dmg = Math.round(dmg * diff.dmg);
         u.takeDamage(dmg, team);
         if (u.alive) {
-          u.vy = -Math.min(330, 70 + f * damage * 2.2);
+          u.vy = -Math.min(360, 70 + f * damage * 2.4);
           u.onGround = false;
+          u.vx += Math.sign(dx || 1) * f * 60;
         }
       }
     }
@@ -2023,7 +2546,10 @@ class StoneWars {
   _checkEndState() {
     if (this.phase === "over" || this.phase === "menu") return;
     if (!this.players.some((u) => u.alive)) { this.finish(false, "族人全部倒下"); return; }
-    if (!this.enemies.some((u) => u.alive)) { this.finish(true); return; }
+    if (!this.enemies.some((u) => u.alive)) {
+      if (!this.level.endless) this.finish(true);
+      return;
+    }
     this._refreshFireButton();
     this._updateHUD();
   }
@@ -2145,10 +2671,18 @@ class StoneWars {
   }
 
   _updateCheatText() {
+    this._refreshCheatUI();
+  }
+
+  _refreshCheatUI() {
     const god = document.getElementById("cheatGodText");
     if (god) god.textContent = `无敌模式：${this.cheatGod ? "开" : "关"}`;
     const ammo = document.getElementById("cheatAmmoText");
     if (ammo) ammo.textContent = `无限弹药：${this.cheatInfiniteAmmo ? "开" : "关"}`;
+    const diff = document.getElementById("cheatDiffText");
+    if (diff) diff.textContent = `难度：${this._difficulty().name}`;
+    const rt = document.getElementById("cheatRealtimeText");
+    if (rt) rt.textContent = `实时开火：${this.cheatRealtime ? "开" : "关"}`;
   }
 
   _handleCheat(action) {
@@ -2170,6 +2704,12 @@ class StoneWars {
     } else if (action === "infinite") {
       this.cheatInfiniteAmmo = !this.cheatInfiniteAmmo;
       toast(`无限弹药：${this.cheatInfiniteAmmo ? "开" : "关"}`, "ok");
+    } else if (action === "difficulty") {
+      this._toggleDifficulty();
+      toast(`难度已切换为：${this._difficulty().name}`, "ok");
+    } else if (action === "realtime") {
+      this._toggleRealtime();
+      toast(`实时开火：${this.cheatRealtime ? "开" : "关"}`, "ok");
     } else if (action === "kill") {
       for (const e of this.enemies) if (e.alive) e.takeDamage(99999, 0);
       toast("已秒杀当前敌人", "ok");
@@ -2247,15 +2787,18 @@ class StoneWars {
   _refreshWeaponBar() {
     if (!this.level) return;
     const bar = document.getElementById("weaponBar");
-    if (bar.children.length !== WEAPON_ORDER.length) {
-      bar.innerHTML = WEAPON_ORDER.map((id, i) => {
+    if (bar.children.length !== this.weaponIds.length || bar.dataset.era !== this.era.id) {
+      bar.dataset.era = this.era.id;
+      bar.innerHTML = this.weaponIds.map((id, i) => {
         const w = WEAPONS[id];
-        return `<button class="weapon-card" data-weapon="${id}" type="button">
+        return `<button class="weapon-card" data-weapon="${id}" type="button"
+          title="${w.name} · 伤害 ${w.damage}${w.blast ? ` · 爆炸范围 ${w.blast}` : ""}\n${w.desc}">
           <span class="w-key">${i + 1}</span>
           <span class="w-ammo" data-ammo="${id}"></span>
           <span class="w-cool"></span>
           ${this._weaponIcon(id)}
           <span class="w-name">${w.name}</span>
+          <span class="w-power">${w.damage}</span>
         </button>`;
       }).join("");
     }
@@ -2286,15 +2829,23 @@ class StoneWars {
     if (id === "banana") return `<svg ${common}><path d="M5 6c1 8 6 12 14 11-3 3-9 4-13 1S3 9 5 6z"/></svg>`;
     if (id === "boomerang") return `<svg ${common}><path d="M5 8l6 5-6 5"/><path d="M5 8l10 4-10 5" opacity=".55"/></svg>`;
     if (id === "meteor") return `<svg ${common}><circle cx="15" cy="9" r="5"/><path d="M9 15l-5 5M11 17l-3 3M7 11l-3 3"/></svg>`;
+    if (id === "crossbow") return `<svg ${common}><path d="M3 12h18"/><path d="M8 6l4 6-4 6"/><path d="M17 9l3 3-3 3"/></svg>`;
+    if (id === "cannon") return `<svg ${common}><path d="M3 15l13-5 5 3-3 5-15 2z"/><circle cx="9" cy="18" r="2.6"/><circle cx="16" cy="17" r="2.6"/><path d="M16 10l4-3"/></svg>`;
+    if (id === "firebomb") return `<svg ${common}><circle cx="11" cy="15" r="6"/><path d="M11 3c3 3 2 5 0 6-2-1-2-3 0-6z"/></svg>`;
+    if (id === "rifle") return `<svg ${common}><path d="M2 14l16-4 3 2-1 3-17 3z"/><path d="M8 15v4"/><path d="M14 12l2 4"/></svg>`;
+    if (id === "mortar") return `<svg ${common}><path d="M7 17L15 4l5 3-8 13z"/><path d="M3 20l6-3"/><path d="M9 19l3 2"/></svg>`;
+    if (id === "rocket") return `<svg ${common}><path d="M14 4l6 8-6 8-3-4h-5V8h5z"/><path d="M9 12H3"/><path d="M8 8L4 5M8 16l-4 3"/></svg>`;
+    if (id === "laser") return `<svg ${common}><path d="M3 12h10"/><path d="M13 9l7 3-7 3z"/><path d="M5 8v8M9 9v6"/></svg>`;
+    if (id === "railgun") return `<svg ${common}><path d="M2 12h20"/><path d="M4 8v8M9 9v6M14 8v8M19 9v6"/></svg>`;
     return `<svg ${common}><circle cx="12" cy="12" r="5"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l3 3M18 6l-3 3M6 18l3-3M18 18l-3-3"/></svg>`;
   }
 
   _updateHUD() {
     if (!this.level) return;
     document.getElementById("hudLevel").textContent = this.level.endless
-      ? "无限模式 · 无回合上限"
-      : `第 ${this.level.id} 关 · ${this.level.name}`;
-    document.getElementById("hudTime").textContent = this.level.endless ? "∞" : String(this.turnNo);
+      ? "无限模式 · 机械时代"
+      : `${this.era.name} · 第 ${this.level.id} 关 · ${this.level.name}`;
+    document.getElementById("hudTime").textContent = this.cheatRealtime ? "实时" : this.level.endless ? "∞" : String(this.turnNo);
     document.getElementById("windVal").textContent = Math.abs(this.wind).toFixed(1);
     const arrow = document.getElementById("windArrow");
     arrow.style.transform = `rotate(${this.wind >= 0 ? 90 : -90}deg)`;
@@ -2309,6 +2860,14 @@ class StoneWars {
     const cd = w.cooldown || 1;
     const remain = Math.max(0, (this.weaponReadyAt[this.selectedWeapon] || 0) - this.time);
     document.getElementById("moveBar").style.width = Math.round(clamp(1 - remain / cd, 0, 1) * 100) + "%";
+    const info = document.getElementById("weaponInfo");
+    if (info && w) {
+      info.textContent = `${w.name} · 伤害 ${w.damage}${w.blast ? ` · 范围 ${w.blast}` : ""}`;
+      info.style.setProperty("--w-color", w.color);
+      info.classList.toggle("realtime", this.cheatRealtime);
+    }
+    const badge = document.getElementById("realtimeBadge");
+    if (badge) badge.classList.toggle("show", this.cheatRealtime);
   }
 
   addText(x, y, text, color) {
@@ -2361,9 +2920,70 @@ class StoneWars {
     if (this.phase === "aim" && (this.aim.active || this.aim.locked)) this._drawPlayerAim(ctx);
     if (this.phase === "aim") this._drawEnemyAims(ctx);
 
+    this._drawGlows(ctx);
     this._drawParticles(ctx);
     this._drawRings(ctx);
+    this._drawMuzzleFlashes(ctx);
     this._drawTexts(ctx);
+    ctx.restore();
+    if (this.screenFlash > 0.004) {
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.globalAlpha = this.screenFlash;
+      ctx.fillStyle = this.flashColor;
+      ctx.fillRect(0, 0, W, H);
+      ctx.restore();
+    }
+  }
+
+  _drawGlows(ctx) {
+    if (!this.glows.length) return;
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    for (const g of this.glows) {
+      const k = g.life / g.max;
+      const r = g.r * (1.5 - k * 0.5);
+      const grad = ctx.createRadialGradient(g.x, g.y, 0, g.x, g.y, r);
+      grad.addColorStop(0, g.color);
+      grad.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.globalAlpha = k * 0.85;
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(g.x, g.y, r, 0, TAU);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  _drawMuzzleFlashes(ctx) {
+    if (!this.muzzleFlashes.length) return;
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    for (const f of this.muzzleFlashes) {
+      const k = f.t / f.max;
+      const len = f.size * (1.6 + (1 - k) * 1.2);
+      const grad = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, f.size * 1.8);
+      grad.addColorStop(0, "#ffffff");
+      grad.addColorStop(0.35, f.color);
+      grad.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.globalAlpha = k;
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(f.x, f.y, f.size * 1.8, 0, TAU);
+      ctx.fill();
+      // 向枪口方向喷出的锥形火焰
+      ctx.save();
+      ctx.translate(f.x, f.y);
+      ctx.rotate(f.angle);
+      ctx.fillStyle = f.color;
+      ctx.beginPath();
+      ctx.moveTo(0, -f.size * 0.55);
+      ctx.lineTo(len, 0);
+      ctx.lineTo(0, f.size * 0.55);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
     ctx.restore();
   }
 
@@ -2469,50 +3089,77 @@ class StoneWars {
       const dx = c.x - j.x;
       const dy = c.y - j.y;
       const len = Math.hypot(dx, dy);
-      const visualMax = 62;
-      const kx = j.x + (len > 0 ? (dx / len) * Math.min(len, visualMax) : 0);
-      const ky = j.y + (len > 0 ? (dy / len) * Math.min(len, visualMax) : 0);
+      // 大操作圈 + 长行程：圈只负责方向与力度刻度，真实拖动 58~528px 才满力
+      const ring = 160;
+      const dirX = len > 0.001 ? dx / len : 1;
+      const dirY = len > 0.001 ? dy / len : 0;
+      const knobR = Math.max(30, ring * this.aim.power);
+      const kx = j.x + dirX * knobR;
+      const ky = j.y + dirY * knobR;
       ctx.save();
-      ctx.globalAlpha = 0.5;
-      ctx.fillStyle = "rgba(8, 10, 14, 0.5)";
+      ctx.globalAlpha = 0.42;
+      ctx.fillStyle = "rgba(8, 10, 14, 0.55)";
       ctx.beginPath();
-      ctx.arc(j.x, j.y, 52, 0, TAU);
+      ctx.arc(j.x, j.y, ring + 8, 0, TAU);
       ctx.fill();
-      ctx.globalAlpha = 0.72;
-      ctx.strokeStyle = "rgba(255, 215, 140, 0.55)";
-      ctx.lineWidth = 2;
+      ctx.globalAlpha = 0.65;
+      ctx.strokeStyle = "rgba(255, 215, 140, 0.45)";
+      ctx.lineWidth = 1.6;
       ctx.beginPath();
-      ctx.arc(j.x, j.y, 52, 0, TAU);
+      ctx.arc(j.x, j.y, ring, 0, TAU);
       ctx.stroke();
-      // 八个方向的刻度，帮助判断角度
-      ctx.globalAlpha = 0.3;
-      for (let i = 0; i < 8; i++) {
-        const a = (i / 8) * TAU;
+      // 力度弧：沿外圈填充，直观看到当前力度
+      ctx.globalAlpha = 0.95;
+      ctx.strokeStyle = this.aim.power > 0.82 ? "#ff8a5a" : "#ffd27c";
+      ctx.lineWidth = 5;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.arc(j.x, j.y, ring, -Math.PI / 2, -Math.PI / 2 + TAU * this.aim.power);
+      ctx.stroke();
+      // 十二方向刻度
+      ctx.globalAlpha = 0.34;
+      ctx.strokeStyle = "#ffe0ad";
+      ctx.lineWidth = 1.6;
+      for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * TAU;
+        const inner = i % 3 === 0 ? ring - 10 : ring - 6;
         ctx.beginPath();
-        ctx.moveTo(j.x + Math.cos(a) * 40, j.y + Math.sin(a) * 40);
-        ctx.lineTo(j.x + Math.cos(a) * 47, j.y + Math.sin(a) * 47);
+        ctx.moveTo(j.x + Math.cos(a) * inner, j.y + Math.sin(a) * inner);
+        ctx.lineTo(j.x + Math.cos(a) * ring, j.y + Math.sin(a) * ring);
         ctx.stroke();
       }
-      ctx.globalAlpha = 0.62;
+      ctx.globalAlpha = 0.7;
       ctx.strokeStyle = w.color;
       ctx.lineWidth = 3;
       ctx.beginPath();
       ctx.moveTo(j.x, j.y);
       ctx.lineTo(kx, ky);
       ctx.stroke();
-      ctx.globalAlpha = 0.94;
-      ctx.fillStyle = "#ffd27c";
+      // 手指实际的位置：超出力度圈时用一个小点提示，避免误以为没响应
+      if (len > ring) {
+        ctx.globalAlpha = 0.42;
+        ctx.fillStyle = "#ffe0ad";
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, 5, 0, TAU);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 0.96;
+      const knob = ctx.createRadialGradient(kx - 5, ky - 5, 2, kx, ky, 23);
+      knob.addColorStop(0, "#fff3cf");
+      knob.addColorStop(1, "#e9a53c");
+      ctx.fillStyle = knob;
       ctx.beginPath();
-      ctx.arc(kx, ky, 18, 0, TAU);
+      ctx.arc(kx, ky, 23, 0, TAU);
       ctx.fill();
       ctx.strokeStyle = "rgba(80, 50, 20, 0.7)";
       ctx.lineWidth = 2;
       ctx.stroke();
-      ctx.globalAlpha = 0.92;
+      ctx.globalAlpha = 0.94;
       ctx.fillStyle = "#ffe0ad";
       ctx.font = '700 12px "PingFang SC", "Microsoft YaHei", sans-serif';
       ctx.textAlign = "center";
-      ctx.fillText(`力度 ${Math.round(this.aim.power * 100)}%`, j.x, Math.min(j.y + 74, H - 12));
+      const deg = ((this.aim.angle * 180) / Math.PI).toFixed(0);
+      ctx.fillText(`${deg}° · 力度 ${Math.round(this.aim.power * 100)}%`, j.x, Math.min(j.y + ring + 20, H - 12));
       ctx.restore();
     }
     ctx.restore();
@@ -2588,6 +3235,13 @@ class StoneWars {
         ctx.arc(p.x, p.y, p.size * a, 0, TAU);
         ctx.fill();
         ctx.globalCompositeOperation = "source-over";
+      } else if (p.kind === "spark") {
+        ctx.globalCompositeOperation = "lighter";
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, Math.max(0.8, p.size * a), 0, TAU);
+        ctx.fill();
+        ctx.globalCompositeOperation = "source-over";
       } else {
         ctx.fillStyle = p.color;
         ctx.fillRect(p.x, p.y, p.size, p.size);
@@ -2601,7 +3255,7 @@ class StoneWars {
       const k = r.t / r.life;
       const radius = r.r + (r.max - r.r) * k;
       ctx.globalAlpha = (1 - k) * 0.7;
-      ctx.strokeStyle = "#ffd9a0";
+      ctx.strokeStyle = r.color || "#ffd9a0";
       ctx.lineWidth = 3 * (1 - k) + 1;
       ctx.beginPath();
       ctx.arc(r.x, r.y, radius, 0, TAU);
@@ -2709,6 +3363,124 @@ class StoneWars {
       ctx.beginPath();
       ctx.arc(18, 0, 3 * s, 0, TAU);
       ctx.fill();
+    } else if (type === "crossbow") {
+      ctx.strokeStyle = "#8a6a45";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(-10, 0);
+      ctx.lineTo(34, 0);
+      ctx.stroke();
+      ctx.strokeStyle = "#c7d3dd";
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.arc(24, 0, 12, -Math.PI * 0.62, Math.PI * 0.62);
+      ctx.stroke();
+      ctx.strokeStyle = "#e8eef4";
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(31, -10);
+      ctx.lineTo(20, 0);
+      ctx.lineTo(31, 10);
+      ctx.stroke();
+    } else if (type === "cannon") {
+      ctx.fillStyle = "#3e4650";
+      ctx.strokeStyle = "#151a20";
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.roundRect ? ctx.roundRect(-4, -7 * s, 38, 14 * s, 4) : ctx.rect(-4, -7 * s, 38, 14 * s);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "#6d7883";
+      ctx.beginPath();
+      ctx.arc(34, 0, 8 * s, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+    } else if (type === "firebomb") {
+      ctx.fillStyle = "#a8502c";
+      ctx.strokeStyle = "#3a1c12";
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.arc(20, 0, 8 * s, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "#ffb04a";
+      ctx.globalAlpha = 0.8 + Math.sin(performance.now() / 120) * 0.2;
+      ctx.beginPath();
+      ctx.arc(20, -10, 3 * s, 0, TAU);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    } else if (type === "rifle") {
+      ctx.strokeStyle = "#6f4a2c";
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(-8, 2);
+      ctx.lineTo(14, 0);
+      ctx.stroke();
+      ctx.strokeStyle = "#2e3338";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(12, 0);
+      ctx.lineTo(46, 0);
+      ctx.stroke();
+      ctx.strokeStyle = "#b9c4cf";
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(42, 0);
+      ctx.lineTo(50, 0);
+      ctx.stroke();
+    } else if (type === "mortar") {
+      ctx.strokeStyle = "#4d5761";
+      ctx.lineWidth = 9;
+      ctx.beginPath();
+      ctx.moveTo(2, 8);
+      ctx.lineTo(26, -10);
+      ctx.stroke();
+      ctx.strokeStyle = "#8d99a5";
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.moveTo(4, 7);
+      ctx.lineTo(24, -8);
+      ctx.stroke();
+      ctx.fillStyle = "#353c44";
+      ctx.beginPath();
+      ctx.ellipse(4, 9, 5, 3, 0, 0, TAU);
+      ctx.fill();
+    } else if (type === "rocket") {
+      ctx.fillStyle = "#4f5a65";
+      ctx.strokeStyle = "#1d2329";
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.roundRect ? ctx.roundRect(-4, -5, 34, 10, 3) : ctx.rect(-4, -5, 34, 10);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "#e8503a";
+      ctx.beginPath();
+      ctx.moveTo(30, -5);
+      ctx.lineTo(40, 0);
+      ctx.lineTo(30, 5);
+      ctx.closePath();
+      ctx.fill();
+    } else if (type === "laser" || type === "railgun") {
+      const col = type === "laser" ? "#6fe8ff" : "#b48cff";
+      ctx.fillStyle = "#2c3a44";
+      ctx.strokeStyle = "#11181e";
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.roundRect ? ctx.roundRect(-6, -6, 38, 12, 3) : ctx.rect(-6, -6, 38, 12);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = col;
+      ctx.shadowColor = col;
+      ctx.shadowBlur = 12;
+      if (type === "laser") {
+        ctx.beginPath();
+        ctx.roundRect ? ctx.roundRect(16, -3, 18, 6, 3) : ctx.rect(16, -3, 18, 6);
+        ctx.fill();
+      } else {
+        ctx.fillRect(18, -4.5, 20, 2.4);
+        ctx.fillRect(18, 2.1, 20, 2.4);
+      }
+      ctx.shadowBlur = 0;
     } else {
       // 默认木棒
       ctx.strokeStyle = "#7c5330";

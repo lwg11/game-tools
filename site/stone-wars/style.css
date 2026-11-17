@@ -174,6 +174,45 @@
 }
 .switch-unit:active { transform: scale(0.95); }
 
+.weapon-info {
+  --w-color: #ffd27c;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--w-color) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--w-color) 40%, transparent);
+  color: var(--w-color);
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.weapon-info.realtime {
+  background: rgba(255, 96, 80, 0.18);
+  border-color: rgba(255, 120, 100, 0.5);
+  color: #ffb0a0;
+}
+
+.realtime-badge {
+  position: absolute;
+  top: 96px;
+  left: 50%;
+  transform: translate(-50%, -6px);
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(220, 60, 40, 0.9), rgba(255, 130, 60, 0.9));
+  color: #fff3e0;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s, transform 0.2s;
+  box-shadow: 0 6px 18px rgba(255, 80, 40, 0.3);
+}
+.realtime-badge.show { opacity: 1; transform: translate(-50%, 0); }
+
 /* 武器栏 */
 .weapon-bar {
   position: absolute;
@@ -239,6 +278,19 @@
   pointer-events: none;
   transform-origin: top;
   display: none;
+}
+.weapon-card .w-power {
+  position: absolute;
+  right: 4px;
+  bottom: 3px;
+  padding: 1px 4px;
+  border-radius: 5px;
+  background: rgba(255, 170, 70, 0.16);
+  color: #ffc878;
+  font-size: 7.5px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
 }
 
 /* 触控方向键 */
@@ -433,6 +485,26 @@ html[data-device="desktop"] .jump-btn { display: none; }
 .ls-actions { display: flex; gap: 9px; flex: 0 0 auto; }
 .ls-actions .btn { min-height: 42px; font-size: 13px; }
 
+.era-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin: 14px 0 10px;
+}
+.era-legend span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--era) 40%, transparent);
+  background: color-mix(in srgb, var(--era) 10%, transparent);
+  color: color-mix(in srgb, var(--era) 80%, #ffffff);
+  font-size: 9.5px;
+  font-weight: 700;
+}
+.era-legend b { color: var(--era); font-weight: 900; }
+
 .level-grid {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
@@ -466,6 +538,22 @@ html[data-device="desktop"] .jump-btn { display: none; }
 }
 .level-card:hover { transform: translateY(-3px); border-color: rgba(255, 190, 100, 0.45); box-shadow: 0 14px 30px rgba(0, 0, 0, 0.35); }
 .level-card .lv-top { display: flex; align-items: center; justify-content: space-between; gap: 4px; }
+.level-card .lv-era {
+  margin-left: auto;
+  margin-right: 3px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--era, #d8b06a) 55%, transparent);
+  background: color-mix(in srgb, var(--era, #d8b06a) 16%, transparent);
+  color: var(--era, #d8b06a);
+  font-size: 8px;
+  font-weight: 800;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.level-card.era-iron { border-color: rgba(159, 176, 194, 0.28); }
+.level-card.era-gun { border-color: rgba(255, 161, 92, 0.28); }
+.level-card.era-mech { border-color: rgba(111, 232, 255, 0.3); }
 .level-card .lv-num { font-size: 22px; font-weight: 900; line-height: 1; color: #ffd79a; font-variant-numeric: tabular-nums; }
 .level-card .lv-num small { font-size: 9px; color: #a08870; margin-left: 2px; font-weight: 700; }
 .level-card .lv-name { font-size: 11.5px; font-weight: 700; color: #ddd2c0; margin-top: 4px; line-height: 1.3; }

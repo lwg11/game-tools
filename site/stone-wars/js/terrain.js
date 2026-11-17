@@ -130,7 +130,44 @@ export class Terrain {
     else if (style === "pyramid") this._pyramid(rng);
     else if (style === "cave") this._cave(rng);
     else if (style === "dunes") this._dunes(rng);
+    else if (style === "fortress") this._fortress(rng);
+    else if (style === "trench") this._trench(rng);
     else this._hills(rng);
+  }
+
+  /** 铁骑 / 火器时代的城堡要塞：中央城垛、两侧塔楼 */
+  _fortress(rng) {
+    for (let c = 0; c < this.cols; c++) {
+      const h = 36 + Math.sin(c * 0.15 + this.level.seed) * 0.7;
+      this.fillRect(c, Math.round(h), c, this.rows - 1);
+    }
+    // 两侧塔楼（避开左右出生点）
+    this.fillRect(27, 28, 33, 35);
+    this.fillRect(49, 27, 55, 35);
+    this.clearRect(29, 32, 31, 35);
+    this.clearRect(51, 31, 53, 35);
+    // 中央城墙与城垛
+    this.fillRect(34, 33, 48, 36);
+    for (let c = 34; c <= 48; c += 3) this.fillRect(c, 31, c + 1, 32);
+    // 城门洞
+    this.clearRect(40, 34, 42, 36);
+  }
+
+  /** 火器时代的战壕：凹槽、沙袋掩体与断续胸墙 */
+  _trench(rng) {
+    for (let c = 0; c < this.cols; c++) {
+      const h = 34 + Math.sin(c * 0.2 + 0.6) * 0.8;
+      this.fillRect(c, Math.round(h), c, this.rows - 1);
+    }
+    // 两道战壕，中间保留通路
+    this.clearRect(22, 34, 29, 36);
+    this.clearRect(40, 34, 47, 36);
+    // 沙袋掩体
+    this.fillRect(32, 31, 35, 33);
+    this.fillRect(52, 30, 55, 32);
+    // 观察哨
+    this.fillRect(17, 30, 19, 32);
+    this.fillRect(62, 29, 64, 31);
   }
 
   _hills(rng) {

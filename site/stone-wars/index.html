@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <meta name="theme-color" content="#0b0c10">
-  <meta name="description" content="石器大战手机原版复刻：回合制物理弹道，14 个关卡，5 种原始武器。">
+  <meta name="description" content="石器大战手机原版复刻：回合制物理弹道，穿越石器、铁骑、火器、机械四个时代，20 个关卡与 15 种武器。">
   <title>石器大战 · 石器游戏厅</title>
   <link rel="icon" href="../favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="../assets/css/base.css">
@@ -39,11 +39,13 @@
         <div class="hud-status">
           <span id="teamLabel">战斗中</span>
           <div class="movebar" title="当前武器冷却"><i id="moveBar"></i></div>
+          <span class="weapon-info" id="weaponInfo">石矛 · 伤害 30 · 范围 34</span>
           <button class="switch-unit" id="switchUnit" type="button">切换</button>
         </div>
 
         <div class="weapon-bar" id="weaponBar"></div>
-        <div class="aim-hint" id="aimHint">按住拖动瞄准 · 松手发射 · 拖得越长力度越大</div>
+        <div class="aim-hint" id="aimHint">按住拖动瞄准 · 力度圈更大更好微调 · 松手发射</div>
+        <div class="realtime-badge" id="realtimeBadge">实时开火</div>
 
         <div class="touch-pad" id="touchPad">
           <button class="pad-btn" data-move="left" aria-label="向左移动">←</button>
@@ -84,9 +86,9 @@
 
       <div class="ls-summary">
         <div class="ls-score">
-          <div class="big-stars"><span id="totalStars">0</span><small>/ 42 ★</small></div>
+          <div class="big-stars"><span id="totalStars">0</span><small>/ 60 ★</small></div>
           <div class="ls-bar"><i id="overallBar"></i></div>
-          <p id="progressText">已解锁 1 / 14 关</p>
+          <p id="progressText">已解锁 1 / 20 关</p>
         </div>
         <div class="ls-actions">
           <button class="btn ghost" id="tutorialBtn" type="button">玩法说明</button>
@@ -94,9 +96,15 @@
         </div>
       </div>
 
+      <div class="era-legend" id="eraLegend">
+        <span style="--era:#d8b06a"><b>石器时代</b>1-5 关</span>
+        <span style="--era:#9fb0c2"><b>铁骑时代</b>6-10 关</span>
+        <span style="--era:#ffa15c"><b>火器时代</b>11-15 关</span>
+        <span style="--era:#6fe8ff"><b>机械时代</b>16-20 关</span>
+      </div>
       <div class="level-grid" id="levelGrid"></div>
       <p class="ls-foot">
-        关卡为回合制，无限模式没有回合上限 · 拖动瞄准，松手发射，拖动越远力度越大<br>
+        每 5 关推进一个时代，武器与敌人同步进化 · 拖动瞄准，松手发射，力度圈越大越好微调<br>
         三星条件：全员存活，并在目标回合内结束战斗
       </p>
     </div>
@@ -114,7 +122,7 @@
         <div class="tut-item">
           <div class="tut-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></div>
           <h3>瞄准与开火</h3>
-          <p>按住任意位置朝射击方向拖动，松手立即发射，拖动距离决定力度；松开后不会再因为位置回拉而取消。</p>
+          <p>按住任意位置朝射击方向拖动，松手立即发射。操作圈已经加大，拖动行程更长，微调抛物线更稳，不会再因为回拉而取消。</p>
         </div>
         <div class="tut-item">
           <div class="tut-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 8h10a3 3 0 100-6"/><path d="M3 13h14a3 3 0 110 6"/><path d="M3 18h7"/></svg></div>
@@ -124,12 +132,12 @@
         <div class="tut-item">
           <div class="tut-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 2l2.2 5.2L20 5.5l-3.2 4.5L22 13l-5.5 1.2L18 20l-5-2.5L10 22l-1-5.7L4 18l2-5.3L2 9l5.7-.4z"/></svg></div>
           <h3>回合制对决</h3>
-          <p>关卡中双方轮流行动：你移动、跳跃并发射一次，敌方同样会走位起跳后还击；无限模式没有回合上限，把对方全部打倒即胜利。</p>
+          <p>关卡中双方轮流行动：你移动、跳跃并发射一次，敌方同样会走位起跳后还击；无限模式没有回合上限。金手指里还能切换难度，或直接开启「实时开火」取消回合制。</p>
         </div>
         <div class="tut-item">
           <div class="tut-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 20L18 6"/><path d="M15 4l5 1-1 5z"/><path d="M6 17l4 4"/></svg></div>
-          <h3>七种武器</h3>
-          <p>石矛、石弹、火雷、香蕉炸弹、刺球、回旋镖、陨石。每种武器都有独立冷却，弹药有限，关键时刻再出手。</p>
+          <h3>时代进化</h3>
+          <p>1-5 关石器时代，6-10 关铁骑时代，11-15 关火器时代，16-20 关机械时代。每跨过 5 关，武器栏、敌人装束与爆炸特效都会同步升级，从石矛一直打到电磁炮。</p>
         </div>
       </div>
       <div class="tut-controls">
@@ -168,6 +176,8 @@
         <button class="cheat-item" data-cheat="ammo" type="button"><strong>补满弹药</strong><span>所有武器弹药 +9</span></button>
         <button class="cheat-item" data-cheat="god" type="button"><strong id="cheatGodText">无敌模式：关</strong><span>族人不再受到伤害</span></button>
         <button class="cheat-item" data-cheat="infinite" type="button"><strong id="cheatAmmoText">无限弹药：关</strong><span>开枪不消耗弹药</span></button>
+        <button class="cheat-item" data-cheat="difficulty" type="button"><strong id="cheatDiffText">难度：普通</strong><span>普通 → 困难 → 噩梦，敌方命中与血量提升</span></button>
+        <button class="cheat-item" data-cheat="realtime" type="button"><strong id="cheatRealtimeText">实时开火：关</strong><span>取消回合制，双方同时移动与射击</span></button>
         <button class="cheat-item" data-cheat="kill" type="button"><strong>秒杀敌人</strong><span>清除当前所有敌人</span></button>
         <button class="cheat-item" data-cheat="unlock" type="button"><strong>解锁全部关卡</strong><span>写入账号进度</span></button>
         <button class="cheat-item" data-cheat="win" type="button"><strong>直接过关</strong><span>立即结算当前关卡</span></button>
