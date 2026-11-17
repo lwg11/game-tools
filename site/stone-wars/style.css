@@ -77,6 +77,13 @@
   transition: background 0.16s, border-color 0.16s, transform 0.16s;
 }
 .hud-mini svg { width: 17px; height: 17px; }
+.hud-mini.cheat {
+  color: #ffe08a;
+  border-color: rgba(255, 200, 100, 0.35);
+  background: rgba(45, 32, 16, 0.72);
+  font-size: 16px;
+  font-weight: 900;
+}
 .hud-mini:hover { background: rgba(255, 255, 255, 0.12); border-color: rgba(255, 255, 255, 0.28); }
 .hud-mini:active { transform: scale(0.94); }
 
@@ -593,6 +600,45 @@ html[data-device="desktop"] .jump-btn { display: none; }
 .result-note { min-height: 20px; color: #9bd8a8; font-size: 11.5px; }
 .result-actions { display: flex; gap: 9px; margin-top: 16px; }
 .result-actions .btn { flex: 1; min-width: 0; font-size: 12.5px; }
+
+/* ---------------- 金手指 ---------------- */
+.cheat-card {
+  width: min(560px, 100%);
+  border: 1px solid rgba(255, 210, 140, 0.28);
+  border-radius: 22px;
+  background: linear-gradient(180deg, #201b16, #111114 78%);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.62);
+  padding: clamp(20px, 3vw, 28px);
+  color: #efe4d2;
+}
+.cheat-head { text-align: center; margin-bottom: 16px; }
+.cheat-head h2 { font-size: 25px; font-weight: 900; color: #ffe0ad; margin-top: 8px; }
+.cheat-head p { color: #9a9285; font-size: 11.5px; margin-top: 4px; line-height: 1.6; }
+.cheat-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+.cheat-item {
+  text-align: left;
+  padding: 11px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.035);
+  color: #e9ddca;
+  transition: background .15s, border-color .15s, transform .12s;
+}
+.cheat-item:hover { background: rgba(255, 181, 71, 0.1); border-color: rgba(255, 190, 100, 0.4); }
+.cheat-item:active { transform: scale(0.98); }
+.cheat-item strong { display: block; font-size: 12.5px; font-weight: 900; color: #ffe0ad; }
+.cheat-item span { display: block; font-size: 10px; color: #8f8779; margin-top: 2px; }
+.cheat-item[data-cheat="win"] { background: rgba(255, 181, 71, 0.12); border-color: rgba(255, 190, 100, 0.4); }
+@media (max-height: 500px) and (orientation: landscape) {
+  .cheat-card { padding: 12px 16px; }
+  .cheat-head { margin-bottom: 8px; }
+  .cheat-head h2 { font-size: 21px; margin-top: 4px; }
+  .cheat-head p { display: none; }
+  .cheat-grid { gap: 6px; }
+  .cheat-item { padding: 7px 10px; }
+  .cheat-item span { display: none; }
+  .cheat-item strong { font-size: 11.5px; }
+}
 
 /* ---------------- 横屏提示 ---------------- */
 .rotate-tip {

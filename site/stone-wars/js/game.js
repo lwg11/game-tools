@@ -228,6 +228,7 @@ class Unit {
 
   takeDamage(amount, sourceTeam) {
     if (!this.alive) return;
+    if (this.team === 0 && this.game.cheatGod) return;
     this.hp = Math.max(0, this.hp - amount);
     this.flash = 0.22;
     this.game.addText(this.x, this.y - 72, "-" + Math.round(amount), sourceTeam === 0 ? "#ffe08a" : "#ff9f93");
@@ -868,6 +869,9 @@ class StoneWars {
     this.shake = 0;
     this.time = 0;
     this.lastTs = 0;
+    this.cheatGod = false;
+    this.cheatInfiniteAmmo = false;
+    this.cheatOpen = false;
     this.bg = null;
     this.terrainDirty = false;
     this.terrainDrawnFor = null;
@@ -922,6 +926,12 @@ class StoneWars {
     $("hudHome").addEventListener("click", () => { this.sfx.click(); this._openLevelScreen(); });
     $("hudPause").addEventListener("click", () => { this.sfx.click(); this._openPause(); });
     $("hudSound").addEventListener("click", () => this._toggleSound());
+    $("hudCheat").addEventListener("click", () => { this.sfx.ensure(); this._openCheat(); });
+    $("cheatScreen").addEventListener("click", (e) => {
+      if (e.target.id === "cheatScreen") this._closeCheat();
+      const btn = e.target.closest("[data-cheat]");
+      if (btn) this._handleCheat(btn.dataset.cheat);
+    });
     $("pauseSoundBtn").addEventListener("click", () => this._toggleSound());
     $("resumeBtn").addEventListener("click", () => this._closePause());
     $("restartBtn").addEventListener("click", () => { if (this.level) this.startLevel(this.level.id); });
@@ -1168,6 +1178,8 @@ class StoneWars {
     this.endlessWaveTimer = this.level.endless ? 3 : 0;
     this.endlessCleared = false;
     this.endlessBest = Number(this.store.state.endlessBest) || 0;
+    this.cheatOpen = false;
+    document.getElementById("cheatScreen").classList.remove("show");
 
     const ammo = {
       spear: Infinity, boulder: 0, grenade: 0, banana: 0, spike: 0,
@@ -1416,7 +1428,9 @@ class StoneWars {
       toast(`${w.name}冷却中`);
       return false;
     }
-    if (this.ammo[id] !== Infinity) this.ammo[id] = Math.max(0, this.ammo[id] - 1);
+    if (this.ammo[id] !== Infinity && !this.cheatInfiniteAmmo) {
+      this.ammo[id] = Math.max(0, this.ammo[id] - 1);
+    }
     this.weaponReadyAt[id] = this.time + (w.cooldown || 1);
     const speed = w.speed * (0.5 + 0.5 * power);
     const ox = u.x;
@@ -2056,6 +2070,73 @@ class StoneWars {
   }
 
   // ------------------------------------------------------------ 暂停 / 音效
+  // ------------------------------------------------------------ 金手指
+  _openCheat() {
+    if (this.phase !== "aim" || this.cheatOpen) return;
+    this.cheatOpen = true;
+    this.paused = true;
+    this.aim.active = false;
+    this.aim.startWorld = null;
+    this.aim.currentWorld = null;
+    this.aim.dragLen = 0;
+    this._updateCheatText();
+    document.getElementById("cheatScreen").classList.add("show");
+    this._refreshFireButton();
+  }
+
+  _closeCheat() {
+    document.getElementById("cheatScreen").classList.remove("show");
+    if (this.cheatOpen) {
+      this.cheatOpen = false;
+      if (this.phase === "aim") this.paused = false;
+    }
+  }
+
+  _updateCheatText() {
+    const god = document.getElementById("cheatGodText");
+    if (god) god.textContent = `无敌模式：${this.cheatGod ? "开" : "关"}`;
+    const ammo = document.getElementById("cheatAmmoText");
+    if (ammo) ammo.textContent = `无限弹药：${this.cheatInfiniteAmmo ? "开" : "关"}`;
+  }
+
+  _handleCheat(action) {
+    if (action === "close") { this._closeCheat(); return; }
+    if (this.phase !== "aim") return;
+    if (action === "heal") {
+      for (const p of this.players) if (p.alive) p.hp = p.maxHp;
+      toast("全族生命已回满", "ok");
+    } else if (action === "ammo") {
+      for (const id of Object.keys(this.ammo)) {
+        if (this.ammo[id] === Infinity) continue;
+        this.ammo[id] = Math.max(9, (Number(this.ammo[id]) || 0) + 9);
+      }
+      this._refreshWeaponBar();
+      toast("所有武器弹药已补充", "ok");
+    } else if (action === "god") {
+      this.cheatGod = !this.cheatGod;
+      toast(`无敌模式：${this.cheatGod ? "开" : "关"}`, "ok");
+    } else if (action === "infinite") {
+      this.cheatInfiniteAmmo = !this.cheatInfiniteAmmo;
+      toast(`无限弹药：${this.cheatInfiniteAmmo ? "开" : "关"}`, "ok");
+    } else if (action === "kill") {
+      for (const e of this.enemies) if (e.alive) e.takeDamage(99999, 0);
+      toast("已秒杀当前敌人", "ok");
+    } else if (action === "unlock") {
+      this.store.update((p) => { p.unlocked = LEVELS.length; p.tutorialSeen = true; });
+      this._refreshLevelSummary();
+      toast("已解锁全部关卡", "ok");
+    } else if (action === "win") {
+      if (this.level.endless) {
+        toast("无限模式不能直接过关");
+      } else {
+        this._closeCheat();
+        this.finish(true);
+      }
+    }
+    this._updateCheatText();
+    this._updateHUD();
+  }
+
   _openPause() {
     if (this.phase === "menu" || this.phase === "over" || this.paused) return;
     this.paused = true;

@@ -20,6 +20,7 @@
           <div class="hud-side">
             <button class="hud-mini" id="hudHome" title="返回关卡" aria-label="返回关卡"></button>
             <button class="hud-mini" id="hudSound" title="声音" aria-label="声音"></button>
+            <button class="hud-mini cheat" id="hudCheat" title="金手指" aria-label="金手指">✦</button>
           </div>
           <div class="hud-center">
             <span class="hud-level" id="hudLevel">第 1 关</span>
@@ -155,6 +156,27 @@
         <button class="btn block" id="pauseLevelsBtn" type="button">返回关卡选择</button>
         <button class="btn block ghost" id="pauseSoundBtn" type="button">关闭音效</button>
         <a class="btn block ghost" href="../">回到游戏厅</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- 金手指 -->
+  <section class="screen center-screen" id="cheatScreen">
+    <div class="cheat-card">
+      <div class="cheat-head">
+        <span class="tut-badge">CHEAT MODE</span>
+        <h2>金手指</h2>
+        <p>直接修改当前战斗数据，仅对本局生效；解锁关卡会写入账号进度。</p>
+      </div>
+      <div class="cheat-grid">
+        <button class="cheat-item" data-cheat="heal" type="button"><strong>全员回满</strong><span>所有族人恢复生命</span></button>
+        <button class="cheat-item" data-cheat="ammo" type="button"><strong>补满弹药</strong><span>所有武器弹药 +9</span></button>
+        <button class="cheat-item" data-cheat="god" type="button"><strong id="cheatGodText">无敌模式：关</strong><span>族人不再受到伤害</span></button>
+        <button class="cheat-item" data-cheat="infinite" type="button"><strong id="cheatAmmoText">无限弹药：关</strong><span>开枪不消耗弹药</span></button>
+        <button class="cheat-item" data-cheat="kill" type="button"><strong>秒杀敌人</strong><span>清除当前所有敌人</span></button>
+        <button class="cheat-item" data-cheat="unlock" type="button"><strong>解锁全部关卡</strong><span>写入账号进度</span></button>
+        <button class="cheat-item" data-cheat="win" type="button"><strong>直接过关</strong><span>立即结算当前关卡</span></button>
+        <button class="cheat-item" data-cheat="close" type="button"><strong>关闭</strong><span>返回战斗</span></button>
       </div>
     </div>
   </section>
