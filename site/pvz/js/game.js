@@ -831,7 +831,10 @@ class PvZGame {
     this.hoverCell = null;
     this.cheatInvincible = false;
     this.cheatInfiniteSun = false;
+    this.cheatNoCooldown = false;
     this.cheatOpen = false;
+    this.longPressTimer = null;
+    this.infoTimer = null;
     this.kills = 0;
     this.mowersUsed = 0;
     this.wavesSpawned = 0;
@@ -922,7 +925,7 @@ class PvZGame {
     this.canvas.addEventListener("pointerdown", (e) => this._onPointerDown(e));
     this.canvas.addEventListener("pointermove", (e) => this._onPointerMove(e));
     this.canvas.addEventListener("pointerup", (e) => this._onPointerUp(e));
-    this.canvas.addEventListener("pointercancel", () => { this.cardDrag = null; });
+    this.canvas.addEventListener("pointercancel", () => { this.cardDrag = null; this._clearLongPress(); });
     this.canvas.addEventListener("pointerleave", () => { this.hoverCell = null; });
     this.canvas.addEventListener("contextmenu", (e) => e.preventDefault());
     this.canvas.addEventListener("wheel", (e) => {
@@ -1049,6 +1052,7 @@ class PvZGame {
   // ------------------------------------------------------------ 开局
   startLevel(id) {
     this._hideScreens();
+    document.getElementById("plantInfo").classList.remove("show");
     this.level = getLevel(id);
     this.phase = "playing";
     this.paused = false;
@@ -1142,10 +1146,19 @@ class PvZGame {
       return;
     }
 
-    // 顶部种子卡区域：拖动横向滚动，轻点选择植物
+    // 顶部种子卡区域：拖动横向滚动，轻点选择植物，长按查看说明
     if (p.y >= 20 && p.y <= 120 && p.x >= CARD.x && p.x <= 1200) {
-      this.cardDrag = { startX: p.x, startScroll: this.cardScroll, moved: false };
+      this.cardDrag = { startX: p.x, startScroll: this.cardScroll, moved: false, longPressed: false };
       this.canvas.setPointerCapture?.(e.pointerId);
+      this._clearLongPress();
+      this.longPressTimer = setTimeout(() => {
+        if (!this.cardDrag || this.cardDrag.moved || this.paused) return;
+        const card = this._cardAt(p.x, p.y);
+        if (card) {
+          this.cardDrag.longPressed = true;
+          this._showPlantInfo(card.id);
+        }
+      }, 480);
       return;
     }
 
@@ -1172,7 +1185,10 @@ class PvZGame {
     const p = this._canvasPoint(e);
     if (this.cardDrag) {
       const dx = p.x - this.cardDrag.startX;
-      if (Math.abs(dx) > 6) this.cardDrag.moved = true;
+      if (Math.abs(dx) > 6) {
+        this.cardDrag.moved = true;
+        this._clearLongPress();
+      }
       if (this.cardDrag.moved) {
         this.cardScroll = clamp(this.cardDrag.startScroll - dx, 0, this.cardMaxScroll);
         this._layoutCards();
@@ -1185,12 +1201,51 @@ class PvZGame {
   _onPointerUp(e) {
     if (!this.cardDrag) return;
     e.preventDefault();
+    this._clearLongPress();
     const p = this._canvasPoint(e);
     const drag = this.cardDrag;
     this.cardDrag = null;
-    if (drag.moved) return;
-    const card = this.cardRects.find((c) => c.x + c.w > CARD.x && c.x < 1200 && this._pointIn(c, p.x, p.y));
+    if (drag.moved || drag.longPressed) return;
+    const card = this._cardAt(p.x, p.y);
     if (card) this._selectCard(card.id);
+  }
+
+  _cardAt(x, y) {
+    return this.cardRects.find((c) => c.x + c.w > CARD.x && c.x < 1200 && this._pointIn(c, x, y)) || null;
+  }
+
+  _clearLongPress() {
+    if (this.longPressTimer) {
+      clearTimeout(this.longPressTimer);
+      this.longPressTimer = null;
+    }
+  }
+
+  /** 长按植物卡显示属性与用法 */
+  _showPlantInfo(id) {
+    const def = PLANTS[id];
+    if (!def) return;
+    const info = document.getElementById("plantInfo");
+    if (!info) return;
+    const stats = [
+      `阳光 <b>${def.cost}</b>`,
+      `冷却 <b>${def.recharge}s</b>`,
+      `生命 <b>${def.hp}</b>`,
+    ];
+    if (def.damage) stats.push(`伤害 <b>${def.damage}</b>`);
+    if (def.fireRate) stats.push(`攻击间隔 <b>${def.fireRate}s</b>`);
+    if (def.produce) stats.push(`产出 <b>${def.sunValue} 阳光 / ${def.produce}s</b>`);
+    if (def.slow) stats.push(`减速 <b>${def.slow}s</b>`);
+    if (def.splash) stats.push(`溅射伤害 <b>${def.splash}</b>`);
+    if (def.armTime) stats.push(`布防 <b>${def.armTime}s</b>`);
+    if (def.tick) stats.push(`持续伤害 <b>${def.damage} / ${def.tick}s</b>`);
+    info.innerHTML = `
+      <div class="pi-head"><b>${def.name}</b><span>${def.cost} 阳光</span></div>
+      <p class="pi-desc">${def.desc}</p>
+      <div class="pi-stats">${stats.map((s) => `<span>${s}</span>`).join("")}</div>`;
+    info.classList.add("show");
+    clearTimeout(this.infoTimer);
+    this.infoTimer = setTimeout(() => info.classList.remove("show"), 2800);
   }
 
   _cellAt(x, y) {
@@ -1474,6 +1529,7 @@ class PvZGame {
       this.spawnSkySun();
     }
     if (this.cheatInfiniteSun) this.sun = Math.max(this.sun, 9999);
+    if (this.cheatNoCooldown) this.cardReadyAt = {};
 
     for (const p of this.plants) p.update(dt);
     for (const z of this.zombies) z.update(dt);
@@ -1886,6 +1942,19 @@ class PvZGame {
     if (inv) inv.textContent = `植物无敌：${this.cheatInvincible ? "开" : "关"}`;
     const inf = document.getElementById("cheatInfiniteText");
     if (inf) inf.textContent = `无限阳光：${this.cheatInfiniteSun ? "开" : "关"}`;
+    const cd = document.getElementById("cheatNoCdText");
+    if (cd) cd.textContent = `植物无冷却：${this.cheatNoCooldown ? "开" : "关"}`;
+  }
+
+  _spawnCheatZombie(type, count) {
+    if (this.phase !== "playing") return;
+    for (let i = 0; i < count; i++) {
+      const row = this._pickRow();
+      const z = new Zombie(this, type, row);
+      z.x = W + 50 + i * 52;
+      this.zombies.push(z);
+    }
+    toast(`已增加 ${count} 只${ZOMBIES[type].name}`, "ok");
   }
 
   _handleCheat(action) {
@@ -1903,6 +1972,16 @@ class PvZGame {
     } else if (action === "cooldown") {
       this.cardReadyAt = {};
       toast("植物冷却已清空", "ok");
+    } else if (action === "noCooldown") {
+      this.cheatNoCooldown = !this.cheatNoCooldown;
+      if (this.cheatNoCooldown) this.cardReadyAt = {};
+      toast(`植物无冷却：${this.cheatNoCooldown ? "开" : "关"}`, "ok");
+    } else if (action === "spawnNormal") {
+      this._spawnCheatZombie("normal", 5);
+    } else if (action === "spawnBucket") {
+      this._spawnCheatZombie("bucket", 1);
+    } else if (action === "spawnFootball") {
+      this._spawnCheatZombie("football", 1);
     } else if (action === "invincible") {
       this.cheatInvincible = !this.cheatInvincible;
       toast(`植物无敌：${this.cheatInvincible ? "开" : "关"}`, "ok");
