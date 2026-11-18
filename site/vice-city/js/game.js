@@ -928,6 +928,9 @@ export class ViceCityGame {
     if (i) i.textContent = icon;
     if (n) n.textContent = name;
     if (a) a.textContent = ammoText || "";
+    if (this.player && this.player.showGun) {
+      this.player.showGun(name !== "拳头");
+    }
   }
 
   setCrosshair(show) {

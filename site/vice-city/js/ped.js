@@ -15,6 +15,7 @@ const RUN_SPEED = 4.6;
 const SHIRT_COLORS = [0xd9534f, 0x5cb85c, 0x5bc0de, 0xf0ad4e, 0x9b5de5, 0xf78c6b, 0x4a6a9a, 0xeeeeee];
 const PANTS_COLORS = [0x2a3a55, 0x3a3a3a, 0x6a5a4a, 0x505a6a];
 const SKIN_COLORS = [0xe8b890, 0xc8956c, 0x8a5a3a, 0xf0c8a0];
+const HAIR_COLORS = [0x201410, 0x3a2414, 0x5a3a1a, 0x8a8a8a, 0x141414, 0xc8a050];
 
 export class PedestrianSystem {
   constructor(game, count = 36) {
@@ -37,8 +38,9 @@ export class PedestrianSystem {
     this.legRInst = mk(0.18, 0.6, 0.2);
     this.armLInst = mk(0.13, 0.5, 0.16);
     this.armRInst = mk(0.13, 0.5, 0.16);
+    this.hairInst = mk(0.34, 0.14, 0.34);
 
-    for (const inst of [this.bodyInst, this.headInst, this.legLInst, this.legRInst, this.armLInst, this.armRInst]) {
+    for (const inst of [this.bodyInst, this.headInst, this.legLInst, this.legRInst, this.armLInst, this.armRInst, this.hairInst]) {
       inst.castShadow = true;
       // 包围球只在首次渲染时按原点初始矩阵算一次；行人四处走动后必须禁用剔除，
       // 否则相机离开原点视野时整个行人系统被整体剔除（走近人反而消失）
@@ -70,6 +72,7 @@ export class PedestrianSystem {
         colorIdx: Math.floor(rnd() * SHIRT_COLORS.length),
         pantsIdx: Math.floor(rnd() * PANTS_COLORS.length),
         skinIdx: Math.floor(rnd() * SKIN_COLORS.length),
+        hairIdx: Math.floor(rnd() * HAIR_COLORS.length),
         dead: false,
         deadTimer: 0,
         fallAngle: 0,
@@ -88,6 +91,7 @@ export class PedestrianSystem {
       this.armLInst.setColorAt(i, new THREE.Color(SHIRT_COLORS[p.colorIdx]));
       this.armRInst.setColorAt(i, new THREE.Color(SHIRT_COLORS[p.colorIdx]));
       this.headInst.setColorAt(i, new THREE.Color(SKIN_COLORS[p.skinIdx]));
+      this.hairInst.setColorAt(i, new THREE.Color(HAIR_COLORS[p.hairIdx]));
       m4.makeScale(0, 0, 0); // 初始隐藏，update 时写入
       this.bodyInst.setMatrixAt(i, m4);
     }
@@ -100,6 +104,7 @@ export class PedestrianSystem {
       this.legRInst.setMatrixAt(i, hide);
       this.armLInst.setMatrixAt(i, hide);
       this.armRInst.setMatrixAt(i, hide);
+      this.hairInst.setMatrixAt(i, hide);
     }
     this.bodyInst.instanceMatrix.needsUpdate = true;
     this.bodyInst.instanceColor.needsUpdate = true;
@@ -108,6 +113,7 @@ export class PedestrianSystem {
     this.legRInst.instanceColor.needsUpdate = true;
     this.armLInst.instanceColor.needsUpdate = true;
     this.armRInst.instanceColor.needsUpdate = true;
+    this.hairInst.instanceColor.needsUpdate = true;
   }
 
   /** 触发恐慌：某点附近行人四散 */
@@ -257,6 +263,7 @@ export class PedestrianSystem {
         this.legRInst.setMatrixAt(i, hidden);
         this.armLInst.setMatrixAt(i, hidden);
         this.armRInst.setMatrixAt(i, hidden);
+        this.hairInst.setMatrixAt(i, hidden);
         continue;
       }
       // base：位置 + 朝向；死亡时向侧面放倒
@@ -271,6 +278,7 @@ export class PedestrianSystem {
       this._setPart(this.legRInst, i, m4, 0.13, 0.32, 0, -swing);
       this._setPart(this.armLInst, i, m4, -0.33, 0.98, 0, -swing * 0.9);
       this._setPart(this.armRInst, i, m4, 0.33, 0.98, 0, swing * 0.9);
+      this._setPart(this.hairInst, i, m4, 0, 1.58, -0.01, 0);
     }
     this.bodyInst.instanceMatrix.needsUpdate = true;
     this.headInst.instanceMatrix.needsUpdate = true;
@@ -278,6 +286,7 @@ export class PedestrianSystem {
     this.legRInst.instanceMatrix.needsUpdate = true;
     this.armLInst.instanceMatrix.needsUpdate = true;
     this.armRInst.instanceMatrix.needsUpdate = true;
+    this.hairInst.instanceMatrix.needsUpdate = true;
   }
 
   _setPart(inst, idx, baseM4, ox, oy, oz, swing) {

@@ -5,7 +5,7 @@
  * 与玩家车辆碰撞时推挤+双方受损。
  */
 import * as THREE from "../lib/three.module.min.js";
-import { Car } from "./vehicle.js";
+import { Car, paintCar, CAR_PAINTS } from "./vehicle.js";
 import { WORLD, clamp, angleDiff } from "./common.js";
 
 const TRAFFIC_COUNT = 8;
@@ -32,6 +32,9 @@ export class TrafficSystem {
       const dir = dirs[Math.floor(Math.random() * 4)];
       const angle = Math.atan2(dir[0], dir[1]);
       const car = new Car(types[i % types.length], nx, nz, angle);
+      if (!["taxi", "police", "ambulance"].includes(types[i % types.length]) && Math.random() < 0.6) {
+        paintCar(car, CAR_PAINTS[Math.floor(Math.random() * CAR_PAINTS.length)]);
+      }
       car.occupiedBy = "traffic";
       car._baseMaxSpeed = car.def.maxSpeed;
       car.def.maxSpeed = 16; // 巡航限速

@@ -112,14 +112,14 @@ class BoxBatch {
 
 // ---------------------------------------------------------------- 窗户贴图
 function makeWindowTextures(seed) {
-  const size = 256;
-  const cols = 4;   // 每 40m 4 列窗
-  const rows = 4;
+  const size = 512;
+  const cols = 5;   // 每 40m 5 列窗
+  const rows = 6;
   const cellW = size / cols;
   const cellH = size / rows;
   const rnd = mulberry32(seed);
 
-  // 墙面：浅蓝灰墙 + 深色窗
+  // 墙面：浅蓝灰墙 + 深色窗 + 窗框/窗台
   const wallCv = document.createElement("canvas");
   wallCv.width = wallCv.height = size;
   const wctx = wallCv.getContext("2d");
@@ -127,11 +127,11 @@ function makeWindowTextures(seed) {
   wctx.fillRect(0, 0, size, size);
   // 顶部檐口线
   wctx.fillStyle = "#a3adba";
-  wctx.fillRect(0, 0, size, 10);
+  wctx.fillRect(0, 0, size, 14);
   // 随机墙面噪点
-  for (let i = 0; i < 60; i++) {
+  for (let i = 0; i < 160; i++) {
     wctx.fillStyle = `rgba(60,70,86,${0.04 + rnd() * 0.05})`;
-    wctx.fillRect(rnd() * size, rnd() * size, 4 + rnd() * 8, 4 + rnd() * 8);
+    wctx.fillRect(rnd() * size, rnd() * size, 6 + rnd() * 12, 6 + rnd() * 12);
   }
 
   // 发光：黑底 + 亮窗
@@ -147,11 +147,15 @@ function makeWindowTextures(seed) {
       const wy = r * cellH + cellH * 0.2;
       const ww = cellW * 0.68;
       const wh = cellH * 0.5;
-      // 墙上的窗（深色）
+      // 墙上的窗（深色 + 玻璃高光 + 窗台）
       wctx.fillStyle = "#1c2a3a";
       wctx.fillRect(wx, wy, ww, wh);
-      wctx.fillStyle = "rgba(255,255,255,0.10)";
-      wctx.fillRect(wx, wy, ww, 3);
+      wctx.fillStyle = "rgba(255,255,255,0.12)";
+      wctx.fillRect(wx, wy, ww, 4);
+      wctx.fillStyle = "rgba(255,255,255,0.06)";
+      wctx.fillRect(wx, wy + wh * 0.45, ww, wh * 0.55);
+      wctx.fillStyle = "#8a94a0";
+      wctx.fillRect(wx - 2, wy + wh, ww + 4, 5);
       // 夜窗：60% 亮
       if (rnd() < 0.6) {
         const warm = rnd();
@@ -159,6 +163,9 @@ function makeWindowTextures(seed) {
         else if (warm < 0.85) lctx.fillStyle = "#ffe9b0";
         else lctx.fillStyle = "#9fe0ff";
         lctx.fillRect(wx, wy, ww, wh);
+        // 帘子阴影
+        lctx.fillStyle = "rgba(0,0,0,0.35)";
+        lctx.fillRect(wx + ww * 0.3, wy, ww * 0.2, wh);
       }
     }
   }
@@ -298,6 +305,22 @@ export class City {
         batch.add(x, 0.05, p, 6, 0.01, 0.35, 0, lineC);
       }
     }
+    // 交叉口斑马线（四个街臂，条纹顺行人过街方向）
+    const zebra = "#dfe3e8";
+    const zOff = roadW / 2 + 1.2;
+    for (let i = 1; i < WORLD.gridN; i++) {
+      for (let k = 1; k < WORLD.gridN; k++) {
+        const px = -half + i * step;
+        const pz = -half + k * step;
+        for (const sgn of [-1, 1]) {
+          for (let s = 0; s < 6; s++) {
+            const a = -7.2 + s * 2.9;
+            batch.add(px + sgn * zOff, 0.06, pz + a, 2.4, 0.02, 0.8, 0, zebra);
+            batch.add(px + a, 0.06, pz + sgn * zOff, 0.8, 0.02, 2.4, 0, zebra);
+          }
+        }
+      }
+    }
     // 人行道边条（沿道路两侧）
     for (let i = 0; i <= WORLD.gridN; i++) {
       const p = -half + i * step;
@@ -318,6 +341,8 @@ export class City {
     const half = WORLD.half;
     const s = WORLD.size;
     const buildingBatch = new BoxBatch(true);
+    this._roofBatch = new BoxBatch(false);   // 屋顶檐口/设备（无窗UV，纯材质）
+    this._bldNeon = new BoxBatch(false);    // 楼体霓虹条
     const palette = PALETTE.building;
     const downtownPalette = PALETTE.downtown;
 
@@ -366,6 +391,13 @@ export class City {
     const mesh = buildingBatch.build(mat, true);
     this.group.add(mesh);
     this._mats.building = mat;
+
+    // 屋顶细节（深色檐口 + 设备箱/水塔）
+    const roofMat = new THREE.MeshLambertMaterial({ vertexColors: true });
+    this.group.add(this._roofBatch.build(roofMat, true));
+    // 楼体霓虹（基础色材质，晚上不参与 emissiveMap）
+    const bldNeonMat = new THREE.MeshBasicMaterial({ vertexColors: true });
+    this.group.add(this._bldNeon.build(bldNeonMat, false));
   }
 
   _blockInner(cx, cz, step, roadW) {
@@ -389,6 +421,29 @@ export class City {
     const color = opt.color || "#c8ccd4";
     batch.add(x, h / 2, z, w, h, d, 0, color);
     this.colliders.push({ minX: x - w / 2, minZ: z - d / 2, maxX: x + w / 2, maxZ: z + d / 2 });
+
+    // 屋顶檐口（盖住带窗 UV 的顶面，视觉上更利落）
+    const roof = this._roofBatch;
+    roof.add(x, h + 0.12, z, w * 1.02, 0.24, d * 1.02, 0, "#3f444c");
+    if (rnd() < 0.7) {
+      roof.add(x + (rnd() - 0.5) * w * 0.45, h + 0.85, z + (rnd() - 0.5) * d * 0.45, 2.4, 1.4, 2.4, 0, "#50555e");
+    }
+    if (rnd() < 0.3) {
+      roof.add(x + (rnd() - 0.5) * w * 0.4, h + 1.7, z + (rnd() - 0.5) * d * 0.4, 2.2, 2.2, 2.2, 0, "#6a7076");
+    }
+    // 一层遮阳棚（临街面）
+    if (rnd() < 0.45) {
+      const awn = ["#e0635a", "#3fa7a0", "#e8b34a", "#7a6fd0"][Math.floor(rnd() * 4)];
+      batch.add(x, 2.5, z + d / 2 + 0.7, w * 0.72, 0.16, 1.4, 0, awn);
+    }
+    // 楼体霓虹竖牌
+    if (rnd() < 0.3 && this._bldNeon) {
+      const signColors = ["#ff4fa3", "#23d5e8", "#ffe066", "#9b5de5", "#3fe0b0"];
+      const sc = signColors[Math.floor(rnd() * signColors.length)];
+      const sw = Math.min(w * 0.75, 8);
+      const dir = rnd() < 0.5 ? 1 : -1;
+      this._bldNeon.add(x, 4.2, z + dir * (d / 2 + 0.3), sw, 1.4, 0.5, 0, sc);
+    }
   }
 
   _downtownBlock(batch, rnd, cx, cz, step, roadW, palette) {

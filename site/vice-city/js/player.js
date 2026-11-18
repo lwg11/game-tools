@@ -47,33 +47,78 @@ export class Player {
     const skinMat = new THREE.MeshLambertMaterial({ color: 0xe8b890 });
     const shirtMat = new THREE.MeshLambertMaterial({ color: PALETTE.player });
     const pantsMat = new THREE.MeshLambertMaterial({ color: 0x2a3a55 });
+    const hairMat = new THREE.MeshLambertMaterial({ color: 0x2e1d12 });
+    const shoeMat = new THREE.MeshLambertMaterial({ color: 0x1c1c22 });
+    const darkMat = new THREE.MeshLambertMaterial({ color: 0x14161a });
 
+    // 躯干 + 肩部
     const body = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.62, 0.3), shirtMat);
     body.position.y = 0.98;
     body.castShadow = true;
+    const shoulders = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.12, 0.34), shirtMat);
+    shoulders.position.y = 1.26;
 
+    // 颈 + 头 + 头发 + 眼睛
+    const neck = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.1, 0.12), skinMat);
+    neck.position.y = 1.33;
     const head = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.3), skinMat);
-    head.position.y = 1.45;
+    head.position.y = 1.47;
     head.castShadow = true;
+    const hair = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.13, 0.34), hairMat);
+    hair.position.set(0, 0.13, -0.02);
+    const hairBack = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.22, 0.1), hairMat);
+    hairBack.position.set(0, 0.02, -0.15);
+    head.add(hair, hairBack);
+    for (const sx of [-0.07, 0.07]) {
+      const eye = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.02), darkMat);
+      eye.position.set(sx, 0.0, 0.16);
+      head.add(eye);
+    }
 
-    const legL = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.6, 0.2), pantsMat);
-    legL.position.set(-0.13, 0.32, 0);
-    const legR = legL.clone();
-    legR.position.set(0.13, 0.32, 0);
+    // 手臂（袖 + 手）
+    const mkArm = (sx) => {
+      const arm = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.42, 0.16), shirtMat);
+      arm.position.set(0.33 * sx, 1.06, 0);
+      const hand = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.16, 0.13), skinMat);
+      hand.position.set(0, -0.29, 0);
+      arm.add(hand);
+      return arm;
+    };
+    const armL = mkArm(-1);
+    const armR = mkArm(1);
 
-    const armL = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.5, 0.16), shirtMat);
-    armL.position.set(-0.33, 0.98, 0);
-    const armR = armL.clone();
-    armR.position.set(0.33, 0.98, 0);
+    // 武器（持枪时显示，挂在右手）
+    const gun = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.1, 0.34), darkMat);
+    gun.position.set(0, -0.34, 0.14);
+    gun.visible = false;
+    armR.add(gun);
 
-    g.add(body, head, legL, legR, armL, armR);
+    // 腿（裤 + 鞋）
+    const mkLeg = (sx) => {
+      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.6, 0.2), pantsMat);
+      leg.position.set(0.13 * sx, 0.32, 0);
+      const shoe = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.12, 0.32), shoeMat);
+      shoe.position.set(0, -0.26, 0.05);
+      leg.add(shoe);
+      return leg;
+    };
+    const legL = mkLeg(-1);
+    const legR = mkLeg(1);
+
+    g.add(body, shoulders, neck, head, armL, armR, legL, legR);
     this.legL = legL;
     this.legR = legR;
     this.armL = armL;
     this.armR = armR;
     this.body = body;
+    this.gun = gun;
     this.group = g;
     if (!this.headless) this.game.scene.add(g);
+  }
+
+  /** 持枪状态可视化 */
+  showGun(on) {
+    if (this.gun) this.gun.visible = !!on;
   }
 
   // ------------------------------------------------------------ 上下车

@@ -50,6 +50,18 @@ export const VEHICLE_TYPES = {
 
 const CAR_RADIUS = 1.6; // 近似碰撞半径
 
+// ---------------------------------------------------------------- 涂装
+export const CAR_PAINTS = [
+  "#b8433a", "#3a6ea8", "#3aa87a", "#c8ccd4", "#2f3440", "#8a5aa8",
+  "#d88a3a", "#e8e2d8", "#5a8a3a", "#a83a6a", "#3ab0c8", "#e8c83a",
+];
+
+/** 给载具换随机车漆（特殊车辆出租车/警车/救护车除外） */
+export function paintCar(car, hex) {
+  car.def = Object.assign({}, car.def, { color: hex });
+  car.bodyMat.color.setHex(hex);
+}
+
 // ---------------------------------------------------------------- 单车
 export class Car {
   constructor(type, x, z, angle, dead = false) {
@@ -336,6 +348,9 @@ export class VehicleSystem {
       const s = sorted[i];
       const type = types[i % types.length];
       const car = new Car(type, s.x, s.z, s.angle);
+      if (!["taxi", "police", "ambulance"].includes(type) && Math.random() < 0.6) {
+        paintCar(car, CAR_PAINTS[Math.floor(Math.random() * CAR_PAINTS.length)]);
+      }
       this.cars.push(car);
       this.game.scene.add(car.group);
       car.onCrash = (impact) => this.game.onCarCrash && this.game.onCarCrash(car, impact);
