@@ -1,7 +1,7 @@
 # 交接文档：罪恶都市（vice-city）3D Web 游戏开发
 
-> 面向**接续任务的模型**。当前状态：8 个功能 commit 已提交（见下），核心可玩闭环完成
-> （城市/驾驶/行人/警察/武器/音效/任务），最后一公里为「打磨 + 部署」。
+> 面向**接续任务的模型**。当前状态：13 个功能 commit 已提交（见下），核心可玩闭环完成
+> （城市/驾驶/行人/警察/武器/音效/任务），并完成一轮体验/视觉/AI 专项打磨（见「1.2 打磨轮」）。
 > 完整调研与规划见 `VICE_CITY_PLAN.md`（用户已确认：Three.js r160 本地化 / 标准版内容 / 双端）。
 
 ## 一、已完成并提交
@@ -16,6 +16,18 @@
 | `ed21306` | 程序化音效系统（零外部音频资源）：引擎变调、3 电台 80s 音序器、警笛 LFO、枪声×4/撞击/爆炸/BUSTED/WASTED |
 | `6936e8c` | 主线任务系统：3 任务（reach/delivery/eliminate）、对话面板、3D 标记、giver 接取、奖励+武器解锁+存档、动态小地图 |
 | `7b92722` | 性能与收尾：爆炸火球（dispose 防泄漏）+镜头震动、车流/警车 800m 距离 LOD |
+
+### 1.2 打磨轮（体验/视觉/AI 专项，见 git log）
+
+| commit | 内容 |
+|---|---|
+| `89a2268` | A/D 与驾驶左右反向修复；对话 Enter/Space/E 键盘推进 + 对话期输入冻结；补齐移动端触屏接线（摇杆×2 + 动作键） |
+| `118f0c6` | 行人 InstancedMesh 禁用视锥剔除（走近人反而消失的根因修复） |
+| `22984ef` | 警察 AI：生成锁定 70–420m 道路交点、含避障切线绕行、卡住自动重生补员 |
+| `95e0f92` | 视觉升级：玩家模型精细化（发/眼/手/鞋/持枪模型）、行人发色、建筑屋顶檐口/设备/遮阳棚/霓虹竖牌、5×6 窗贴图、全交叉口斑马线、60% 随机车漆 |
+| `a2c01a2` | 碰撞火花粒子池 + 受损冒烟（玩家车 hp<40% 必冒）+ 车辆可见受损形变（压扁/侧倾），爆炸加烟 |
+
+另：`boot.js` 暴露 `window.__vc = game` 调试句柄。
 
 ## 二、架构与模块（`site/vice-city/`）
 
@@ -35,7 +47,7 @@ js/
   sfx.js      SfxSystem：WebAudio 合成（引擎/电台/警笛/单次音效），首次交互 unlock
   missions.js MissionSystem：3 任务/giver E 接取/对话/标记/奖励/存档
   game.js     ViceCityGame 主类：场景/相机/昼夜（_applyDayNight/HUD/小地图/_syncMinimap/
-              startDialog/floater/toast/BUSTED/WASTED/爆炸 FX/镜头震动）+ InputManager
+              startDialog/floater/toast/BUSTED/WASTED/爆炸 FX/镜头震动/火花&烟雾粒子池）+ InputManager（含 _initTouch 触屏接线）
 ```
 
 ### 关键约束（改代码前必读）
@@ -48,19 +60,26 @@ js/
   写入一律 `store.update(s => {...})`（自动 local + 云端）。武器解锁进 store.weapons。
 - **物理修复**：命中判定中**射线-圆求交必须先把 XZ 方向归一化**再算判别式
   （`weapons.js _rayCircle`，曾因直接用 3D 单位向量分量导致永不相交）。
+- **步行/驾驶左右方向（易错点）**：相机系右向 = `(-cos yaw, sin yaw)`；
+  正舵量使车头 +X 偏（屏幕左）→ 驾驶 `steer = -clamp(strafe)`。改动相机/转向相关逻辑后务必回归 A/D。
+- **行人 InstancedMesh 不可依赖视锥剔除**：包围球只在首帧按初始矩阵计算一次，
+  行人散开后会把整个系统错误剔除（玩家看不到任何行人）——静态实例（棕榈/路灯）无此问题，
+  会变动实例的系统（行人）一律 `frustumCulled = false`。
 - 固定步长（`FIXED_DT = 1/60`），`update(dt)` 每系统调用顺序：
   input→player→vehicles→traffic→peds→weapons→police→missions→world→sfx→camera→fx→HUD→minimap(每 10 帧)。
 
-## 三、当前工作区状态（已提交，无未提交改动）
+## 三、当前工作区状态（已提交）
 
-全部功能 commit 已入库（8 个，如上节）。改动仅限工作区文件，无遗留临时脚本
-（`tools/_vc_headless_test.mjs` 已入库作为回归工具）。
+全部功能 commit 已入库（13 个，如上节 1 + 1.2），仅 `tools/_vc_headless_test.mjs`
+作为回归工具入库；临时验证脚本（截图/结构断言）不提交。
+构建产物 `dist/vice-city.html` 同步生成。
 
 ## 四、剩余工作（按优先级）
 
-### 4.1 移动端完善（VICE 计划要求双端）
-- 现虚拟摇杆/动作键是否已实现**需在浏览器实机核对**；缺少则在 `index.html` 增加
-  左摇杆（移动）+ 右摇杆（视角）+ 动作键（E/开火/换武器），并在 InputManager 增加对应 `isDown`。
+### 4.1 移动端完善（已完成）
+- `index.html` 已有 #vc-touch（双摇杆 + A/🚗/🛑），`InputManager._initTouch()` 完成接线：
+  左摇杆=移动/油门，右摇杆=横移/转向 + 纵推俯仰，A=开火、B/🚗=上下车、🛑=手刹。
+- 后续可选：横屏提示、射击目标辅助、 HUD 密度设置。
 
 ### 4.2 主线扩展到 10 章（计划为 10 章，现为 3 章）
 - `missions.js` 的 MISSION 数组已按 reach/delivery/eliminate 三型参数化，
@@ -87,6 +106,7 @@ node tools/_vc_headless_test.mjs    # 期望结尾 HEADLESS ... TEST PASS
 ```
 
 当前基线：unittest 27/27 OK；smoke 5/5 PASS；headless 全 PASS（含任务奖励/存档断言）。
+浏览器实测：无控制台错误；draw calls ≈ 96 / tris ≈ 160k（pc 配 GTX 1660 同构核显环境流畅）。
 
 ## 六、部署
 
@@ -109,3 +129,5 @@ python deploy/deploy.py
 5. 距离 LOD（traffic/police >800m 跳过）会让“传送远处 NPC 再测”的断言失效——测试时先把目标放回玩家 30m 内。
 6. PowerShell 无 `<` 重定向；`node --check` 前用 `Copy-Item xx.js $env:TEMP\chk.mjs` 包一层。
 7. **CSP 限制**：`server/app.py` 对所有 `.html` 下发 `Content-Security-Policy: script-src 'self'`，页面**不允许内联脚本/事件处理器**（曾导致 vice-city 内联 boot 被拦截、卡在加载页）。新页面/新游戏入口一律写成 `<script type="module" src="./js/boot.js">` 外链；同理避免 `onclick=` 属性。
+8. `Car` 的 `damage()` 使用 `this.body/this.cabin/this._bodyY` 等实例引用——这些引用在两处 `_buildMesh` 中赋值；若为 headless 新建更轻量的车身模型，注意同步。`game` 新增粒子/公告板 FX 接口均以 `spawnSparks/spawnSmoke(x,y,z,...)` 命名，headless 自动跳过。
+9. 调试可用 `window.__vc`（boot.js 暴露）：改 `worldHour` 切昼夜、读 `renderer.info.render` 看 draw calls、直改 `input.keys` 模拟按键。
