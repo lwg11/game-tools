@@ -294,6 +294,15 @@ export class Player {
   }
 
   _animate(dt) {
+    // 出拳：右臂快速前挥（0.12s 一次），优先级高于走路摆动
+    if (this._punchT > 0) {
+      this._punchT -= dt;
+      const k = 1 - Math.max(0, this._punchT) / 0.12; // 0→1
+      const swing = Math.sin(k * Math.PI);            // 0→1→0
+      this.armR.rotation.x = -1.5 * swing - 0.2;
+      this.armL.rotation.x = -0.4 * swing;
+      return;
+    }
     if (this.aiming) {
       // 据枪姿势：右手前伸、左手托举
       this.armR.rotation.x = lerp(this.armR.rotation.x, -1.3, clamp(10 * dt, 0, 1));

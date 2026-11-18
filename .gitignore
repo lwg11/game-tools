@@ -7,3 +7,5 @@ server/data/
 .trae-html-share-packages/
 *.log
 .DS_Store
+.screenshots/
+.playwright-mcp/

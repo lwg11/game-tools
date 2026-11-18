@@ -15,7 +15,14 @@ import {
   WORLD, PALETTE, mulberry32, clamp, hexToRgb,
 } from "./common.js";
 
-const BOX_TILE = 40; // 窗户贴图每 40 米平铺一次
+const BOX_TILE = 40; // 窗户贴图每 40 米平铺一次（atlas 2×2 变体，实际 80m/象限）
+
+/** 颜色压暗/提亮：shade(hex, 0.8) → 稍暗 */
+function shade(hex, f) {
+  const { r, g, b } = hexToRgb(hex);
+  const m = (v) => clamp(Math.round(v * f), 0, 255).toString(16).padStart(2, "0");
+  return `#${m(r)}${m(g)}${m(b)}`;
+}
 
 // ---------------------------------------------------------------- 盒体合并器
 /**
@@ -33,7 +40,10 @@ class BoxBatch {
     this.v = 0;
   }
 
-  add(cx, cy, cz, w, h, d, ry = 0, color = "#ffffff") {
+  /**
+   * @param {number[]} uvOff 可选 [ou, ov] 立面 atlas 象限偏移（仅 withUV 批次生效）
+   */
+  add(cx, cy, cz, w, h, d, ry = 0, color = "#ffffff", uvOff = null) {
     const hw = w / 2;
     const hh = h / 2;
     const hd = d / 2;
@@ -76,12 +86,15 @@ class BoxBatch {
         this.nor.push(outN[0], outN[1], outN[2]);
         this.col.push(col.r / 255, col.g / 255, col.b / 255);
         if (this.withUV) {
-          // 世界米坐标 UV，保证跨面窗户平铺连续
+          // 世界米坐标 UV（atlas 每 80m 一格），uvOff 选择立面变体象限
+          const sc = 1 / (BOX_TILE * 2);
           let u, v;
-          if (ny !== 0) { u = wx / BOX_TILE; v = wz / BOX_TILE; }
-          else if (nz !== 0) { u = wx / BOX_TILE; v = wy / BOX_TILE; }
-          else { u = wz / BOX_TILE; v = wy / BOX_TILE; }
-          this.uv.push(u, v);
+          if (ny !== 0) { u = wx * sc; v = wz * sc; }
+          else if (nz !== 0) { u = wx * sc; v = wy * sc; }
+          else { u = wz * sc; v = wy * sc; }
+          const ou = uvOff ? uvOff[0] : 0;
+          const ov = uvOff ? uvOff[1] : 0;
+          this.uv.push(u + ou, v + ov);
         } else {
           this.uv.push(0, 0);
         }
@@ -111,61 +124,89 @@ class BoxBatch {
 }
 
 // ---------------------------------------------------------------- 窗户贴图
+// 4 个立面变体（2×2 atlas，每格 512px 对应 80m），同一栋楼用同一象限偏移，
+// 不同楼随机选象限 → 打破“全城同一扇窗”的重复感
 function makeWindowTextures(seed) {
-  const size = 512;
-  const cols = 5;   // 每 40m 5 列窗
-  const rows = 6;
-  const cellW = size / cols;
-  const cellH = size / rows;
-  const rnd = mulberry32(seed);
-
-  // 墙面：浅蓝灰墙 + 深色窗 + 窗框/窗台
+  const TILE = 512;
+  const SIZE = TILE * 2;
+  const cols = 8;   // 80m 内 8 列窗 = 10m 窗距
+  const rows = 10;
   const wallCv = document.createElement("canvas");
-  wallCv.width = wallCv.height = size;
+  wallCv.width = wallCv.height = SIZE;
   const wctx = wallCv.getContext("2d");
-  wctx.fillStyle = "#b9c2ce";
-  wctx.fillRect(0, 0, size, size);
-  // 顶部檐口线
-  wctx.fillStyle = "#a3adba";
-  wctx.fillRect(0, 0, size, 14);
-  // 随机墙面噪点
-  for (let i = 0; i < 160; i++) {
-    wctx.fillStyle = `rgba(60,70,86,${0.04 + rnd() * 0.05})`;
-    wctx.fillRect(rnd() * size, rnd() * size, 6 + rnd() * 12, 6 + rnd() * 12);
-  }
-
-  // 发光：黑底 + 亮窗
   const litCv = document.createElement("canvas");
-  litCv.width = litCv.height = size;
+  litCv.width = litCv.height = SIZE;
   const lctx = litCv.getContext("2d");
   lctx.fillStyle = "#000000";
-  lctx.fillRect(0, 0, size, size);
+  lctx.fillRect(0, 0, SIZE, SIZE);
 
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const wx = c * cellW + cellW * 0.16;
-      const wy = r * cellH + cellH * 0.2;
-      const ww = cellW * 0.68;
-      const wh = cellH * 0.5;
-      // 墙上的窗（深色 + 玻璃高光 + 窗台）
-      wctx.fillStyle = "#1c2a3a";
-      wctx.fillRect(wx, wy, ww, wh);
-      wctx.fillStyle = "rgba(255,255,255,0.12)";
-      wctx.fillRect(wx, wy, ww, 4);
-      wctx.fillStyle = "rgba(255,255,255,0.06)";
-      wctx.fillRect(wx, wy + wh * 0.45, ww, wh * 0.55);
-      wctx.fillStyle = "#8a94a0";
-      wctx.fillRect(wx - 2, wy + wh, ww + 4, 5);
-      // 夜窗：60% 亮
-      if (rnd() < 0.6) {
-        const warm = rnd();
-        if (warm < 0.7) lctx.fillStyle = "#ffd27a";
-        else if (warm < 0.85) lctx.fillStyle = "#ffe9b0";
-        else lctx.fillStyle = "#9fe0ff";
-        lctx.fillRect(wx, wy, ww, wh);
-        // 帘子阴影
-        lctx.fillStyle = "rgba(0,0,0,0.35)";
-        lctx.fillRect(wx + ww * 0.3, wy, ww * 0.2, wh);
+  const wallTones = ["#b9c2ce", "#c9c2b2", "#a9b4c4", "#c4b9a8"];
+  const glassTones = ["#1c2a3a", "#16222e", "#22303c", "#1a2634"];
+
+  for (let q = 0; q < 4; q++) {
+    const rnd = mulberry32(seed * 7 + q * 131);
+    const ox = (q % 2) * TILE;
+    const oy = Math.floor(q / 2) * TILE;
+    const cellW = TILE / cols;
+    const cellH = TILE / rows;
+    const wallC = wallTones[q % wallTones.length];
+    const glassC = glassTones[q % glassTones.length];
+    const litChance = 0.45 + rnd() * 0.3;
+    const trimC = rnd() < 0.5 ? "#a3adba" : "#98a2ae";
+
+    // 墙面基底 + 顶部檐口 + 噪点
+    wctx.fillStyle = wallC;
+    wctx.fillRect(ox, oy, TILE, TILE);
+    wctx.fillStyle = trimC;
+    wctx.fillRect(ox, oy, TILE, 16);
+    for (let i = 0; i < 200; i++) {
+      wctx.fillStyle = `rgba(60,70,86,${0.03 + rnd() * 0.05})`;
+      wctx.fillRect(ox + rnd() * TILE, oy + rnd() * TILE, 6 + rnd() * 12, 6 + rnd() * 12);
+    }
+    // 楼层水平分割线（每行窗下一条浅线）
+    wctx.fillStyle = "rgba(255,255,255,0.18)";
+    for (let r = 0; r < rows; r++) wctx.fillRect(ox, oy + r * cellH - 3, TILE, 3);
+
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const wx = ox + c * cellW + cellW * 0.18;
+        const wy = oy + r * cellH + cellH * 0.22;
+        const ww = cellW * 0.64;
+        const wh = cellH * 0.5;
+        // 墙上的窗
+        wctx.fillStyle = glassC;
+        wctx.fillRect(wx, wy, ww, wh);
+        // 玻璃高光/反光带（一半窗亮一半暗）
+        if (rnd() < 0.5) {
+          wctx.fillStyle = "rgba(255,255,255,0.16)";
+          wctx.fillRect(wx, wy, ww, wh * 0.35);
+        } else {
+          wctx.fillStyle = "rgba(255,255,255,0.05)";
+          wctx.fillRect(wx, wy + wh * 0.45, ww, wh * 0.55);
+        }
+        // 窗框 + 窗台
+        wctx.fillStyle = "rgba(40,48,60,0.8)";
+        wctx.fillRect(ox + c * cellW - 2, oy + r * cellH, 4, cellH);
+        wctx.fillRect(ox + (c + 1) * cellW - 2, oy + r * cellH, 4, cellH);
+        wctx.fillStyle = trimC;
+        wctx.fillRect(wx - 2, wy + wh, ww + 4, 5);
+        // 夜窗
+        if (rnd() < litChance) {
+          const warm = rnd();
+          if (warm < 0.65) lctx.fillStyle = "#ffd27a";
+          else if (warm < 0.85) lctx.fillStyle = "#ffe9b0";
+          else lctx.fillStyle = "#9fe0ff";
+          lctx.fillRect(wx, wy, ww, wh);
+          // 帘子阴影
+          if (rnd() < 0.5) {
+            lctx.fillStyle = "rgba(0,0,0,0.35)";
+            lctx.fillRect(wx + ww * 0.3, wy, ww * 0.2, wh);
+          }
+        } else if (rnd() < 0.2) {
+          // 未开灯的暗窗也带一点环境反光
+          lctx.fillStyle = "rgba(90,110,140,0.18)";
+          lctx.fillRect(wx, wy, ww, wh);
+        }
       }
     }
   }
@@ -280,7 +321,6 @@ export class City {
   }
 
   _buildRoads(rnd, step, roadW, sideW) {
-    const s = WORLD.size;
     const half = WORLD.half;
     const batch = new BoxBatch(false);
     const roadC = "#2b2f36";
@@ -288,20 +328,29 @@ export class City {
     const lineC = "#f2d16b";
 
     const roadMat = new THREE.MeshLambertMaterial({ vertexColors: true });
-    // 人行道基座（整幅浅灰，压地块下）
-    // 车行道（横/纵）
+    const nodeAt = (k) => -half + k * step;
+    const gap = roadW / 2 + 0.4;
+    // 车行道：逐段铺在相邻路口之间，避免纵横道路在路口共面重叠产生 z-fighting 闪烁
+    const segV = (x, a, b) => { if (b - a > 0.2) batch.add(x, 0.03, (a + b) / 2, roadW, 0.02, b - a, 0, roadC); };
+    const segH = (z, a, b) => { if (b - a > 0.2) batch.add((a + b) / 2, 0.03, z, b - a, 0.02, roadW, 0, roadC); };
     for (let i = 0; i <= WORLD.gridN; i++) {
-      const p = -half + i * step;
-      batch.add(p, 0.03, 0, roadW, 0.02, s, 0, roadC);       // 纵向
-      batch.add(0, 0.03, p, s, 0.02, roadW, 0, roadC);       // 横向
+      const p = nodeAt(i);
+      for (let k = 0; k < WORLD.gridN; k++) {
+        segV(p, nodeAt(k) + gap, nodeAt(k + 1) - gap); // 纵向段
+        segH(p, nodeAt(k) + gap, nodeAt(k + 1) - gap); // 横向段
+      }
     }
-    // 车道虚线
+    // 车道虚线（路口净区内不画，避免与斑马线区域重叠）
     for (let i = 0; i <= WORLD.gridN; i++) {
-      const p = -half + i * step;
+      const p = nodeAt(i);
       for (let z = -half + 10; z < half - 10; z += 16) {
+        const near = Math.round((z + half) / step) * step - half;
+        if (Math.abs(z - near) < roadW / 2 + 3) continue;
         batch.add(p, 0.05, z, 0.35, 0.01, 6, 0, lineC);
       }
       for (let x = -half + 10; x < half - 10; x += 16) {
+        const near = Math.round((x + half) / step) * step - half;
+        if (Math.abs(x - near) < roadW / 2 + 3) continue;
         batch.add(x, 0.05, p, 6, 0.01, 0.35, 0, lineC);
       }
     }
@@ -321,13 +370,21 @@ export class City {
         }
       }
     }
-    // 人行道边条（沿道路两侧）
+    // 人行道边条（沿道路两侧，逐段铺设避免路口共面重叠）
     for (let i = 0; i <= WORLD.gridN; i++) {
-      const p = -half + i * step;
-      batch.add(p + roadW / 2 + sideW / 2, 0.02, 0, sideW, 0.04, s, 0, sideC);
-      batch.add(p - roadW / 2 - sideW / 2, 0.02, 0, sideW, 0.04, s, 0, sideC);
-      batch.add(0, 0.02, p + roadW / 2 + sideW / 2, s, 0.04, sideW, 0, sideC);
-      batch.add(0, 0.02, p - roadW / 2 - sideW / 2, s, 0.04, sideW, 0, sideC);
+      const p = nodeAt(i);
+      const off = roadW / 2 + sideW / 2;
+      for (let k = 0; k < WORLD.gridN; k++) {
+        const a = nodeAt(k) + gap;
+        const b = nodeAt(k + 1) - gap;
+        if (b - a <= 0.2) continue;
+        const mid = (a + b) / 2;
+        const len = b - a;
+        batch.add(p + off, 0.02, mid, sideW, 0.04, len, 0, sideC);
+        batch.add(p - off, 0.02, mid, sideW, 0.04, len, 0, sideC);
+        batch.add(mid, 0.02, p + off, len, 0.04, sideW, 0, sideC);
+        batch.add(mid, 0.02, p - off, len, 0.04, sideW, 0, sideC);
+      }
     }
     // 桥（海星岛）
     batch.add(900, 0.14, 1030, 12, 0.28, 60, 0, "#6a4a3a");
@@ -419,7 +476,9 @@ export class City {
     const x = clamp(opt.x, block.x0 + w / 2, block.x1 - w / 2);
     const z = clamp(opt.z, block.z0 + d / 2, block.z1 - d / 2);
     const color = opt.color || "#c8ccd4";
-    batch.add(x, h / 2, z, w, h, d, 0, color);
+    // 每栋楼固定一个立面变体象限，避免和隔壁楼同一扇窗
+    const uvOff = [(rnd() * 2 | 0) * 0.5, (rnd() * 2 | 0) * 0.5];
+    batch.add(x, h / 2, z, w, h, d, 0, color, uvOff);
     this.colliders.push({ minX: x - w / 2, minZ: z - d / 2, maxX: x + w / 2, maxZ: z + d / 2 });
 
     // 屋顶檐口（盖住带窗 UV 的顶面，视觉上更利落）
@@ -431,10 +490,41 @@ export class City {
     if (rnd() < 0.3) {
       roof.add(x + (rnd() - 0.5) * w * 0.4, h + 1.7, z + (rnd() - 0.5) * d * 0.4, 2.2, 2.2, 2.2, 0, "#6a7076");
     }
+    // 高层退台（.upper tier）：城市天际线更立体
+    if (h > 30 && rnd() < 0.55) {
+      const w2 = w * (0.62 + rnd() * 0.14);
+      const d2 = d * (0.62 + rnd() * 0.14);
+      const h2 = h * (0.16 + rnd() * 0.12);
+      batch.add(x, h + h2 / 2, z, w2, h2, d2, 0, shade(color, 0.92), uvOff);
+      roof.add(x, h + h2 + 0.12, z, w2 * 1.02, 0.24, d2 * 1.02, 0, "#3f444c");
+      if (rnd() < 0.6) {
+        roof.add(
+          x + (rnd() - 0.5) * w2 * 0.4, h + h2 + 0.8, z + (rnd() - 0.5) * d2 * 0.4,
+          2.2, 1.2, 2.2, 0, "#50555e",
+        );
+      }
+      if (rnd() < 0.35) roof.add(x, h + h2 + 2.2, z, 0.3, 4.4, 0.3, 0, "#2f333a"); // 天线
+    }
+    // 转角壁柱（高楼增加竖向线条）
+    if (h > 20 && rnd() < 0.6) {
+      const pw = 0.55;
+      const px = w / 2 - pw / 2 + 0.14;
+      const pz = d / 2 - pw / 2 + 0.14;
+      const pc = shade(color, 0.82);
+      for (const sx of [-1, 1]) {
+        for (const sz of [-1, 1]) {
+          batch.add(x + sx * px, h / 2, z + sz * pz, pw, h, pw, 0, pc, uvOff);
+        }
+      }
+    }
+    // 一层玻璃橱窗（临街面）
+    if (rnd() < 0.7) {
+      batch.add(x, 1.55, z + d / 2 + 0.12, w * 0.8, 2.9, 0.26, 0, "#21303f", uvOff);
+    }
     // 一层遮阳棚（临街面）
     if (rnd() < 0.45) {
       const awn = ["#e0635a", "#3fa7a0", "#e8b34a", "#7a6fd0"][Math.floor(rnd() * 4)];
-      batch.add(x, 2.5, z + d / 2 + 0.7, w * 0.72, 0.16, 1.4, 0, awn);
+      batch.add(x, 3.1, z + d / 2 + 0.7, w * 0.72, 0.16, 1.4, 0, awn, uvOff);
     }
     // 楼体霓虹竖牌
     if (rnd() < 0.3 && this._bldNeon) {

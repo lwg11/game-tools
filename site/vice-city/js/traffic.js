@@ -26,9 +26,21 @@ export class TrafficSystem {
     const step = WORLD.size / WORLD.gridN;
     const types = ["sedan", "taxi", "pickup", "sedan", "ambulance", "pickup", "sport", "sedan",
       "taxi", "sedan", "pickup", "sedan", "taxi", "pickup", "sedan", "sport"];
+    // 一半车流优先投放在市中心（出生点周围），保证玩家立刻能看到路面上有车
     for (let i = 0; i < this.count; i++) {
       const nodes = this._gridNodes();
-      const idx = Math.floor(Math.random() * nodes.length);
+      let idx;
+      if (i % 2 === 0) {
+        // 中心 5×5 网格内抽节点
+        for (let t = 0; t < 12; t++) {
+          const cand = Math.floor(Math.random() * nodes.length);
+          const [wx, wz] = nodes[cand];
+          if (Math.abs(wx) < step * 2.6 && Math.abs(wz) < step * 2.6) { idx = cand; break; }
+        }
+        if (idx === undefined) idx = Math.floor(Math.random() * nodes.length);
+      } else {
+        idx = Math.floor(Math.random() * nodes.length);
+      }
       const [nx, nz] = nodes[idx]; // eslint-disable-line no-unused-vars
       const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
       const dir = dirs[Math.floor(Math.random() * 4)];
@@ -45,6 +57,7 @@ export class TrafficSystem {
         gz: Math.round((nz + half) / step),
         dir,
       };
+      car._target = this._nextNode(car); // 出生即上路，不空等一帧
       this.game.scene.add(car.group);
       this.cars.push(car);
     }
