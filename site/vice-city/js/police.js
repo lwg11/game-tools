@@ -53,20 +53,22 @@ export class PoliceSystem {
     const game = this.game;
     const p = game.player.pos;
     const step = WORLD.size / WORLD.gridN;
-    const roadsX = Math.round(p.x / step) * step;
-    const roadsZ = Math.round(p.z / step) * step;
-    const offsets = [-3, -2, -1, 1, 2, 3];
-    const off = offsets[Math.floor(Math.random() * offsets.length)] * step;
-    let x;
-    let z;
-    if (Math.random() < 0.5) {
-      x = clamp(roadsX + off, -WORLD.half + 10, WORLD.half - 10);
-      z = p.z + (Math.random() - 0.5) * 40;
-    } else {
-      x = p.x + (Math.random() - 0.5) * 40;
-      z = clamp(roadsZ + off, -WORLD.half + 10, WORLD.half - 10);
+    // 在玩家周边街区的道路交点上选生成点（约 70~420m），避免凭空出现在玩家脸上
+    const gx = Math.round(p.x / step);
+    const gz = Math.round(p.z / step);
+    const nodes = [];
+    for (let a = -3; a <= 3; a++) {
+      for (let b = -3; b <= 3; b++) {
+        if (a === 0 && b === 0) continue;
+        const d = Math.hypot(a, b) * step;
+        if (d < 70 || d > 420) continue;
+        nodes.push([gx + a, gz + b]);
+      }
     }
-    z = clamp(z, -WORLD.half + 10, WORLD.half - 10);
+    const list = nodes.length ? nodes : [[gx + 1, gz], [gx - 1, gz]];
+    const [nx, nz] = list[Math.floor(Math.random() * list.length)];
+    const x = clamp(nx * step, -WORLD.half + 10, WORLD.half - 10);
+    const z = clamp(nz * step, -WORLD.half + 10, WORLD.half - 10);
     const car = new Car("police", x, z, Math.atan2(p.x - x, p.z - z));
     car.occupiedBy = "police";
     car.maxSpeedScale = 1.05 + 0.08 * this.stars; // 橡皮筋加速
@@ -75,6 +77,11 @@ export class PoliceSystem {
     };
     game.scene.add(car.group);
     this.cars.push({ car, alive: true });
+  }
+
+  _removeCop(entry) {
+    entry.alive = false;
+    this.game.scene.remove(entry.car.group);
   }
 
   _despawnAll() {
@@ -138,16 +145,47 @@ export class PoliceSystem {
       if (dist > 800) continue; // 距离 LOD：远处不跑 AI
       const desired = Math.atan2(dx, dz);
       const diff = angleDiff(desired, car.angle);
-      const steer = clamp(diff * 1.6, -1, 1);
       let throttle = 0;
       if (dist > 7) throttle = Math.abs(diff) < 1.1 ? 1 : 0.35;
       else throttle = -0.4; // 贴近后缓行压制
+
+      // 避障：探测车头前方，若被建筑挡住则沿墙切线绕行
+      let steer = clamp(diff * 1.6, -1, 1);
+      if (game.world && dist > 4) {
+        const px = car.pos.x + Math.sin(car.angle) * 9;
+        const pz = car.pos.z + Math.cos(car.angle) * 9;
+        const ahead = game.world.collideCircle(px, pz, car.radius);
+        if (ahead) {
+          // 两个切线方向中选更靠近目标的一侧
+          const t1x = -ahead.nz;
+          const t1z = ahead.nx;
+          const s1 = Math.abs(angleDiff(Math.atan2(t1x, t1z), desired));
+          const s2 = Math.abs(angleDiff(Math.atan2(-t1x, -t1z), desired));
+          const txv = s1 < s2 ? t1x : -t1x;
+          const tzv = s1 < s2 ? t1z : -t1z;
+          const avoid = clamp(angleDiff(Math.atan2(txv, tzv), car.angle) * 2.4, -1, 1);
+          steer = clamp(avoid + diff * 0.4, -1, 1);
+          if (Math.abs(diff) < 0.9) throttle = 1;
+        }
+      }
 
       // 橡皮筋极速
       if (car._baseMaxSpeed == null) car._baseMaxSpeed = car.def.maxSpeed;
       car.def.maxSpeed = car._baseMaxSpeed * (car.maxSpeedScale || 1);
       car.drive(throttle, steer, false, dt, game.world);
       car.def.maxSpeed = car._baseMaxSpeed;
+
+      // 卡住自检：想追却原地打转 → 撤下并立即补一辆（避免"找不到人"）
+      if (Math.abs(throttle) > 0.1 && car.kmh < 2 && dist > 8) {
+        car._stuckT = (car._stuckT || 0) + dt;
+      } else {
+        car._stuckT = 0;
+      }
+      if (car._stuckT > 2.2) {
+        this._removeCop(c);
+        this._spawnCooldown = Math.min(this._spawnCooldown, 0.4);
+        continue;
+      }
 
       // 警灯交替
       const blink = Math.sin(performance.now() * 0.012) > 0;
