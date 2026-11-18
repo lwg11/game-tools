@@ -612,6 +612,7 @@ class CarrotGame {
     this.ctx = this.canvas.getContext("2d");
     this.crazy = isCrazy();
     applyBodyMode();
+    window.addEventListener("gt:mode-changed", () => { this.crazy = isCrazy(); });
     this.sfx = new Sfx();
     this.store = new ProgressStore("carrot");
     this.phase = "menu";

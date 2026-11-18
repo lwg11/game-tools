@@ -44,4 +44,5 @@ export const api = {
   logout: () => request("/logout", { method: "POST", body: {} }),
   bindPhone: (phone) => request("/bind-phone", { method: "POST", body: { phone } }),
   saveProgress: (gameId, data) => request("/progress", { method: "PUT", body: { gameId, data } }),
+  savePrefs: (data) => request("/prefs", { method: "PUT", body: { data } }),
 };

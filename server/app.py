@@ -91,6 +91,11 @@ def init_db():
                 updated_at INTEGER NOT NULL,
                 PRIMARY KEY (user_id, game_id)
             );
+            CREATE TABLE IF NOT EXISTS prefs (
+                user_id INTEGER PRIMARY KEY,
+                data TEXT NOT NULL,
+                updated_at INTEGER NOT NULL
+            );
             CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
             """
         )
@@ -240,6 +245,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._api_me()
         if sub == "/progress" and method == "PUT":
             return self._api_save_progress()
+        if sub == "/prefs" and method == "PUT":
+            return self._api_save_prefs()
         raise ApiError(404, "接口不存在")
 
     def _read_json(self):
@@ -259,6 +266,18 @@ class Handler(BaseHTTPRequestHandler):
         if not isinstance(data, dict):
             raise ApiError(400, "请求格式错误")
         return data
+
+    def _discard_body(self):
+        """请求体未使用时也要读掉，避免 keep-alive 连接里残留内容污染下一个请求。"""
+        try:
+            length = int(self.headers.get("Content-Length") or "0")
+        except ValueError:
+            length = 0
+        if 0 < length <= MAX_BODY:
+            try:
+                self.rfile.read(length)
+            except Exception:
+                pass
 
     def _check_origin(self):
         """同源校验：只比较主机名，兼容反向代理时 Host 带/不带端口的情况。"""
@@ -434,6 +453,7 @@ class Handler(BaseHTTPRequestHandler):
     # ---- 登出
     def _api_logout(self):
         self._check_origin()
+        self._discard_body()
         cookie_header = self.headers.get("Cookie")
         if cookie_header:
             try:
@@ -452,15 +472,16 @@ class Handler(BaseHTTPRequestHandler):
         self._json(200, {"ok": True},
                    {"Set-Cookie": "%s=; Path=%s; HttpOnly; SameSite=Lax; Max-Age=0" % (SESSION_COOKIE, PREFIX)})
 
-    # ---- 当前用户 + 全部进度
+    # ---- 当前用户 + 全部进度 + 偏好设置
     def _api_me(self):
         user = self._current_user()
         if not user:
-            self._json(200, {"user": None, "progress": {}})
+            self._json(200, {"user": None, "progress": {}, "prefs": {}})
             return
         conn = db_connect()
         try:
             rows = conn.execute("SELECT game_id, data, updated_at FROM progress WHERE user_id = ?", (user["id"],)).fetchall()
+            pref_row = conn.execute("SELECT data FROM prefs WHERE user_id = ?", (user["id"],)).fetchone()
         finally:
             conn.close()
         progress = {}
@@ -469,7 +490,15 @@ class Handler(BaseHTTPRequestHandler):
                 progress[row["game_id"]] = json.loads(row["data"])
             except ValueError:
                 continue
-        self._json(200, {"user": user, "progress": progress})
+        prefs = {}
+        if pref_row:
+            try:
+                prefs = json.loads(pref_row["data"])
+            except ValueError:
+                prefs = {}
+            if not isinstance(prefs, dict):
+                prefs = {}
+        self._json(200, {"user": user, "progress": progress, "prefs": prefs})
 
     # ---- 保存进度（整份覆盖）
     def _api_save_progress(self):
@@ -499,6 +528,42 @@ class Handler(BaseHTTPRequestHandler):
         finally:
             conn.close()
         self._json(200, {"ok": True, "updatedAt": now})
+
+    # ---- 保存偏好设置（与已有内容合并）
+    def _api_save_prefs(self):
+        self._check_origin()
+        user = self._current_user()
+        if not user:
+            raise ApiError(401, "请先登录")
+        data = self._read_json()
+        prefs = data.get("data")
+        if not isinstance(prefs, dict):
+            raise ApiError(400, "偏好设置格式错误")
+        conn = db_connect()
+        try:
+            row = conn.execute("SELECT data FROM prefs WHERE user_id = ?", (user["id"],)).fetchone()
+            merged = {}
+            if row:
+                try:
+                    merged = json.loads(row["data"])
+                except ValueError:
+                    merged = {}
+                if not isinstance(merged, dict):
+                    merged = {}
+            merged.update(prefs)
+            encoded = json.dumps(merged, ensure_ascii=False, separators=(",", ":"))
+            if len(encoded.encode("utf-8")) > 16 * 1024:
+                raise ApiError(413, "偏好设置过大")
+            now = int(time.time())
+            conn.execute(
+                "INSERT INTO prefs(user_id, data, updated_at) VALUES (?,?,?) "
+                "ON CONFLICT(user_id) DO UPDATE SET data=excluded.data, updated_at=excluded.updated_at",
+                (user["id"], encoded, now),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+        self._json(200, {"ok": True, "prefs": merged, "updatedAt": now})
 
     def log_message(self, fmt, *args):
         # 只记录错误与 API 写操作，避免静态日志刷屏

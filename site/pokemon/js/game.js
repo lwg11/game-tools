@@ -126,6 +126,7 @@ class PokemonGame {
     this.sfx = new Sfx();
     this.crazy = isCrazy();
     applyBodyMode();
+    window.addEventListener("gt:mode-changed", () => { this.crazy = isCrazy(); });
     this.phase = "menu"; // menu | world | busy | choose | pause | cheat | over
     this.battle = null;
     this.busy = false;

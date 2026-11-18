@@ -25,6 +25,7 @@ if (modeBtn) {
     paintMode();
     toast(next === "crazy" ? "已切换到疯狂模式：金手指已解锁，火力全开" : "已切换到常规模式：金手指已隐藏", "ok", 2400);
   });
+  window.addEventListener("gt:mode-changed", paintMode);
 }
 
 const TOTAL = { "stone-wars": 14, pvz: 12, carrot: 8, pokemon: 8 };

@@ -925,6 +925,7 @@ class PvZGame {
     this.isMobile = isMobile;
     this.crazy = isCrazy();
     applyBodyMode();
+    window.addEventListener("gt:mode-changed", () => { this.crazy = isCrazy(); });
     this.sfx = new PvzSfx();
     this.store = new ProgressStore("pvz");
     this.level = null;

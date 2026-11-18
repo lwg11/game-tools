@@ -1190,6 +1190,7 @@ class StoneWars {
     this.era = ERAS.stone;
     this.crazy = isCrazy();
     applyBodyMode();
+    window.addEventListener("gt:mode-changed", () => { this.crazy = isCrazy(); });
     this.fires = [];
     this.weaponIds = [...ERA_WEAPONS.stone];
     this.selectedWeapon = "spear";
