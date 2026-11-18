@@ -97,6 +97,7 @@ export class Car {
     const body = new THREE.Mesh(new THREE.BoxGeometry(W, def.bodyH, L), bodyMat);
     body.position.y = def.bodyH / 2 + 0.25;
     body.castShadow = true;
+    this.body = body;
     this.bodyMat = bodyMat;
 
     const cabinColor = def.cabinColor || 0x18202c;
@@ -106,6 +107,10 @@ export class Car {
     );
     cabin.position.set(0, def.bodyH + 0.25 + def.cabinH / 2, -L * 0.05);
     cabin.castShadow = true;
+    this.cabin = cabin;
+    this._bodyY = body.position.y;
+    this._cabinY = cabin.position.y;
+    this._tilt = Math.random() - 0.5; // 受损扭曲方向
 
     this.group.add(body, cabin);
 
@@ -185,6 +190,17 @@ export class Car {
     this.group.visible = !this.dead;
   }
 
+  /** 修复后还原外观（刷新点/复活） */
+  _resetVisual() {
+    this.body.scale.set(1, 1, 1);
+    this.cabin.scale.set(1, 1, 1);
+    this.body.rotation.z = 0;
+    this.cabin.rotation.z = 0;
+    this.body.position.y = this._bodyY;
+    this.cabin.position.y = this._cabinY;
+    if (this.bodyMat) this.bodyMat.color.setHex(this.def.color);
+  }
+
   // ------------------------------------------------------------ 物理
   /**
    * 驾驶一帧
@@ -262,7 +278,7 @@ export class Car {
         this.vz -= nz * vDotN * 1.25;
         if (impact > 3) {
           this.damage(impact * 0.9);
-          if (this.onCrash) this.onCrash(impact);
+          if (this.onCrash) this.onCrash(impact, nx, nz);
         }
       }
     }
@@ -294,10 +310,17 @@ export class Car {
       this.group.visible = false;
       if (this.onExplode) this.onExplode();
     } else {
-      // 受损变暗
-      const f = 0.55 + 0.45 * (this.hp / this.maxHp);
+      // 受损：变暗 + 车体压扁/扭曲（可见损伤）
+      const f = 0.6 + 0.4 * (this.hp / this.maxHp);
+      const crush = 1 - this.hp / this.maxHp;
       this.bodyMat.color.setHex(this.def.color);
       this.bodyMat.color.multiplyScalar(f);
+      this.body.scale.set(1 - crush * 0.06, 1 - crush * 0.1, 1 - crush * 0.16);
+      this.cabin.scale.set(1 - crush * 0.1, 1 - crush * 0.12, 1 - crush * 0.1);
+      this.body.rotation.z = this._tilt * crush * 0.5;
+      this.cabin.rotation.z = this._tilt * crush * 0.3;
+      this.body.position.y = this._bodyY - crush * 0.05;
+      this.cabin.position.y = this._cabinY - crush * 0.07;
     }
   }
 
@@ -411,6 +434,14 @@ export class VehicleSystem {
           if (Math.abs(diff) > 4) {
             a.damage(Math.abs(diff) * 0.5);
             b.damage(Math.abs(diff) * 0.5);
+            const mx = (a.pos.x + b.pos.x) / 2;
+            const mz = (a.pos.z + b.pos.z) / 2;
+            if (this.game.spawnSparks) {
+              this.game.spawnSparks(mx, 0.7, mz, Math.min(12, Math.floor(Math.abs(diff))), 0xffd080, 5);
+            }
+            if (this.game.sfx && Math.hypot(mx - playerPos.x, mz - playerPos.z) < 50) {
+              this.game.sfx.playCrash(Math.abs(diff));
+            }
           }
           a._syncVisual(dt);
           b._syncVisual(dt);
@@ -426,9 +457,9 @@ export class VehicleSystem {
   _respawn(car) {
     car.dead = false;
     car.hp = car.maxHp;
-    car.bodyMat.color.setHex(car.def.color);
     car.vx = car.vz = 0;
     car.respawnTimer = 0;
     car.group.visible = true;
+    car._resetVisual();
   }
 }

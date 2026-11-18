@@ -96,8 +96,8 @@ export class TrafficSystem {
         if (car.deadTimer > 25) {
           car.dead = false;
           car.hp = car.maxHp;
-          car.bodyMat.color.setHex(car.def.color);
           car.group.visible = true;
+          car._resetVisual();
         }
         continue;
       }
@@ -152,6 +152,13 @@ export class TrafficSystem {
             playerVehicle.damage(relSpeed * 0.5);
             car.damage(relSpeed * 0.5);
             if (game.sfx && game.sfx.playCrash) game.sfx.playCrash(relSpeed);
+            if (game.spawnSparks) {
+              game.spawnSparks(
+                (playerVehicle.pos.x + car.pos.x) / 2, 0.7,
+                (playerVehicle.pos.z + car.pos.z) / 2,
+                Math.min(12, Math.floor(relSpeed)), 0xffc266, 5,
+              );
+            }
           }
         }
       }

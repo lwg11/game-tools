@@ -285,6 +285,10 @@ export class ViceCityGame {
     // 一次性特效池（爆炸）与镜头震动
     this._fx = [];
     this._shakeAmp = 0;
+    // 火花/烟雾粒子池（碰撞/受损可视化）
+    this._puffs = [];
+    this._smokeT = 0;
+    this._initParticles();
 
     // 输入
     this.input = new InputManager(this);
@@ -414,9 +418,132 @@ export class ViceCityGame {
     if (!this.headless) this.showToast(`⚠ 通缉等级 ${'★'.repeat(stars)}`);
   }
 
+  /** 火花池（加色混合 Points，环形缓冲） */
+  _initParticles() {
+    if (this.headless) return;
+    const MAX = this._sparkMax = 240;
+    this._sparkPos = new Float32Array(MAX * 3);
+    this._sparkCol = new Float32Array(MAX * 3);
+    this._sparkVel = new Float32Array(MAX * 3);
+    this._sparkLife = new Float32Array(MAX);
+    for (let i = 0; i < MAX; i++) this._sparkPos[i * 3 + 1] = -1000;
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(this._sparkPos, 3));
+    geo.setAttribute("color", new THREE.BufferAttribute(this._sparkCol, 3));
+    const mat = new THREE.PointsMaterial({
+      size: 0.3, vertexColors: true, transparent: true, opacity: 0.95,
+      depthWrite: false, blending: THREE.AdditiveBlending,
+    });
+    this._sparkPts = new THREE.Points(geo, mat);
+    this._sparkPts.frustumCulled = false;
+    this.scene.add(this._sparkPts);
+    this._sparkCursor = 0;
+  }
+
+  /** 生成一簇火花（碰撞/中弹/爆炸） */
+  spawnSparks(x, y, z, n = 8, colorHex = 0xffc266, speed = 5) {
+    if (this.headless || !this._sparkPts) return;
+    const c = new THREE.Color(colorHex);
+    for (let k = 0; k < n; k++) {
+      const i = this._sparkCursor;
+      this._sparkCursor = (i + 1) % this._sparkMax;
+      const i3 = i * 3;
+      this._sparkPos[i3] = x;
+      this._sparkPos[i3 + 1] = y;
+      this._sparkPos[i3 + 2] = z;
+      const a = Math.random() * Math.PI * 2;
+      const s = speed * (0.35 + Math.random() * 0.9);
+      this._sparkVel[i3] = Math.cos(a) * s * 0.7;
+      this._sparkVel[i3 + 1] = (0.5 + Math.random()) * s;
+      this._sparkVel[i3 + 2] = Math.sin(a) * s * 0.7;
+      this._sparkCol[i3] = Math.min(1, c.r + 0.45);
+      this._sparkCol[i3 + 1] = Math.min(1, c.g + 0.3);
+      this._sparkCol[i3 + 2] = c.b;
+      this._sparkLife[i] = 0.35 + Math.random() * 0.35;
+    }
+    this._sparkPts.geometry.attributes.position.needsUpdate = true;
+    this._sparkPts.geometry.attributes.color.needsUpdate = true;
+  }
+
+  _updateSparks(dt) {
+    if (this.headless || !this._sparkPts) return;
+    let live = false;
+    for (let i = 0; i < this._sparkMax; i++) {
+      if (this._sparkLife[i] <= 0) continue;
+      live = true;
+      const i3 = i * 3;
+      this._sparkLife[i] -= dt;
+      this._sparkVel[i3 + 1] -= 12 * dt;
+      this._sparkPos[i3] += this._sparkVel[i3] * dt;
+      this._sparkPos[i3 + 1] += this._sparkVel[i3 + 1] * dt;
+      this._sparkPos[i3 + 2] += this._sparkVel[i3 + 2] * dt;
+      if (this._sparkPos[i3 + 1] < 0.03) {
+        this._sparkPos[i3 + 1] = 0.03;
+        this._sparkVel[i3 + 1] *= -0.4;
+        this._sparkVel[i3] *= 0.6;
+        this._sparkVel[i3 + 2] *= 0.6;
+      }
+      if (this._sparkLife[i] <= 0) this._sparkPos[i3 + 1] = -1000;
+    }
+    if (live) this._sparkPts.geometry.attributes.position.needsUpdate = true;
+  }
+
+  /** 烟雾：广告牌式渐扩灰团（受损车辆/爆炸） */
+  _smokeTexture() {
+    if (this._smokeTex) return this._smokeTex;
+    const cv = document.createElement("canvas");
+    cv.width = cv.height = 64;
+    const ctx = cv.getContext("2d");
+    const g = ctx.createRadialGradient(32, 32, 4, 32, 32, 30);
+    g.addColorStop(0, "rgba(70,70,76,0.5)");
+    g.addColorStop(0.6, "rgba(70,70,76,0.22)");
+    g.addColorStop(1, "rgba(70,70,76,0)");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 64, 64);
+    this._smokeTex = new THREE.CanvasTexture(cv);
+    return this._smokeTex;
+  }
+
+  spawnSmoke(x, y, z) {
+    if (this.headless) return;
+    const mat = new THREE.MeshBasicMaterial({
+      map: this._smokeTexture(), transparent: true, depthWrite: false, opacity: 0.42,
+    });
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 1.6), mat);
+    mesh.position.set(x, y, z);
+    this.scene.add(mesh);
+    this._puffs.push({ mesh, t: 0, dur: 1.2 + Math.random() * 0.5 });
+  }
+
+  _updatePuffs(dt) {
+    if (this.headless) return;
+    for (let i = this._puffs.length - 1; i >= 0; i--) {
+      const p = this._puffs[i];
+      p.t += dt;
+      const k = p.t / p.dur;
+      if (k >= 1) {
+        this.scene.remove(p.mesh);
+        p.mesh.material.dispose();
+        p.mesh.geometry.dispose();
+        this._puffs.splice(i, 1);
+        continue;
+      }
+      p.mesh.quaternion.copy(this.camera.quaternion);
+      p.mesh.scale.setScalar(1 + k * 2.8);
+      p.mesh.position.y += dt * 1.5;
+      p.mesh.material.opacity = 0.42 * (1 - k);
+    }
+  }
+
   /** 车辆撞击声与提示（停放车/玩家车） */
-  onCarCrash(car, impact) {
+  onCarCrash(car, impact, nx, nz) {
     if (this.sfx && this.sfx.playCrash) this.sfx.playCrash(impact);
+    if (impact > 6 && nx !== undefined) {
+      this.spawnSparks(
+        car.pos.x + nx * car.radius, 0.7, car.pos.z + nz * car.radius,
+        Math.min(14, Math.floor(impact)), 0xffc266, 6,
+      );
+    }
     if (!this.headless && this.player && this.player.vehicle === car && impact > 12) {
       this.showToast("车辆受损严重！注意车况");
       this._shakeAmp = Math.max(this._shakeAmp, Math.min(0.5, impact * 0.02));
@@ -440,6 +567,9 @@ export class ViceCityGame {
   /** 爆炸火球特效（程序化） */
   spawnExplosion(x, z) {
     if (this.headless) return;
+    this.spawnSparks(x, 1.2, z, 26, 0xffd27a, 9);
+    this.spawnSparks(x, 1.0, z, 12, 0xff6a20, 6);
+    this.spawnSmoke(x, 1.4, z);
     const core = new THREE.Mesh(
       new THREE.SphereGeometry(1.2, 14, 12),
       new THREE.MeshBasicMaterial({ color: 0xffe98a, transparent: true, opacity: 0.95 }),
@@ -484,7 +614,10 @@ export class ViceCityGame {
   }
 
   onPedHit(car, ped) {
-    if (!this.headless) this.floater("肇事逃逸", "bad");
+    if (!this.headless) {
+      if (car && car.pos) this.spawnSparks(car.pos.x, 0.8, car.pos.z, 10, 0xd02030, 4);
+      this.floater("肇事逃逸", "bad");
+    }
   }
 
   /** 被逮捕：传送回警局，扣除现金 15% */
@@ -583,6 +716,31 @@ export class ViceCityGame {
     if (this.player.hp <= 0) this.wasted();
     if (this.world && this.world.update) this.world.update(dt);
     if (this.sfx && this.sfx.update) this.sfx.update(dt);
+
+    // 受损车辆冒烟（玩家车必冒，视线内其他车辆低概率）
+    this._smokeT -= dt;
+    if (this._smokeT <= 0 && this.player) {
+      this._smokeT = 0.12;
+      const pv = this.player.vehicle;
+      if (pv && !pv.dead && pv.hp < pv.maxHp * 0.4) {
+        const fx2 = Math.sin(pv.angle);
+        const fz2 = Math.cos(pv.angle);
+        this.spawnSmoke(pv.pos.x + fx2 * 1.5, 1.0, pv.pos.z + fz2 * 1.5);
+      } else if (this.vehicles && this.player) {
+        for (const c of this.vehicles.cars) {
+          if (c.dead || c.hp > c.maxHp * 0.4 || c.occupiedBy) continue;
+          const d2 = (c.pos.x - this.player.pos.x) ** 2 + (c.pos.z - this.player.pos.z) ** 2;
+          if (d2 > 3600) continue;
+          if (Math.random() < 0.15) {
+            const fx2 = Math.sin(c.angle);
+            const fz2 = Math.cos(c.angle);
+            this.spawnSmoke(c.pos.x + fx2 * 1.3, 1.0, c.pos.z + fz2 * 1.3);
+          }
+        }
+      }
+    }
+    this._updateSparks(dt);
+    this._updatePuffs(dt);
 
     this._updateCamera();
     this._updateFx(dt);
