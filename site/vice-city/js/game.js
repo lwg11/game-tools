@@ -961,7 +961,11 @@ if (this.taxi && this.taxi.update) this.taxi.update(dt);
     const $ = (id) => document.getElementById(id);
     $("vc-btn-start").addEventListener("click", () => this.startGame());
     $("vc-btn-continue").addEventListener("click", () => this.startGame());
-    $("vc-btn-missions").addEventListener("click", () => this.showToast("任务选择：跟随粉色 M 标记推进主线"));
+    $("vc-btn-missions").addEventListener("click", () => this._showMissionPanel());
+    $("vc-missions-close").addEventListener("click", () => {
+      document.getElementById("vc-missions").classList.add("hidden");
+      if (this.sfx && this.sfx.playUi) this.sfx.playUi();
+    });
     $("vc-btn-resume").addEventListener("click", () => this.resume());
     $("vc-btn-restart").addEventListener("click", () => {
       this.resume();
@@ -974,6 +978,48 @@ if (this.taxi && this.taxi.update) this.taxi.update(dt);
       this.running = false;
     });
     initAccount(document.querySelector("[data-account-chip]"));
+  }
+
+  // ------------------------------------------------------------ 任务选择面板
+  _showMissionPanel() {
+    if (this.headless) return;
+    this._renderMissionPanel();
+    document.getElementById("vc-missions").classList.remove("hidden");
+    if (this.sfx && this.sfx.playUi) this.sfx.playUi();
+  }
+
+  _renderMissionPanel() {
+    const box = document.getElementById("vc-mission-list");
+    if (!box || !this.missions) return;
+    box.innerHTML = "";
+    this.missions.missions.forEach((m, i) => {
+      const btn = document.createElement("button");
+      btn.className = "vc-mission-item";
+      const stateTxt = m.status === "done" ? "✓ 已完成" : m.status === "open" ? "可接取" : "🔒 未解锁";
+      btn.innerHTML = `<span class="mi-no">${String(i + 1).padStart(2, "0")}</span>`
+        + `<span class="mi-title">${m.title}</span>`
+        + `<span class="mi-state">${stateTxt}</span>`;
+      if (m.status !== "open") {
+        btn.disabled = true;
+      } else {
+        btn.addEventListener("click", () => this._jumpToMission(i));
+      }
+      box.appendChild(btn);
+    });
+  }
+
+  /** 从任务面板直达：进入漫游并瞬移到 giver，直接开接该任务 */
+  _jumpToMission(i) {
+    const m = this.missions.missions[i];
+    if (!m || m.status !== "open") return;
+    document.getElementById("vc-missions").classList.add("hidden");
+    if (!this.running) this.startGame();
+    if (this.running && !this.paused) {
+      // 站位：giver 旁 3m，面向 giver
+      this.player.pos.set(this.missions.giverPos.x + 3, 0, this.missions.giverPos.z + 3);
+      this.player.angle = Math.atan2(this.missions.giverPos.x - this.player.pos.x, this.missions.giverPos.z - this.player.pos.z);
+      this.missions._startMission(i);
+    }
   }
 
   // ------------------------------------------------------------ HUD
