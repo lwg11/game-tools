@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>罪恶都市 · Vice City</title>
+<meta name="description" content="罪恶都市：3D 开放世界驾驶射击。霓虹海滨、电台音乐、通缉追捕与主线任务，枫糖游戏厅荣誉出品。">
+<link rel="stylesheet" href="style.css">
+<link rel="manifest" href="../manifest.webmanifest">
+</head>
+<body class="vc-theme">
+<div id="app">
+  <canvas id="game-canvas"></canvas>
+
+  <!-- ================= HUD ================= -->
+  <div id="hud" class="vc-hud">
+    <!-- 左上：金钱 / 生命 / 护甲 / 通缉 -->
+    <div class="vc-hud-tl">
+      <div id="vc-money" class="vc-money">$0</div>
+      <div class="vc-bars">
+        <div class="vc-bar"><span class="vc-bar-ico">❤</span><div class="vc-bar-track"><div id="vc-health" class="vc-bar-fill hp"></div></div></div>
+        <div class="vc-bar"><span class="vc-bar-ico">🛡</span><div class="vc-bar-track"><div id="vc-armor" class="vc-bar-fill ap"></div></div></div>
+      </div>
+      <div class="vc-wanted">
+        <span class="vc-star" data-star="1">★</span><span class="vc-star" data-star="2">★</span><span class="vc-star" data-star="3">★</span><span class="vc-star" data-star="4">★</span><span class="vc-star" data-star="5">★</span>
+      </div>
+    </div>
+
+    <!-- 右上：小地图 + 时钟/电台 -->
+    <div class="vc-hud-tr">
+      <canvas id="vc-minimap" width="180" height="180"></canvas>
+      <div class="vc-status-row">
+        <span id="vc-clock" class="vc-clock">08:00</span>
+        <span id="vc-radio" class="vc-radio">电台</span>
+      </div>
+    </div>
+
+    <!-- 左下：任务/提示 -->
+    <div class="vc-hud-bl">
+      <div id="vc-mission" class="vc-mission">
+        <div class="vc-mission-title" id="vc-mission-title">任务</div>
+        <div class="vc-mission-text" id="vc-mission-text"></div>
+      </div>
+      <div id="vc-toast" class="vc-toast"></div>
+    </div>
+
+    <!-- 右下：武器 / 车速 -->
+    <div class="vc-hud-br">
+      <div id="vc-vehicle-panel" class="vc-vehicle-panel hidden">
+        <div class="vc-speed"><span id="vc-speed">0</span><small>km/h</small></div>
+        <div class="vc-car-hp"><div class="vc-bar-track"><div id="vc-car-hp" class="vc-bar-fill car"></div></div></div>
+      </div>
+      <div id="vc-weapon" class="vc-weapon">
+        <span id="vc-weapon-icon" class="vc-weapon-icon">🗡</span>
+        <span id="vc-weapon-name" class="vc-weapon-name">拳头</span>
+        <span id="vc-weapon-ammo" class="vc-weapon-ammo"></span>
+      </div>
+    </div>
+
+    <!-- 准星 -->
+    <div id="vc-crosshair" class="vc-crosshair"></div>
+
+    <!-- 按键提示 -->
+    <div id="vc-interact-tip" class="vc-interact-tip hidden">按 <b>E</b> 上车</div>
+  </div>
+
+  <!-- ================= 载入画面 ================= -->
+  <div id="vc-loading" class="vc-screen vc-loading">
+    <div class="vc-load-inner">
+      <h1 class="vc-logo"><span class="neon-p">V</span><span class="neon-c">ice</span> <span class="neon-y">City</span></h1>
+      <div class="vc-load-sub">罪恶都市 · 程序化生成中</div>
+      <div class="vc-load-bar"><div id="vc-load-fill" class="vc-load-fill"></div></div>
+      <div id="vc-load-text" class="vc-load-text">正在铺设道路…</div>
+    </div>
+  </div>
+
+  <!-- ================= 主菜单 ================= -->
+  <div id="vc-menu" class="vc-screen vc-menu hidden">
+    <div class="vc-menu-inner">
+      <h1 class="vc-logo vc-logo-big"><span class="neon-p">V</span><span class="neon-c">ice</span> <span class="neon-y">City</span></h1>
+      <div class="vc-menu-sub">1986 · 霓虹海滨 · 开放世界</div>
+      <div class="vc-menu-buttons">
+        <button id="vc-btn-start" class="vc-btn vc-btn-primary">开始自由漫游</button>
+        <button id="vc-btn-continue" class="vc-btn hidden">继续游戏</button>
+        <button id="vc-btn-missions" class="vc-btn">任务选择</button>
+        <button id="vc-btn-cheats" class="vc-btn vc-btn-small hidden">金手指</button>
+      </div>
+      <div class="vc-menu-stats" id="vc-menu-stats"></div>
+      <div class="vc-menu-help">
+        <b>键鼠</b>：WASD 移动 / Shift 冲刺 / 空格 跳跃 / 鼠标 视角 / 左键 射击（步行）/ E 上下车 /
+        手刹 空格 / R 换电台 / Tab 小地图放大 / Esc 暂停 · <b>手机</b>：双摇杆 + 动作键
+      </div>
+      <div class="vc-account" data-account-chip="vice-city"></div>
+    </div>
+  </div>
+
+  <!-- ================= 暂停菜单 ================= -->
+  <div id="vc-pause" class="vc-screen vc-pause hidden">
+    <div class="vc-panel">
+      <h2>已暂停</h2>
+      <button id="vc-btn-resume" class="vc-btn vc-btn-primary">继续</button>
+      <button id="vc-btn-restart" class="vc-btn">重新开始</button>
+      <button id="vc-btn-menu" class="vc-btn">回主菜单</button>
+    </div>
+  </div>
+
+  <!-- ================= 任务对话 ================= -->
+  <div id="vc-dialog" class="vc-screen vc-dialog hidden">
+    <div class="vc-panel vc-dialog-panel">
+      <div id="vc-dialog-name" class="vc-dialog-name">肯</div>
+      <div id="vc-dialog-text" class="vc-dialog-text">...</div>
+      <button id="vc-dialog-next" class="vc-btn vc-btn-primary">继续</button>
+    </div>
+  </div>
+
+  <!-- ================= 浮动提示（罚款/奖励） ================= -->
+  <div id="vc-floaters" class="vc-floaters"></div>
+
+  <!-- ================= 移动端虚拟控件 ================= -->
+  <div id="vc-touch" class="vc-touch hidden">
+    <div id="vc-stick-left" class="vc-stick"><div class="vc-stick-base"></div><div id="vc-stick-left-knob" class="vc-stick-knob"></div></div>
+    <div id="vc-stick-right" class="vc-stick"><div class="vc-stick-base"></div><div id="vc-stick-right-knob" class="vc-stick-knob"></div></div>
+    <div class="vc-touch-buttons">
+      <button id="vc-tb-a" class="vc-tb">A</button>
+      <button id="vc-tb-b" class="vc-tb">B</button>
+      <button id="vc-tb-car" class="vc-tb vc-tb-car">🚗</button>
+      <button id="vc-tb-brake" class="vc-tb">🛑</button>
+    </div>
+  </div>
+
+  <!-- 左上声音开关（音频解锁兼容） -->
+  <button id="vc-mute" class="vc-mute" title="声音开关">🔊</button>
+</div>
+
+<script type="module">
+import { boot } from "./js/game.js";
+boot();
+</script>
+</body>
+</html>

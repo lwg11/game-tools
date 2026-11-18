@@ -35,7 +35,7 @@ from urllib.parse import urlparse, unquote
 
 APP_NAME = "石器游戏厅"
 PREFIX = "/games"
-GAME_IDS = {"stone-wars", "pvz", "carrot", "pokemon"}
+GAME_IDS = {"stone-wars", "pvz", "carrot", "pokemon", "vice-city"}
 SESSION_COOKIE = "gt_session"
 SESSION_TTL = 30 * 24 * 3600          # 30 天
 PBKDF2_ROUNDS = 150000

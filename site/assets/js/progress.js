@@ -9,7 +9,7 @@ import { api } from "./api.js";
 
 const KEY_PREFIX = "gt.progress.v1.";
 
-export const GAME_IDS = ["stone-wars", "pvz", "carrot", "pokemon"];
+export const GAME_IDS = ["stone-wars", "pvz", "carrot", "pokemon", "vice-city"];
 
 export const DEFAULT_PROGRESS = {
   "stone-wars": {
@@ -65,6 +65,17 @@ export const DEFAULT_PROGRESS = {
     catches: 0,
     pos: { x: 255, y: 385 },
   },
+  "vice-city": {
+    money: 500,
+    weapons: ["fist"],
+    ammo: {},
+    weaponIndex: 0,
+    armor: 0,
+    missionsDone: 0,
+    taxiDone: 0,
+    tutorialSeen: false,
+    sound: true,
+  },
 };
 
 export const GAME_NAMES = {
@@ -72,6 +83,7 @@ export const GAME_NAMES = {
   pvz: "植物大战僵尸加强版",
   carrot: "保卫萝卜",
   pokemon: "精灵宝可梦",
+  "vice-city": "罪恶都市",
 };
 
 function clone(obj) {
@@ -164,6 +176,30 @@ export function mergeProgress(gameId, remote, local) {
       catches: Math.max(Number(a.catches) || 0, Number(b.catches) || 0),
       pos: b.pos || a.pos || { x: 255, y: 385 },
       endlessBest: 0,
+      tutorialSeen: Boolean(a.tutorialSeen || b.tutorialSeen),
+      sound: b.sound !== false,
+    };
+  }
+  if (gameId === "vice-city") {
+    // 武器取并集，弹药/现金/任务数取最大
+    const weapons = Array.from(new Set([...(a.weapons || []), ...(b.weapons || [])]));
+    const ammo = { ...(a.ammo || {}) };
+    Object.keys(b.ammo || {}).forEach((k) => {
+      ammo[k] = Math.max(Number(ammo[k]) || 0, Number(b.ammo[k]) || 0);
+    });
+    const weaponIndex = Math.max(0, Math.min(
+      Number(b.weaponIndex != null ? b.weaponIndex : a.weaponIndex) || 0,
+      Math.max(0, weapons.length - 1),
+    ));
+    return {
+      ...a,
+      money: Math.max(Number(a.money) || 0, Number(b.money) || 0),
+      weapons,
+      ammo,
+      weaponIndex,
+      armor: Math.max(Number(a.armor) || 0, Number(b.armor) || 0),
+      missionsDone: Math.max(Number(a.missionsDone) || 0, Number(b.missionsDone) || 0),
+      taxiDone: Math.max(Number(a.taxiDone) || 0, Number(b.taxiDone) || 0),
       tutorialSeen: Boolean(a.tutorialSeen || b.tutorialSeen),
       sound: b.sound !== false,
     };

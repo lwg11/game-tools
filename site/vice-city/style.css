@@ -1,0 +1,232 @@
+/**
+ * 罪恶都市 · 页面样式（霓虹 1980s 霓虹风）
+ */
+:root {
+  --neon-pink: #ff4fa3;
+  --neon-cyan: #23d5e8;
+  --neon-yellow: #ffe066;
+  --neon-purple: #9b5de5;
+  --neon-orange: #ff8c42;
+  --ink: #0b0f1a;
+  --panel: rgba(10, 14, 26, 0.82);
+  --panel-border: rgba(255, 79, 163, 0.55);
+  --text: #eaf2ff;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #05070d; }
+body {
+  font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  color: var(--text);
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+
+#app { position: relative; width: 100vw; height: 100vh; }
+#game-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+/* ---------------- 通用屏幕层 ---------------- */
+.vc-screen {
+  position: absolute; inset: 0; z-index: 50;
+  display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(ellipse at center, rgba(20, 10, 40, 0.88), rgba(3, 5, 12, 0.96));
+  backdrop-filter: blur(2px);
+}
+.vc-screen.hidden, .hidden { display: none !important; }
+
+.vc-logo {
+  font-size: 44px; font-weight: 900; font-style: italic; letter-spacing: 2px;
+  margin: 0; text-transform: uppercase;
+  text-shadow: 0 0 18px rgba(255, 79, 163, 0.8);
+}
+.vc-logo-big { font-size: 72px; }
+.neon-p { color: var(--neon-pink); text-shadow: 0 0 12px var(--neon-pink), 0 0 34px var(--neon-pink); }
+.neon-c { color: var(--neon-cyan); text-shadow: 0 0 12px var(--neon-cyan), 0 0 34px var(--neon-cyan); }
+.neon-y { color: var(--neon-yellow); text-shadow: 0 0 12px var(--neon-yellow), 0 0 34px var(--neon-yellow); }
+
+/* ---------------- 载入 ---------------- */
+.vc-load-bar { width: 320px; height: 8px; border-radius: 4px; background: rgba(255,255,255,.12); overflow: hidden; }
+.vc-load-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--neon-cyan), var(--neon-pink)); transition: width .2s; }
+.vc-load-inner { text-align: center; }
+.vc-load-sub { margin: 14px 0 8px; color: var(--neon-cyan); font-size: 14px; letter-spacing: 3px; }
+.vc-load-text { margin-top: 10px; font-size: 12px; opacity: .75; }
+
+/* ---------------- 菜单 ---------------- */
+.vc-menu-inner { text-align: center; max-width: 620px; padding: 24px; }
+.vc-menu-sub { margin: 10px 0 26px; color: var(--neon-cyan); letter-spacing: 4px; font-size: 14px; }
+.vc-menu-buttons { display: flex; flex-direction: column; gap: 12px; width: 280px; margin: 0 auto; }
+.vc-btn {
+  padding: 12px 18px; border-radius: 8px; cursor: pointer;
+  background: rgba(255,255,255,.06); color: var(--text);
+  border: 1px solid rgba(255,255,255,.16);
+  font-size: 15px; font-weight: 600; letter-spacing: 1px;
+  transition: all .15s;
+}
+.vc-btn:hover { background: rgba(255,79,163,.18); border-color: var(--neon-pink); transform: translateY(-1px); }
+.vc-btn-primary {
+  background: linear-gradient(135deg, var(--neon-pink), var(--neon-purple));
+  border: none; box-shadow: 0 0 18px rgba(255,79,163,.45);
+}
+.vc-btn-primary:hover { box-shadow: 0 0 26px rgba(255,79,163,.7); }
+.vc-btn-small { font-size: 12px; padding: 8px 14px; opacity: .85; }
+.vc-menu-stats { margin-top: 18px; font-size: 13px; opacity: .8; min-height: 18px; }
+.vc-menu-help { margin-top: 22px; font-size: 12px; line-height: 1.8; opacity: .65; }
+.vc-account { margin-top: 16px; font-size: 12px; opacity: .7; }
+.vc-account button, .vc-account a {
+  color: var(--neon-cyan); background: none; border: none; cursor: pointer; font-size: 12px; text-decoration: underline;
+}
+
+/* ---------------- 面板 ---------------- */
+.vc-panel {
+  background: var(--panel); border: 1px solid var(--panel-border); border-radius: 14px;
+  padding: 28px 32px; min-width: 300px; text-align: center;
+  box-shadow: 0 0 40px rgba(255,79,163,.25);
+}
+.vc-panel h2 { margin: 0 0 18px; color: var(--neon-yellow); letter-spacing: 4px; font-size: 26px; }
+.vc-panel .vc-btn { display: block; width: 100%; margin-top: 12px; }
+
+/* ---------------- 对话 ---------------- */
+.vc-dialog-panel { max-width: 560px; text-align: left; }
+.vc-dialog-name { color: var(--neon-cyan); font-weight: 700; letter-spacing: 2px; margin-bottom: 10px; }
+.vc-dialog-text { line-height: 1.9; font-size: 15px; min-height: 70px; }
+.vc-dialog-panel .vc-btn { margin-top: 16px; float: right; }
+
+/* ---------------- HUD ---------------- */
+.vc-hud { position: absolute; inset: 0; z-index: 10; pointer-events: none; }
+.vc-hud > * { position: absolute; }
+.vc-hud-tl { top: 16px; left: 16px; }
+.vc-money {
+  font-size: 26px; font-weight: 900; color: var(--neon-yellow);
+  text-shadow: 0 0 10px rgba(255,224,102,.6), 1px 1px 0 #000;
+  font-family: "Arial Black", "PingFang SC", sans-serif;
+}
+.vc-bars { margin-top: 6px; display: flex; flex-direction: column; gap: 4px; }
+.vc-bar { display: flex; align-items: center; gap: 6px; }
+.vc-bar-ico { font-size: 12px; width: 14px; text-align: center; filter: drop-shadow(1px 1px 0 #000); }
+.vc-bar-track { width: 150px; height: 10px; background: rgba(0,0,0,.55); border: 1px solid rgba(255,255,255,.25); border-radius: 5px; overflow: hidden; }
+.vc-bar-fill { height: 100%; width: 100%; transition: width .2s; }
+.vc-bar-fill.hp { background: linear-gradient(90deg, #ff4f4f, #ff9a62); }
+.vc-bar-fill.ap { background: linear-gradient(90deg, #2fa3e8, #23d5e8); }
+.vc-bar-fill.car { background: linear-gradient(90deg, #9b5de5, #ff4fa3); }
+.vc-wanted { margin-top: 6px; font-size: 18px; letter-spacing: 2px; }
+.vc-star { color: rgba(255,255,255,.18); transition: color .2s, text-shadow .2s; }
+.vc-star.lit { color: var(--neon-yellow); text-shadow: 0 0 10px var(--neon-yellow); }
+.vc-star.hot { color: #ff5a3c; text-shadow: 0 0 10px #ff5a3c; animation: vc-star-blink .8s infinite alternate; }
+@keyframes vc-star-blink { from { opacity: 1; } to { opacity: .4; } }
+
+.vc-hud-tr { top: 16px; right: 16px; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+#vc-minimap {
+  width: 180px; height: 180px; border-radius: 10px;
+  border: 2px solid rgba(35,213,232,.6);
+  box-shadow: 0 0 18px rgba(35,213,232,.35), inset 0 0 20px rgba(0,0,0,.5);
+  background: rgba(6,10,20,.75);
+}
+.vc-status-row { display: flex; gap: 8px; align-items: center; }
+.vc-clock, .vc-radio {
+  font-size: 13px; padding: 3px 10px; border-radius: 6px;
+  background: rgba(0,0,0,.55); border: 1px solid rgba(255,255,255,.2);
+}
+.vc-clock { color: var(--neon-yellow); font-weight: 700; }
+.vc-radio { color: var(--neon-cyan); }
+
+.vc-hud-bl { left: 16px; bottom: 16px; max-width: 380px; display: flex; flex-direction: column; gap: 8px; }
+.vc-mission {
+  background: var(--panel); border-left: 4px solid var(--neon-pink); border-radius: 8px;
+  padding: 10px 14px; font-size: 13px; line-height: 1.6;
+}
+.vc-mission-title { color: var(--neon-pink); font-weight: 700; letter-spacing: 1px; margin-bottom: 4px; }
+.vc-mission-text { opacity: .92; }
+.vc-toast {
+  background: rgba(0,0,0,.7); border: 1px solid var(--neon-cyan); border-radius: 6px;
+  padding: 8px 12px; font-size: 13px; color: var(--neon-cyan);
+  opacity: 0; transition: opacity .25s; pointer-events: none;
+}
+.vc-toast.show { opacity: 1; }
+
+.vc-hud-br { right: 16px; bottom: 16px; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+.vc-vehicle-panel { background: var(--panel); border-radius: 10px; padding: 10px 14px; min-width: 190px; }
+.vc-speed { font-size: 26px; font-weight: 900; color: var(--neon-cyan); font-family: "Arial Black", sans-serif; text-shadow: 0 0 10px rgba(35,213,232,.5); }
+.vc-speed small { font-size: 11px; font-weight: 400; opacity: .7; margin-left: 4px; }
+.vc-car-hp { margin-top: 6px; }
+.vc-weapon {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--panel); border-radius: 10px; padding: 8px 12px; font-size: 14px;
+}
+.vc-weapon-icon { font-size: 22px; }
+.vc-weapon-name { font-weight: 700; letter-spacing: 1px; }
+.vc-weapon-ammo { color: var(--neon-yellow); font-weight: 700; }
+
+.vc-crosshair {
+  left: 50%; top: 50%; width: 18px; height: 18px; margin: -9px 0 0 -9px;
+  border: 2px solid rgba(255,255,255,.8); border-radius: 50%;
+  box-shadow: 0 0 8px rgba(0,0,0,.8), inset 0 0 4px rgba(0,0,0,.4);
+  opacity: .85;
+}
+.vc-interact-tip {
+  left: 50%; bottom: 22%; transform: translateX(-50%);
+  background: rgba(0,0,0,.72); border: 1px solid var(--neon-yellow); color: var(--neon-yellow);
+  border-radius: 8px; padding: 8px 16px; font-size: 14px;
+}
+.vc-interact-tip b { color: #fff; }
+
+.vc-floaters { position: absolute; inset: 0; z-index: 9; pointer-events: none; }
+.vc-floater {
+  position: absolute; font-weight: 900; font-size: 20px;
+  text-shadow: 0 2px 6px rgba(0,0,0,.8); animation: vc-float-up 1.4s ease-out forwards;
+}
+.vc-floater.money { color: var(--neon-yellow); }
+.vc-floater.bad { color: #ff5a3c; }
+.vc-floater.info { color: var(--neon-cyan); }
+@keyframes vc-float-up {
+  from { opacity: 0; transform: translateY(0); }
+  15% { opacity: 1; }
+  to { opacity: 0; transform: translateY(-60px); }
+}
+
+/* ---------------- 声音开关 ---------------- */
+.vc-mute {
+  position: absolute; top: 16px; left: 50%; transform: translateX(-50%);
+  z-index: 60; width: 40px; height: 40px; border-radius: 50%;
+  background: rgba(0,0,0,.55); border: 1px solid rgba(255,255,255,.25);
+  color: #fff; font-size: 18px; cursor: pointer;
+}
+
+/* ---------------- 移动端控件 ---------------- */
+.vc-touch { position: absolute; inset: 0; z-index: 20; pointer-events: none; }
+.vc-stick {
+  position: absolute; bottom: 90px; width: 120px; height: 120px; pointer-events: auto;
+}
+#vc-stick-left { left: 26px; }
+#vc-stick-right { right: 26px; }
+.vc-stick-base {
+  position: absolute; inset: 0; border-radius: 50%;
+  background: rgba(255,255,255,.08); border: 2px solid rgba(35,213,232,.5);
+}
+.vc-stick-knob {
+  position: absolute; left: 50%; top: 50%; width: 52px; height: 52px;
+  margin: -26px 0 0 -26px; border-radius: 50%;
+  background: rgba(35,213,232,.35); border: 2px solid rgba(35,213,232,.9);
+}
+.vc-touch-buttons {
+  position: absolute; right: 160px; bottom: 96px; display: grid;
+  grid-template-columns: repeat(2, 58px); gap: 10px; pointer-events: auto;
+}
+.vc-tb {
+  width: 58px; height: 58px; border-radius: 50%; font-weight: 900; font-size: 18px;
+  background: rgba(0,0,0,.5); border: 2px solid rgba(255,79,163,.7); color: var(--text);
+}
+.vc-tb-car { border-color: var(--neon-cyan); }
+.vc-tb-brake { border-color: var(--neon-orange); }
+.vc-tb:active { background: rgba(255,79,163,.4); }
+
+/* 桌面隐藏触屏控件 */
+body[data-device="desktop"] .vc-touch { display: none !important; }
+
+/* 小屏适配 */
+@media (max-width: 720px) {
+  #vc-minimap { width: 120px; height: 120px; }
+  .vc-logo-big { font-size: 48px; }
+  .vc-bars { transform: scale(.85); transform-origin: top left; }
+  .vc-money { font-size: 20px; }
+}
