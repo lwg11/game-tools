@@ -23,6 +23,7 @@ import { VehicleSystem } from "./vehicle.js";
 import { PedestrianSystem } from "./ped.js";
 import { PoliceSystem } from "./police.js";
 import { TrafficSystem } from "./traffic.js";
+import { SfxSystem } from "./sfx.js";
 import { WeaponSystem, WEAPONS, PLAYER_WEAPON_ORDER, UNLOCKED_AT_START } from "./weapons.js";
 
 // 固定步长
@@ -59,6 +60,7 @@ class InputManager {
         canvas.addEventListener("mousedown", (e) => {
           if (e.button === 0) this.mouseFire = true;
           canvas.requestPointerLock && canvas.requestPointerLock();
+          if (this.game.sfx && this.game.sfx.unlock) this.game.sfx.unlock();
         });
         window.addEventListener("mouseup", (e) => {
           if (e.button === 0) this.mouseFire = false;
@@ -254,6 +256,7 @@ export class ViceCityGame {
       this.police = new PoliceSystem(this);
       this.peds = new PedestrianSystem(this, 36);
       this.weapons = new WeaponSystem(this);
+      this.sfx = new SfxSystem(this);
       const _w0 = WEAPONS[this.player.weapons[0]];
       this.setWeapon(_w0.icon, _w0.name, "");
       this._setLoadFill(100);
@@ -267,6 +270,7 @@ export class ViceCityGame {
       this.police = new PoliceSystem(this);
       this.peds = new PedestrianSystem(this, 36);
       this.weapons = new WeaponSystem(this);
+      this.sfx = new SfxSystem(this);
       this.running = true;
     }
     await this.store.init();
@@ -314,7 +318,23 @@ export class ViceCityGame {
     if (!this.headless) this.showToast(`⚠ 通缉等级 ${'★'.repeat(stars)}`);
   }
 
+  /** 车辆撞击声与提示（停放车/玩家车） */
+  onCarCrash(car, impact) {
+    if (this.sfx && this.sfx.playCrash) this.sfx.playCrash(impact);
+    if (!this.headless && this.player && this.player.vehicle === car && impact > 12) {
+      this.showToast("车辆受损严重！注意车况");
+    }
+  }
+
+  /** 车辆爆炸（玩家当前车） */
+  onCarExplode(car) {
+    if (!this.headless && this.player && this.player.vehicle === car) {
+      this.showToast("车辆报废！快逃离现场");
+    }
+  }
+
   onCopCrash(impact) {
+    if (this.sfx && this.sfx.playCrash) this.sfx.playCrash(impact * 0.7);
     if (!this.headless && impact > 12) this.showToast("警车被撞得失去了控制！");
   }
 
@@ -334,6 +354,7 @@ export class ViceCityGame {
     p.money = Math.floor(p.money * 0.85);
     if (this.traffic) this.traffic.cars.forEach((c) => { c.pos.x += 40; c.vx = c.vz = 0; });
     this.showOverlay("被捕", "你被警方带走了。保释金已从现金中扣除。", "#4a6a9a");
+    if (this.sfx && this.sfx.playBusted) this.sfx.playBusted();
     setTimeout(() => { this._busted = false; }, 5000);
   }
 
@@ -350,6 +371,7 @@ export class ViceCityGame {
     p.armor = 0;
     p.money = Math.floor(p.money * 0.85);
     this.showOverlay("你倒下了", "被紧急送往医院，医疗费从现金中扣除。", "#8a2020");
+    if (this.sfx && this.sfx.playWasted) this.sfx.playWasted();
     setTimeout(() => { this._wasted = false; }, 5000);
   }
 
@@ -478,6 +500,7 @@ export class ViceCityGame {
   startGame() {
     this.running = true;
     this.paused = false;
+    if (this.sfx) this.sfx.ensure();
     if (!this.headless) {
       document.getElementById("vc-menu").classList.add("hidden");
       this.showToast("欢迎来到罪恶都市 · 自由探索开始");

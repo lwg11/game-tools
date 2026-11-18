@@ -128,6 +128,7 @@ export class WeaponSystem {
       g.onPedHit && g.onPedHit(null, hitPed);
       if (g.police) g.police.reportCrime(1);
     }
+    if (g.sfx && g.sfx.playMelee) g.sfx.playMelee();
     p._punchT = 0.12; // 挥拳动画（后续 player 渲染使用）
   }
 

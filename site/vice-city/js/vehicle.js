@@ -280,6 +280,7 @@ export class Car {
       this.respawnTimer = 20;
       this._setDeadVisual();
       this.group.visible = false;
+      if (this.onExplode) this.onExplode();
     } else {
       // 受损变暗
       const f = 0.55 + 0.45 * (this.hp / this.maxHp);
@@ -337,7 +338,11 @@ export class VehicleSystem {
       const car = new Car(type, s.x, s.z, s.angle);
       this.cars.push(car);
       this.game.scene.add(car.group);
-      if (i === 0) car.onCrash = (impact) => this.game.onCarCrash && this.game.onCarCrash(car, impact);
+      car.onCrash = (impact) => this.game.onCarCrash && this.game.onCarCrash(car, impact);
+      car.onExplode = () => {
+        if (this.game.sfx && this.game.sfx.playExplode && this.game.player && this.game.player.vehicle === car) this.game.sfx.playExplode();
+        this.game.onCarExplode && this.game.onCarExplode(car);
+      };
     }
   }
 

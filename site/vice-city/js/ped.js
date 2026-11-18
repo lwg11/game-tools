@@ -150,6 +150,7 @@ export class PedestrianSystem {
         if (car.kmh > 10 && this.checkCarHit(car, car.kmh)) {
           if (this.game.police) this.game.police.reportCrime(2);
           if (this.game.onPedHit) this.game.onPedHit(car, this.peds.find((p) => p.dead && p.deadTimer > 7));
+          if (this.game.sfx && this.game.sfx.playCrash) this.game.sfx.playCrash(10);
           this.panicAt(car.pos.x, car.pos.z, 30);
         }
       }

@@ -144,6 +144,7 @@ export class TrafficSystem {
           if (relSpeed > 4) {
             playerVehicle.damage(relSpeed * 0.5);
             car.damage(relSpeed * 0.5);
+            if (game.sfx && game.sfx.playCrash) game.sfx.playCrash(relSpeed);
           }
         }
       }
