@@ -190,8 +190,7 @@ export class Player {
   _drive(dt) {
     const car = this.vehicle;
     if (!car || car.dead) {
-      this.vehicle = null;
-      if (this.group) this.group.visible = true;
+      if (this.vehicle) this.exitVehicle();
       return;
     }
     const axes = this.game.input.moveAxes();
@@ -240,6 +239,17 @@ export class Player {
   /** 当前坐标 */
   get x() { return this.pos.x; }
   get z() { return this.pos.z; }
+
+  // ------------------------------------------------------------ 伤害
+  /** 受到伤害（警察/车辆冲撞/后续武器） */
+  damage(amount) {
+    this.hp = Math.max(0, this.hp - amount);
+  }
+
+  /** 短暂僵直（被车撞） */
+  stagger() {
+    this.speed = 0;
+  }
 }
 
 // ------------------------------------------------------------ 工具

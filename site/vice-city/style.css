@@ -90,6 +90,31 @@ body {
 .vc-dialog-panel { max-width: 560px; text-align: left; }
 .vc-dialog-name { color: var(--neon-cyan); font-weight: 700; letter-spacing: 2px; margin-bottom: 10px; }
 .vc-dialog-text { line-height: 1.9; font-size: 15px; min-height: 70px; }
+
+/* ---------------- BUSTED / WASTED 全屏 ---------------- */
+.vc-overlay {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: radial-gradient(ellipse at center, rgba(20,4,8,.55), rgba(6,2,4,.92));
+  backdrop-filter: blur(2px);
+  pointer-events: none;
+  z-index: 40;
+}
+.vc-overlay-title {
+  font-size: clamp(56px, 12vw, 128px);
+  font-weight: 900; font-style: italic; letter-spacing: 10px;
+  color: #8a2020;
+  text-shadow: 0 0 30px rgba(255,40,40,.7), 0 4px 0 rgba(0,0,0,.6);
+  animation: vc-overlay-in 300ms cubic-bezier(.2,1.4,.4,1);
+}
+.vc-overlay-text {
+  margin-top: 14px; color: #f6d8a8; font-size: 17px; letter-spacing: 2px;
+  text-shadow: 0 2px 8px rgba(0,0,0,.8);
+  animation: vc-overlay-in 400ms cubic-bezier(.2,1.4,.4,1);
+}
+@keyframes vc-overlay-in {
+  from { transform: scale(.6); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
 .vc-dialog-panel .vc-btn { margin-top: 16px; float: right; }
 
 /* ---------------- HUD ---------------- */

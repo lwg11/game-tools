@@ -20,6 +20,9 @@ import {
 import { buildWorld } from "./city.js";
 import { Player } from "./player.js";
 import { VehicleSystem } from "./vehicle.js";
+import { PedestrianSystem } from "./ped.js";
+import { PoliceSystem } from "./police.js";
+import { TrafficSystem } from "./traffic.js";
 
 // 固定步长
 const STEP = 1 / 60;
@@ -245,12 +248,18 @@ export class ViceCityGame {
       this._setLoadFill(70);
       this.player = new Player(this);
       this.vehicles = new VehicleSystem(this, 26);
+      this.traffic = new TrafficSystem(this, 8);
+      this.police = new PoliceSystem(this);
+      this.peds = new PedestrianSystem(this, 36);
       this._setLoadFill(100);
       this._showMenu();
       this._raf = requestAnimationFrame((ts) => this._loop(ts));
     } else {
       this.player = new Player(this);
       this.vehicles = new VehicleSystem(this, 26);
+      this.traffic = new TrafficSystem(this, 8);
+      this.police = new PoliceSystem(this);
+      this.peds = new PedestrianSystem(this, 36);
       this.running = true;
     }
     await this.store.init();
@@ -280,6 +289,7 @@ export class ViceCityGame {
     this.setMoney(p.money);
     this.setBars(p.hp, p.maxHp, p.armor);
     this.setClock(this.worldHour);
+    this.setWanted(this.police ? this.police.stars : 0);
     this.setVehiclePanel(p.inVehicle, p.vehicle ? p.vehicle.kmh : 0, p.vehicle ? p.vehicle.hp / p.vehicle.maxHp : 1);
     this.setCrosshair(!p.inVehicle);
     // 交互提示
@@ -290,6 +300,63 @@ export class ViceCityGame {
     } else {
       this.setInteractTip(null);
     }
+  }
+
+  // ------------------------------------------------------------ 通缉与事件
+  policeBuzz(stars) {
+    if (!this.headless) this.showToast(`⚠ 通缉等级 ${'★'.repeat(stars)}`);
+  }
+
+  onCopCrash(impact) {
+    if (!this.headless && impact > 12) this.showToast("警车被撞得失去了控制！");
+  }
+
+  onPedHit(car, ped) {
+    if (!this.headless) this.floater("肇事逃逸", "bad");
+  }
+
+  /** 被逮捕：传送回警局，扣除现金 15% */
+  busted() {
+    if (this._busted) return;
+    this._busted = true;
+    const p = this.player;
+    if (p.inVehicle) p.exitVehicle();
+    this.police.clearCrime();
+    p.pos.set(this.police.station.x, 0, this.police.station.z);
+    p.hp = p.maxHp;
+    p.money = Math.floor(p.money * 0.85);
+    if (this.traffic) this.traffic.cars.forEach((c) => { c.pos.x += 40; c.vx = c.vz = 0; });
+    this.showOverlay("被捕", "你被警方带走了。保释金已从现金中扣除。", "#4a6a9a");
+    setTimeout(() => { this._busted = false; }, 5000);
+  }
+
+  /** 伤残：送往医院，扣除现金 15% */
+  wasted() {
+    if (this._wasted) return;
+    this._wasted = true;
+    const p = this.player;
+    if (p.inVehicle) p.exitVehicle();
+    if (this.police) this.police.clearCrime();
+    const h = this.police ? this.police.hospital : { x: 320, z: 380 };
+    p.pos.set(h.x, 0, h.z);
+    p.hp = p.maxHp;
+    p.armor = 0;
+    p.money = Math.floor(p.money * 0.85);
+    this.showOverlay("你倒下了", "被紧急送往医院，医疗费从现金中扣除。", "#8a2020");
+    setTimeout(() => { this._wasted = false; }, 5000);
+  }
+
+  showOverlay(title, text, color) {
+    if (this.headless) return;
+    const el = document.getElementById("vc-overlay");
+    if (!el) return;
+    const t = document.getElementById("vc-overlay-title");
+    const x = document.getElementById("vc-overlay-text");
+    if (t) { t.textContent = title; t.style.color = color || "#ffd166"; }
+    if (x) x.textContent = text;
+    el.classList.remove("hidden");
+    clearTimeout(this._overlayT);
+    this._overlayT = setTimeout(() => el.classList.add("hidden"), 3200);
   }
 
   // ------------------------------------------------------------ 主循环
@@ -327,6 +394,17 @@ export class ViceCityGame {
     if (this.vehicles && this.vehicles.update) {
       this.vehicles.update(dt, this.player ? this.player.pos : { x: 0, z: 0 });
     }
+    if (this.traffic && this.traffic.update) {
+      this.traffic.update(dt, this.player.pos, this.player.vehicle ? this.player.vehicle : null);
+    }
+    if (this.peds && this.peds.update) {
+      this.peds.update(dt, this.player.pos.x, this.player.pos.z);
+    }
+    if (this.police && this.police.update) {
+      this.police.update(dt, !this.player.inVehicle, this.player.speed || (this.player.vehicle ? Math.abs(this.player.vehicle.kmh / 3.6) : 0));
+    }
+    // 死亡（非驾驶时）→ WASTED
+    if (this.player.hp <= 0) this.wasted();
     if (this.world && this.world.update) this.world.update(dt);
     if (this.sfx && this.sfx.update) this.sfx.update(dt);
 
