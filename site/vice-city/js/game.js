@@ -24,6 +24,7 @@ import { PedestrianSystem } from "./ped.js";
 import { PoliceSystem } from "./police.js";
 import { TrafficSystem } from "./traffic.js";
 import { SfxSystem } from "./sfx.js";
+import { MissionSystem } from "./missions.js";
 import { WeaponSystem, WEAPONS, PLAYER_WEAPON_ORDER, UNLOCKED_AT_START } from "./weapons.js";
 
 // 固定步长
@@ -230,6 +231,7 @@ export class ViceCityGame {
     // HUD 缓存
     this._hud = {};
     this._floaters = null;
+    this._mmTick = 0;
 
     // 移动端标记
     if (!this.headless) {
@@ -257,8 +259,10 @@ export class ViceCityGame {
       this.peds = new PedestrianSystem(this, 36);
       this.weapons = new WeaponSystem(this);
       this.sfx = new SfxSystem(this);
+      this.missions = new MissionSystem(this);
       const _w0 = WEAPONS[this.player.weapons[0]];
       this.setWeapon(_w0.icon, _w0.name, "");
+      this.setMission("任务", "前往青色标记处与中间人会面 · 或自由探索");
       this._setLoadFill(100);
       this._showMenu();
       this._raf = requestAnimationFrame((ts) => this._loop(ts));
@@ -271,12 +275,19 @@ export class ViceCityGame {
       this.peds = new PedestrianSystem(this, 36);
       this.weapons = new WeaponSystem(this);
       this.sfx = new SfxSystem(this);
+      this.missions = new MissionSystem(this);
       this.running = true;
     }
     await this.store.init();
-    // 进度同步（commit 8 进一步同步任务/武器）
+    // 进度同步：金钱与武器（后续 commit 增加任务进度/护甲）
     if (this.player) {
       this.player.money = Number(this.store.state.money) || 0;
+      // 与存档武器取并集（保留初始拳头+手枪，并恢复已解锁武器）
+      if (Array.isArray(this.store.state.weapons) && this.store.state.weapons.length) {
+        this.player.weapons = Array.from(new Set([...this.player.weapons, ...this.store.state.weapons]));
+        this.player.weaponIndex = clamp(this.store.state.weaponIndex || 0, 0, this.player.weapons.length - 1);
+      }
+      this.player.armor = Math.max(0, Number(this.store.state.armor) || 0);
     }
     return this;
   }
@@ -303,8 +314,11 @@ export class ViceCityGame {
     this.setWanted(this.police ? this.police.stars : 0);
     this.setVehiclePanel(p.inVehicle, p.vehicle ? p.vehicle.kmh : 0, p.vehicle ? p.vehicle.hp / p.vehicle.maxHp : 1);
     this.setCrosshair(!p.inVehicle);
-    // 交互提示
-    if (p.inVehicle) {
+    // 交互提示（任务提示优先于上下车）
+    const mTip = this.missions ? this.missions.missionTip : null;
+    if (mTip) {
+      this.setInteractTip(mTip);
+    } else if (p.inVehicle) {
       this.setInteractTip('按 <b>E</b> 下车');
     } else if (this.vehicles && this.vehicles.nearestEnterable(p.pos.x, p.pos.z, 3.4)) {
       this.setInteractTip('按 <b>E</b> 上车');
@@ -433,6 +447,7 @@ export class ViceCityGame {
     if (this.police && this.police.update) {
       this.police.update(dt, !this.player.inVehicle, this.player.speed || (this.player.vehicle ? Math.abs(this.player.vehicle.kmh / 3.6) : 0));
     }
+    if (this.missions && this.missions.update) this.missions.update(dt);
     // 死亡（非驾驶时）→ WASTED
     if (this.player.hp <= 0) this.wasted();
     if (this.world && this.world.update) this.world.update(dt);
@@ -440,6 +455,96 @@ export class ViceCityGame {
 
     this._updateCamera();
     this._syncHud();
+    if (++this._mmTick % 10 === 0) this._syncMinimap();
+  }
+
+  /** 小地图每 10 帧重绘：城市底图 + 任务标记 + 玩家 + 警车 */
+  _syncMinimap() {
+    if (this.headless || !this.world || !this.world.minimapCv) return;
+    const el = document.getElementById("vc-minimap");
+    if (!el) return;
+    const ctx = el.getContext("2d");
+    if (!ctx) return;
+    const half = WORLD.half;
+    const toPx = (wx, wz) => [(wx + half) / WORLD.size * 180, (wz + half) / WORLD.size * 180];
+    ctx.clearRect(0, 0, 180, 180);
+    ctx.drawImage(this.world.minimapCv, 0, 0, 180, 180);
+    const p = this.player;
+    if (!p) return;
+    // 任务标记
+    if (this.missions) {
+      const mp = this.missions.markerPos;
+      if (mp) {
+        const [mx, my] = toPx(mp[0], mp[1]);
+        ctx.fillStyle = "#ffc94d";
+        ctx.beginPath();
+        ctx.arc(mx, my, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = "rgba(0,0,0,.65)";
+        ctx.stroke();
+      }
+    }
+    // 玩家箭头
+    const [px2, py2] = toPx(p.pos.x, p.pos.z);
+    const ang = p.inVehicle && p.vehicle ? p.vehicle.angle : p.angle;
+    ctx.save();
+    ctx.translate(px2, py2);
+    ctx.rotate(Math.PI / 2 - ang);
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.moveTo(8, 0);
+    ctx.lineTo(-5, 5);
+    ctx.lineTo(-5, -5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = "rgba(0,0,0,.6)";
+    ctx.stroke();
+    ctx.restore();
+    // 警车
+    if (this.police) {
+      ctx.fillStyle = "#ff4055";
+      for (const c of this.police.cars) {
+        if (c.car.dead) continue;
+        const [cx2, cy2] = toPx(c.car.pos.x, c.car.pos.z);
+        ctx.fillRect(cx2 - 2, cy2 - 2, 4, 4);
+      }
+    }
+  }
+
+  // ------------------------------------------------------------ 对话
+  /**
+   * 任务/剧情对话面板；headless 下直接回调，便于逻辑自测。
+   * @param {string} name 说话人
+   * @param {string[][]} lines [ [speaker, text], ... ]
+   * @param {() => void} onDone 全部说完后回调
+   */
+  startDialog(name, lines, onDone) {
+    if (this.headless) { if (onDone) onDone(); return; }
+    const dlg = document.getElementById("vc-dialog");
+    const nm = document.getElementById("vc-dialog-name");
+    const tx = document.getElementById("vc-dialog-text");
+    const btn = document.getElementById("vc-dialog-next");
+    if (!dlg || !btn) { if (onDone) onDone(); return; }
+    let i = 0;
+    this._dialogOpen = true;
+    dlg.classList.remove("hidden");
+    const showLine = () => {
+      const [speaker, text] = lines[i];
+      nm.textContent = speaker || name;
+      tx.textContent = text;
+    };
+    btn.onclick = () => {
+      i++;
+      if (i >= lines.length) {
+        dlg.classList.add("hidden");
+        this._dialogOpen = false;
+        if (onDone) onDone();
+      } else {
+        showLine();
+      }
+      if (this.sfx && this.sfx.playUi) this.sfx.playUi();
+    };
+    showLine();
   }
 
   _applyDayNight() {
