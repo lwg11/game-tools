@@ -17,6 +17,7 @@ import { isMobile } from "../../assets/js/device.js";
 import {
   WORLD, DAY_LENGTH, TIME, PALETTE, clamp, lerp, angleLerp, rgbaOf,
 } from "./common.js";
+import { buildWorld } from "./city.js";
 
 // 固定步长
 const STEP = 1 / 60;
@@ -232,12 +233,12 @@ export class ViceCityGame {
   // ------------------------------------------------------------ 启动流程
   async boot() {
     if (!this.headless) this._setLoadText("正在铺设道路…");
-    // 世界生成占位（commit 2 替换为 city.buildWorld）
-    this._buildPlaceholderWorld();
+    // 世界生成（city.js）
+    this.world = buildWorld(this);
+    this.world.applyNight(this.nightFactor());
     if (!this.headless) {
-      this._setLoadText("正在生成街区和车辆…");
-      this._setLoadFill(60);
-      // 占位：直接放一个测试车辆与玩家
+      this._setLoadText("正在生成车辆与行人…");
+      this._setLoadFill(70);
       this._buildPlaceholderActors();
       this._setLoadFill(100);
       this._showMenu();
@@ -250,56 +251,8 @@ export class ViceCityGame {
     return this;
   }
 
-  _buildPlaceholderWorld() {
-    // 地面
-    const groundGeo = new THREE.PlaneGeometry(WORLD.size, WORLD.size);
-    const groundMat = new THREE.MeshLambertMaterial({ color: 0x3e7d44 });
-    const ground = new THREE.Mesh(groundGeo, groundMat);
-    ground.rotation.x = -Math.PI / 2;
-    ground.receiveShadow = this.headless ? false : true;
-    this.scene.add(ground);
-
-    // 道路网格（占位：深色条带）
-    const roadMat = new THREE.MeshLambertMaterial({ color: 0x2b2f36 });
-    const n = WORLD.gridN;
-    const span = WORLD.size;
-    const step = span / n;
-    for (let i = 0; i <= n; i++) {
-      const p = -span / 2 + i * step;
-      const roadH = new THREE.Mesh(new THREE.PlaneGeometry(WORLD.roadW, span), roadMat);
-      roadH.rotation.x = -Math.PI / 2;
-      roadH.position.set(p, 0.02, 0);
-      roadH.receiveShadow = this.headless ? false : true;
-      this.scene.add(roadH);
-      const roadV = new THREE.Mesh(new THREE.PlaneGeometry(span, WORLD.roadW), roadMat);
-      roadV.rotation.x = -Math.PI / 2;
-      roadV.position.set(0, 0.02, p);
-      roadV.receiveShadow = this.headless ? false : true;
-      this.scene.add(roadV);
-    }
-
-    // 占位建筑（后续 city.js 生成）
-    const boxGeo = new THREE.BoxGeometry(1, 1, 1);
-    for (let bx = 0; bx < n; bx++) {
-      for (let bz = 0; bz < n; bz++) {
-        const cx = -span / 2 + (bx + 0.5) * step;
-        const cz = -span / 2 + (bz + 0.5) * step;
-        if (Math.abs(cx) < step / 2 || Math.abs(cz) < step / 2) continue; // 中心街区留空作出生点
-        const h = 8 + ((bx * 7 + bz * 13) % 20);
-        const w = 26 + ((bx * 3 + bz * 5) % 14);
-        const mat = new THREE.MeshLambertMaterial({ color: PALETTE.building[(bx + bz) % PALETTE.building.length] });
-        const b = new THREE.Mesh(boxGeo, mat);
-        b.scale.set(w, h, w);
-        b.position.set(cx + ((bx % 3) - 1) * 10, h / 2, cz + ((bz % 3) - 1) * 10);
-        b.castShadow = this.headless ? false : true;
-        b.receiveShadow = this.headless ? false : true;
-        this.scene.add(b);
-      }
-    }
-  }
-
   _buildPlaceholderActors() {
-    // 占位玩家（后续 player.js 替换）
+    // 占位玩家（player.js 实现后替换）
     const geo = new THREE.BoxGeometry(0.6, 1.1, 0.6);
     const mat = new THREE.MeshLambertMaterial({ color: PALETTE.player });
     const body = new THREE.Mesh(geo, mat);
@@ -307,19 +260,6 @@ export class ViceCityGame {
     body.castShadow = this.headless ? false : true;
     this.scene.add(body);
     this.playerMesh = body;
-
-    // 出生一辆车（占位：box）
-    const carGroup = new THREE.Group();
-    const carBody = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.75, 4.4), new THREE.MeshLambertMaterial({ color: PALETTE.taxi }));
-    carBody.position.y = 0.65;
-    carBody.castShadow = this.headless ? false : true;
-    const carTop = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.6, 2.2), new THREE.MeshLambertMaterial({ color: 0x222831 }));
-    carTop.position.set(0, 1.25, -0.2);
-    carGroup.add(carBody, carTop);
-    carGroup.position.set(4, 0, 2);
-    carGroup.rotation.y = 0;
-    this.scene.add(carGroup);
-    this.placeholderCar = carGroup;
   }
 
   // ------------------------------------------------------------ 主循环
@@ -380,6 +320,8 @@ export class ViceCityGame {
   }
 
   _applyDayNight() {
+    const nf = this.nightFactor();
+    if (this.world) this.world.applyNight(nf);
     const c = skyColorFor(this.worldHour);
     this.scene.background.setHex(c.sky);
     this.scene.fog.color.setHex(c.fog);
@@ -396,6 +338,12 @@ export class ViceCityGame {
       this.sun.intensity = 0.12;
       this.sun.position.set(40, 140, -80);
     }
+  }
+
+  /** 夜晚系数 0..1（傍晚 18:30 起增强，清晨 6 点前渐变） */
+  nightFactor() {
+    const h = this.worldHour;
+    return clamp(Math.max((h - 18.5) / 2, (6 - h) / 2), 0, 1);
   }
 
   _updateCamera() {
@@ -609,7 +557,7 @@ export class ViceCityGame {
 
   /** 停止循环与渲染（测试用） */
   dispose() {
-    cancelAnimationFrame(this._raf);
+    if (typeof cancelAnimationFrame === "function") cancelAnimationFrame(this._raf);
   }
 }
 
