@@ -9,6 +9,7 @@ import { ProgressStore } from "../../assets/js/progress.js";
 import { initAccount } from "../../assets/js/account.js";
 import { toast, icon } from "../../assets/js/ui.js";
 import { audio } from "../../assets/js/audio.js";
+import { isCrazy, applyBodyMode } from "../../assets/js/mode.js";
 import {
   W, H, TOWERS, TOWER_ORDER, ENEMIES, LEVELS, TOTAL_LEVELS, getLevel,
 } from "./levels.js";
@@ -407,10 +408,11 @@ class Tower {
   }
   stats() {
     const f = 1 + (this.level - 1) * 0.35;
+    const crazy = this.game.crazy;
     return {
-      damage: Math.round(this.def.damage * f),
+      damage: Math.round(this.def.damage * f * (crazy ? 2 : 1)),
       range: this.def.range + (this.level - 1) * 15,
-      rate: this.def.rate * (1 - (this.level - 1) * 0.08),
+      rate: this.def.rate * (1 - (this.level - 1) * 0.08) * (crazy ? 0.5 : 1),
       slow: this.def.slow || 0,
       splash: this.def.splash || 0,
       chain: this.def.chain || 0,
@@ -608,6 +610,8 @@ class CarrotGame {
   constructor() {
     this.canvas = document.getElementById("canvas");
     this.ctx = this.canvas.getContext("2d");
+    this.crazy = isCrazy();
+    applyBodyMode();
     this.sfx = new Sfx();
     this.store = new ProgressStore("carrot");
     this.phase = "menu";

@@ -2,9 +2,31 @@ import { markDeviceBadge } from "./device.js";
 import { initAccount } from "./account.js";
 import { loadMergedProgress, GAME_IDS } from "./progress.js";
 import { toast } from "./ui.js";
+import { getMode, setMode, applyBodyMode } from "./mode.js";
 
 markDeviceBadge(document.getElementById("deviceTag"));
 markDeviceBadge(document.getElementById("deviceTag2"));
+
+// 常规 / 疯狂模式开关：常规隐藏金手指，疯狂解锁金手指并让火力与特效失控
+applyBodyMode();
+const modeBtn = document.getElementById("modeToggle");
+const modeText = document.getElementById("modeText");
+function paintMode() {
+  if (!modeBtn || !modeText) return;
+  const crazy = getMode() === "crazy";
+  modeBtn.classList.toggle("crazy", crazy);
+  modeText.textContent = crazy ? "疯狂模式" : "常规模式";
+  modeBtn.title = crazy ? "疯狂模式：显示金手指，火力与特效全开" : "常规模式：原版体验，隐藏金手指";
+}
+if (modeBtn) {
+  paintMode();
+  modeBtn.addEventListener("click", () => {
+    const next = getMode() === "crazy" ? "normal" : "crazy";
+    setMode(next);
+    paintMode();
+    toast(next === "crazy" ? "已切换到疯狂模式：金手指已解锁，火力全开" : "已切换到常规模式：金手指已隐藏", "ok", 2400);
+  });
+}
 
 const TOTAL = { "stone-wars": 14, pvz: 12, carrot: 8, pokemon: 8 };
 const els = {

@@ -22,6 +22,43 @@
 
 .head-right { display: flex; align-items: center; gap: 10px; min-width: 0; }
 
+/* 常规 / 疯狂模式开关 */
+.mode-toggle {
+  display: inline-flex; align-items: center; gap: 7px;
+  height: 34px; padding: 0 12px; border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--muted);
+  font-size: 12px; font-weight: 800; letter-spacing: 0.04em;
+  cursor: pointer; transition: all 0.2s ease;
+}
+.mode-toggle:hover { border-color: var(--line-strong); color: var(--text); }
+.mode-toggle .mode-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #7adc91; box-shadow: 0 0 8px rgba(122, 220, 145, 0.7);
+}
+.mode-toggle.crazy {
+  color: #ffd08a;
+  border-color: rgba(255, 130, 60, 0.55);
+  background: linear-gradient(135deg, rgba(255, 120, 40, 0.22), rgba(255, 60, 60, 0.14));
+  box-shadow: 0 0 18px rgba(255, 110, 40, 0.22);
+}
+.mode-toggle.crazy .mode-dot {
+  background: #ff8a3a;
+  box-shadow: 0 0 10px rgba(255, 120, 40, 0.95);
+  animation: modePulse 0.9s ease-in-out infinite;
+}
+@keyframes modePulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.5); opacity: 0.65; }
+}
+body.crazy-mode .hero .hl { color: #ff9a3a; text-shadow: 0 0 26px rgba(255, 110, 40, 0.45); }
+
+@media (max-width: 760px) {
+  .mode-toggle { height: 32px; padding: 0 9px; font-size: 11px; }
+  .mode-toggle .mode-dot { width: 7px; height: 7px; }
+}
+
 /* ---------------- Hero ---------------- */
 .hero {
   display: grid;

@@ -9,6 +9,7 @@ import { ProgressStore } from "../../assets/js/progress.js";
 import { initAccount } from "../../assets/js/account.js";
 import { toast, icon } from "../../assets/js/ui.js";
 import { audio } from "../../assets/js/audio.js";
+import { isCrazy, applyBodyMode } from "../../assets/js/mode.js";
 import {
   SPECIES, SPECIES_ORDER, SPECIES_COUNT, STARTERS, MOVES, TYPE_NAMES, TYPE_COLORS,
   ITEMS, ITEM_IDS, BALLS, BALL_IDS,
@@ -123,6 +124,8 @@ class PokemonGame {
   constructor() {
     this.store = new ProgressStore("pokemon");
     this.sfx = new Sfx();
+    this.crazy = isCrazy();
+    applyBodyMode();
     this.phase = "menu"; // menu | world | busy | choose | pause | cheat | over
     this.battle = null;
     this.busy = false;
@@ -1634,6 +1637,7 @@ class PokemonGame {
       if (!this.battle || this.battle.over || target.hp <= 0) break;
       const result = this._calcDamage(user, target, move);
       let dmg = result.damage;
+      if (this.crazy && isPlayer) dmg = Math.round(dmg * 2.2);
       if (this.cheats.oneHit && isPlayer) dmg = Math.max(dmg, target.hp);
       target.hp = Math.max(0, target.hp - dmg);
       total += dmg;

@@ -1037,3 +1037,8 @@ html[data-device="desktop"] .joystick { display: none; }
   .box-mon .mon-svg { width: 38px; height: 38px; }
   .shop-row { padding: 6px 9px; }
 }
+
+/* 常规模式隐藏金手指，疯狂模式才显示 */
+body.normal-mode #worldCheat,
+body.normal-mode #battleCheat { display: none; }
+

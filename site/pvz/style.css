@@ -65,6 +65,7 @@
 .gm-btn svg { width: 20px; height: 20px; }
 .gm-btn:hover { background: rgba(60, 95, 35, 0.9); }
 .gm-btn:active { transform: scale(0.94); }
+body.normal-mode #gmCheat { display: none; }
 .gm-btn.cheat {
   background: rgba(120, 72, 18, 0.82);
   border-color: rgba(255, 210, 120, 0.5);
