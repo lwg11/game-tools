@@ -35,9 +35,10 @@
         </span>
       </a>
       <div class="head-right">
-        <button class="mode-toggle" id="modeToggle" type="button" aria-label="切换常规或疯狂模式">
-          <span class="mode-dot" aria-hidden="true"></span>
-          <span id="modeText">常规模式</span>
+        <button class="mode-switch" id="modeToggle" type="button" role="switch" aria-checked="false" aria-label="切换常规或疯狂模式" data-mode="normal">
+          <span class="mode-label" data-mode="normal">常规</span>
+          <span class="mode-track" aria-hidden="true"><span class="mode-knob"></span></span>
+          <span class="mode-label" data-mode="crazy">疯狂</span>
         </button>
         <span class="device-tag" id="deviceTag"></span>
         <button class="account-chip" data-account-chip aria-label="账号与进度"></button>

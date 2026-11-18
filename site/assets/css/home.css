@@ -23,31 +23,45 @@
 .head-right { display: flex; align-items: center; gap: 10px; min-width: 0; }
 
 /* 常规 / 疯狂模式开关 */
-.mode-toggle {
-  display: inline-flex; align-items: center; gap: 7px;
-  height: 34px; padding: 0 12px; border-radius: 999px;
-  border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--muted);
+.mode-switch {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 2px; border: 0; background: transparent;
+  font: inherit; color: var(--muted); cursor: pointer;
+}
+.mode-switch .mode-label {
   font-size: 12px; font-weight: 800; letter-spacing: 0.04em;
-  cursor: pointer; transition: all 0.2s ease;
+  opacity: 0.55; transition: color 0.2s ease, opacity 0.2s ease;
+  white-space: nowrap;
 }
-.mode-toggle:hover { border-color: var(--line-strong); color: var(--text); }
-.mode-toggle .mode-dot {
-  width: 8px; height: 8px; border-radius: 50%;
-  background: #7adc91; box-shadow: 0 0 8px rgba(122, 220, 145, 0.7);
+.mode-switch .mode-track {
+  position: relative; flex: 0 0 auto;
+  width: 46px; height: 24px; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--line);
+  transition: background 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
 }
-.mode-toggle.crazy {
-  color: #ffd08a;
-  border-color: rgba(255, 130, 60, 0.55);
-  background: linear-gradient(135deg, rgba(255, 120, 40, 0.22), rgba(255, 60, 60, 0.14));
-  box-shadow: 0 0 18px rgba(255, 110, 40, 0.22);
+.mode-switch .mode-knob {
+  position: absolute; top: 2px; left: 2px;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
-.mode-toggle.crazy .mode-dot {
-  background: #ff8a3a;
-  box-shadow: 0 0 10px rgba(255, 120, 40, 0.95);
-  animation: modePulse 0.9s ease-in-out infinite;
+.mode-switch[data-mode="normal"] .mode-label[data-mode="normal"] {
+  opacity: 1; color: var(--text);
 }
+.mode-switch[data-mode="crazy"] .mode-label[data-mode="crazy"] {
+  opacity: 1; color: #ffb26a;
+}
+.mode-switch[data-mode="crazy"] .mode-track {
+  background: linear-gradient(135deg, #ff9a3a, #ff4d3a);
+  border-color: rgba(255, 140, 70, 0.8);
+  box-shadow: 0 0 16px rgba(255, 110, 40, 0.45);
+}
+.mode-switch[data-mode="crazy"] .mode-knob {
+  transform: translateX(22px);
+}
+.mode-switch:hover .mode-label { opacity: 0.85; }
+.mode-switch:focus-visible { outline: 2px solid var(--line-strong); outline-offset: 3px; border-radius: 999px; }
 @keyframes modePulse {
   0%, 100% { transform: scale(1); opacity: 1; }
   50% { transform: scale(1.5); opacity: 0.65; }
@@ -55,8 +69,11 @@
 body.crazy-mode .hero .hl { color: #ff9a3a; text-shadow: 0 0 26px rgba(255, 110, 40, 0.45); }
 
 @media (max-width: 760px) {
-  .mode-toggle { height: 32px; padding: 0 9px; font-size: 11px; }
-  .mode-toggle .mode-dot { width: 7px; height: 7px; }
+  .mode-switch { gap: 6px; }
+  .mode-switch .mode-label { font-size: 11px; }
+  .mode-switch .mode-track { width: 40px; height: 22px; }
+  .mode-switch .mode-knob { width: 16px; height: 16px; }
+  .mode-switch[data-mode="crazy"] .mode-knob { transform: translateX(18px); }
 }
 
 /* ---------------- Hero ---------------- */

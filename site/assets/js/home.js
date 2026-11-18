@@ -10,12 +10,11 @@ markDeviceBadge(document.getElementById("deviceTag2"));
 // 常规 / 疯狂模式开关：常规隐藏金手指，疯狂解锁金手指并让火力与特效失控
 applyBodyMode();
 const modeBtn = document.getElementById("modeToggle");
-const modeText = document.getElementById("modeText");
 function paintMode() {
-  if (!modeBtn || !modeText) return;
+  if (!modeBtn) return;
   const crazy = getMode() === "crazy";
-  modeBtn.classList.toggle("crazy", crazy);
-  modeText.textContent = crazy ? "疯狂模式" : "常规模式";
+  modeBtn.dataset.mode = crazy ? "crazy" : "normal";
+  modeBtn.setAttribute("aria-checked", crazy ? "true" : "false");
   modeBtn.title = crazy ? "疯狂模式：显示金手指，火力与特效全开" : "常规模式：原版体验，隐藏金手指";
 }
 if (modeBtn) {
