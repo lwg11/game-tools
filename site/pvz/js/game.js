@@ -9,6 +9,7 @@ import { ProgressStore } from "../../assets/js/progress.js";
 import { initAccount } from "../../assets/js/account.js";
 import { toast, icon } from "../../assets/js/ui.js";
 import { audio } from "../../assets/js/audio.js";
+import { isCrazy, applyBodyMode } from "../../assets/js/mode.js";
 import {
   PLANTS, PLANT_ORDER, ZOMBIES, LEVELS, TOTAL_LEVELS, getLevel,
 } from "./levels.js";
@@ -145,7 +146,7 @@ class Plant {
     this.alive = true;
     this.age = rand(0, 2);
     this.timer = this.def.produce ? 6
-      : this.def.fireRate ? 0.7
+      : this.def.fireRate ? 0.7 * (game.crazy ? 0.5 : 1)
         : this.def.tick ? 0.5
           : this.def.interval ? 5 : 0;
     this.arm = 0;
@@ -187,7 +188,7 @@ class Plant {
       }
       this.timer -= dt;
       if (this.timer <= 0 && this._hasTarget()) {
-        this.timer = def.fireRate;
+        this.timer = def.fireRate * (this.game.crazy ? 0.5 : 1);
         if (def.laser) {
           this._fireLaser();
         } else {
@@ -204,7 +205,9 @@ class Plant {
       if (this.timer <= 0) {
         this.timer = def.tick;
         for (const z of this.game.zombies) {
-          if (z.alive && z.row === this.row && Math.abs(z.x - this.x) < 54) z.takeDamage(def.damage);
+          if (z.alive && z.row === this.row && Math.abs(z.x - this.x) < 54) {
+            z.takeDamage(def.damage * (this.game.crazy ? 2 : 1));
+          }
         }
       }
     } else if (this.id === "magnet") {
@@ -348,7 +351,7 @@ class Plant {
   _fireLaser() {
     const def = this.def;
     this.shootPulse = 0.26;
-    this.game.fireLaser(this.x + 30, this.y - 54, this.row, def.damage);
+    this.game.fireLaser(this.x + 30, this.y - 54, this.row, def.damage * (this.game.crazy ? 2 : 1));
   }
 
   takeDamage(amount) {
@@ -675,7 +678,7 @@ class Pea {
     this.x = x;
     this.y = y;
     this.row = row;
-    this.damage = damage;
+    this.damage = damage * (game.crazy ? 2 : 1);
     this.snow = snow;
     this.splash = splash;
     this.splashDamage = splashDamage;
@@ -920,6 +923,8 @@ class PvZGame {
     this.canvas = document.getElementById("canvas");
     this.ctx = this.canvas.getContext("2d");
     this.isMobile = isMobile;
+    this.crazy = isCrazy();
+    applyBodyMode();
     this.sfx = new PvzSfx();
     this.store = new ProgressStore("pvz");
     this.level = null;
@@ -935,6 +940,7 @@ class PvZGame {
     this.particles = [];
     this.texts = [];
     this.beams = [];
+    this.scorches = [];
     this.mowers = [];
     this.grid = [];
     this.cardRects = [];
@@ -1179,6 +1185,7 @@ class PvZGame {
     this.time = 0;
     this.elapsed = 0;
     this.sun = this.level.startSun || 150;
+    if (this.crazy) this.sun = Math.max(this.sun, 400);
     this.plants = [];
     this.zombies = [];
     this.peas = [];
@@ -1186,6 +1193,7 @@ class PvZGame {
     this.particles = [];
     this.texts = [];
     this.beams = [];
+    this.scorches = [];
     this.grid = Array.from({ length: GRID.rows }, () => Array(GRID.cols).fill(null));
     this.mowers = [];
     for (let r = 0; r < GRID.rows; r++) this.mowers.push(new Mower(this, r));
@@ -1200,7 +1208,7 @@ class PvZGame {
     this.endlessWave = 0;
     this.nextWaveAt = this.level.endless ? 8 : 0;
     this.banner = null;
-    this.sunTimer = 7;
+    this.sunTimer = this.crazy ? 3 : 7;
     this.shake = 0;
     this.lastRow = -1;
     this.sameRowCount = 0;
@@ -1593,21 +1601,40 @@ class PvZGame {
 
   // ------------------------------------------------------------ 爆炸 / 阳光
   explodeAt(x, y, radius, damage, color) {
-    this.shake = Math.max(this.shake, 8);
+    const crazy = this.crazy;
+    const r = radius * (crazy ? 1.45 : 1);
+    const dmg = damage * (crazy ? 1.6 : 1);
+    this.shake = Math.max(this.shake, crazy ? 16 : 8);
     for (const z of this.zombies) {
       if (!z.alive) continue;
       const d = Math.hypot(z.x - x, z.y - 46 - y);
-      if (d < radius) z.takeDamage(damage);
+      if (d < r) z.takeDamage(dmg);
     }
-    for (let i = 0; i < 26; i++) {
+    const count = crazy ? 54 : 26;
+    for (let i = 0; i < count; i++) {
+      const fire = Math.random() < 0.45;
       this.particles.push({
         x: x + rand(-12, 12), y: y + rand(-12, 12),
-        vx: rand(-220, 220), vy: rand(-300, -20),
+        vx: rand(-220, 220) * (crazy ? 1.35 : 1),
+        vy: rand(-300, -20) * (crazy ? 1.25 : 1),
         life: rand(0.3, 0.9), maxLife: 0.9, size: rand(2, 7),
-        color: Math.random() < 0.5 ? color : "#ffd35e",
-        kind: Math.random() < 0.3 ? "smoke" : "spark", gravity: 500,
+        color: fire ? "#ff7a2a" : Math.random() < 0.5 ? color : "#ffd35e",
+        kind: fire ? "fire" : Math.random() < 0.3 ? "smoke" : "spark", gravity: 500,
       });
     }
+    // 火球核心 + 地面火圈
+    for (let i = 0; i < (crazy ? 5 : 3); i++) {
+      this.particles.push({
+        x: x + rand(-8, 8), y: y + rand(-8, 8), vx: 0, vy: rand(-60, -20),
+        life: 0.3 + i * 0.07, maxLife: 0.3 + i * 0.07,
+        size: (crazy ? 84 : 52) + i * 14, color: "#ffb347", kind: "fire", gravity: 0,
+      });
+    }
+    const row = clamp(Math.round((y - GRID.y) / GRID.cell), 0, GRID.rows - 1);
+    this.scorches.push({
+      x, y: groundY(row), r: r * (crazy ? 0.9 : 0.7),
+      life: 3.4, max: 3.4,
+    });
     this.sfx.boom();
   }
 
@@ -1621,20 +1648,23 @@ class PvZGame {
   }
 
   burnLane(row, damage) {
-    this.shake = Math.max(this.shake, 6);
+    this.shake = Math.max(this.shake, this.crazy ? 12 : 6);
     for (const z of this.zombies) {
-      if (z.alive && z.row === row) z.takeDamage(damage);
+      if (z.alive && z.row === row) z.takeDamage(damage * (this.crazy ? 1.5 : 1));
     }
-    for (let i = 0; i < 42; i++) {
+    const count = this.crazy ? 90 : 42;
+    for (let i = 0; i < count; i++) {
+      const fire = Math.random() < 0.55;
       this.particles.push({
         x: GRID.x + rand(0, GRID_W),
         y: groundY(row) - rand(10, 90),
         vx: rand(-40, 40), vy: rand(-160, -20),
         life: rand(0.3, 0.9), maxLife: 0.9, size: rand(3, 9),
-        color: Math.random() < 0.6 ? "#ff8a3a" : "#ffd35e",
-        kind: "spark", gravity: -40,
+        color: fire ? "#ff7a2a" : Math.random() < 0.6 ? "#ff8a3a" : "#ffd35e",
+        kind: fire ? "fire" : "spark", gravity: -40,
       });
     }
+    this.scorches.push({ x: GRID.x + GRID_W / 2, y: groundY(row), r: GRID_W * 0.5, life: 3.8, max: 3.8 });
     this.sfx.boom();
   }
 
@@ -1718,7 +1748,7 @@ class PvZGame {
 
     this.sunTimer -= dt;
     if (this.sunTimer <= 0) {
-      this.sunTimer = rand(8.5, 11);
+      this.sunTimer = this.crazy ? rand(3.4, 4.8) : rand(8.5, 11);
       this.spawnSkySun();
     }
     if (this.cheatInfiniteSun) this.sun = Math.max(this.sun, 9999);
@@ -1737,6 +1767,11 @@ class PvZGame {
   }
 
   _updateEffects(dt) {
+    for (let i = this.scorches.length - 1; i >= 0; i--) {
+      const s = this.scorches[i];
+      s.life -= dt;
+      if (s.life <= 0) this.scorches.splice(i, 1);
+    }
     for (let i = this.beams.length - 1; i >= 0; i--) {
       const b = this.beams[i];
       b.life -= dt;
@@ -2253,6 +2288,7 @@ class PvZGame {
     if (this.bg) ctx.drawImage(this.bg, 0, 0);
     this._drawAmbient(ctx);
     this._drawCloudShadows(ctx);
+    this._drawScorches(ctx);
 
     for (const m of this.mowers) m.draw(ctx);
 
@@ -2320,6 +2356,57 @@ class PvZGame {
       ctx.beginPath();
       ctx.ellipse(x, 240 + i * 165, 150, 46, 0, 0, TAU);
       ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  _drawScorches(ctx) {
+    if (!this.scorches.length) return;
+    ctx.save();
+    for (const s of this.scorches) {
+      const k = clamp(s.life / s.max, 0, 1);
+      const grow = 1 + (1 - k) * 0.18;
+      // 焦痕主体
+      ctx.globalAlpha = 0.38 * k;
+      const grad = ctx.createRadialGradient(s.x, s.y, s.r * 0.1, s.x, s.y, s.r * grow);
+      grad.addColorStop(0, "rgba(24, 16, 10, .92)");
+      grad.addColorStop(0.55, "rgba(46, 30, 16, .6)");
+      grad.addColorStop(1, "rgba(60, 40, 20, 0)");
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.ellipse(s.x, s.y, s.r * grow, s.r * 0.42 * grow, 0, 0, TAU);
+      ctx.fill();
+      // 前段余烬与火舌
+      if (k > 0.3) {
+        const ember = (k - 0.3) / 0.7;
+        const heat = 0.55 + ember * 0.45;
+        ctx.globalAlpha = 0.95 * heat;
+        ctx.globalCompositeOperation = "lighter";
+        const glow = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, s.r * 0.85 * grow);
+        glow.addColorStop(0, "rgba(255, 224, 140, .95)");
+        glow.addColorStop(0.5, "rgba(255, 130, 45, .5)");
+        glow.addColorStop(1, "rgba(255, 80, 20, 0)");
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.ellipse(s.x, s.y - 4, s.r * 0.85 * grow, s.r * 0.36 * grow, 0, 0, TAU);
+        ctx.fill();
+        // 跳动的火舌
+        const tongues = 8;
+        for (let i = 0; i < tongues; i++) {
+          const ox = Math.sin(i * 1.9 + s.x * 0.01) * s.r * 0.7;
+          const flick = 0.65 + Math.sin(this.time * 13 + i * 2.3) * 0.35;
+          const h = (28 + (i % 4) * 9) * flick * heat;
+          const sway = Math.sin(this.time * 9 + i * 1.4) * 6;
+          ctx.fillStyle = i % 2 ? "rgba(255, 176, 70, .7)" : "rgba(255, 100, 30, .62)";
+          ctx.beginPath();
+          ctx.moveTo(s.x + ox - 7, s.y + 2);
+          ctx.quadraticCurveTo(s.x + ox + sway, s.y + 2 - h * 0.55, s.x + ox + sway * 0.4, s.y + 2 - h);
+          ctx.quadraticCurveTo(s.x + ox + 7, s.y + 2 - h * 0.5, s.x + ox + 7, s.y + 2);
+          ctx.closePath();
+          ctx.fill();
+        }
+        ctx.globalCompositeOperation = "source-over";
+      }
     }
     ctx.restore();
   }
@@ -2633,6 +2720,19 @@ class PvZGame {
         ctx.beginPath();
         ctx.arc(p.x, p.y, r, 0, TAU);
         ctx.fill();
+      } else if (p.kind === "fire") {
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";
+        const r = p.size * (1.3 - a * 0.3);
+        const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
+        g.addColorStop(0, `rgba(255,246,200,${0.9 * a})`);
+        g.addColorStop(0.45, `rgba(255,150,50,${0.55 * a})`);
+        g.addColorStop(1, "rgba(255,60,20,0)");
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, r, 0, TAU);
+        ctx.fill();
+        ctx.restore();
       } else if (p.kind === "shell") {
         ctx.save();
         ctx.translate(p.x, p.y);
