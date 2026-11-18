@@ -18,6 +18,8 @@ import {
   WORLD, DAY_LENGTH, TIME, PALETTE, clamp, lerp, angleLerp, rgbaOf,
 } from "./common.js";
 import { buildWorld } from "./city.js";
+import { Player } from "./player.js";
+import { VehicleSystem } from "./vehicle.js";
 
 // 固定步长
 const STEP = 1 / 60;
@@ -32,6 +34,8 @@ class InputManager {
     this.lookDX = 0;
     this.lookDY = 0;
     this.touchMove = { x: 0, y: 0 };   // 移动端左摇杆（-1..1）
+    this.touchLookX = 0;               // 移动端右摇杆（转向/视角）
+    this.touchLookY = 0;
     this.touchFire = false;            // 移动端射击
     this.touchButtons = Object.create(null); // A/B/上车/手刹
     this.pointerLocked = false;
@@ -239,27 +243,53 @@ export class ViceCityGame {
     if (!this.headless) {
       this._setLoadText("正在生成车辆与行人…");
       this._setLoadFill(70);
-      this._buildPlaceholderActors();
+      this.player = new Player(this);
+      this.vehicles = new VehicleSystem(this, 26);
       this._setLoadFill(100);
       this._showMenu();
       this._raf = requestAnimationFrame((ts) => this._loop(ts));
     } else {
-      this._buildPlaceholderActors();
+      this.player = new Player(this);
+      this.vehicles = new VehicleSystem(this, 26);
       this.running = true;
     }
     await this.store.init();
+    // 进度同步（commit 8 进一步同步任务/武器）
+    if (this.player) {
+      this.player.money = Number(this.store.state.money) || 0;
+    }
     return this;
   }
 
-  _buildPlaceholderActors() {
-    // 占位玩家（player.js 实现后替换）
-    const geo = new THREE.BoxGeometry(0.6, 1.1, 0.6);
-    const mat = new THREE.MeshLambertMaterial({ color: PALETTE.player });
-    const body = new THREE.Mesh(geo, mat);
-    body.position.set(0, 0.55, 0);
-    body.castShadow = this.headless ? false : true;
-    this.scene.add(body);
-    this.playerMesh = body;
+  /** 上车/下车 hook（sfx 接入后续 commit） */
+  onEnterVehicle(car) {
+    this.inVehicle = true;
+    if (this.sfx && this.sfx.engineOn) this.sfx.engineOn(true, car);
+    if (!this.headless) this.showToast(`已进入 ${car.def.name} · 空格手刹 / E 下车`);
+  }
+
+  onExitVehicle(car) {
+    this.inVehicle = false;
+    if (this.sfx && this.sfx.engineOff) this.sfx.engineOff();
+  }
+
+  // ------------------------------------------------------------ HUD 同步
+  _syncHud() {
+    if (this.headless || !this.player) return;
+    const p = this.player;
+    this.setMoney(p.money);
+    this.setBars(p.hp, p.maxHp, p.armor);
+    this.setClock(this.worldHour);
+    this.setVehiclePanel(p.inVehicle, p.vehicle ? p.vehicle.kmh : 0, p.vehicle ? p.vehicle.hp / p.vehicle.maxHp : 1);
+    this.setCrosshair(!p.inVehicle);
+    // 交互提示
+    if (p.inVehicle) {
+      this.setInteractTip('按 <b>E</b> 下车');
+    } else if (this.vehicles && this.vehicles.nearestEnterable(p.pos.x, p.pos.z, 3.4)) {
+      this.setInteractTip('按 <b>E</b> 上车');
+    } else {
+      this.setInteractTip(null);
+    }
   }
 
   // ------------------------------------------------------------ 主循环
@@ -281,42 +311,27 @@ export class ViceCityGame {
     this._raf = requestAnimationFrame((t) => this._loop(t));
   }
 
-  /** 每步更新（step = 固定 1/60s） */
+    /** 每步更新（step = 固定 1/60s） */
   update(dt) {
     // 昼夜推进：1 小时 = DAY_LENGTH/24 秒
     this.worldHour = (this.worldHour + (dt * 24 / DAY_LENGTH) * this.speedMultiplier) % 24;
     this._applyDayNight();
 
-    // 相机朝向（相对世界 yaw）
-    const axes = this.input.moveAxes();
-    if (this.playerMesh) {
-      // 占位逻辑：WASD 移动
-      const speed = 12;
-      const yaw = this.cameraYaw;
-      const fx = Math.sin(yaw);
-      const fz = Math.cos(yaw);
-      this.playerMesh.position.x += (fx * -axes.y + Math.cos(yaw) * axes.x) * speed * dt;
-      this.playerMesh.position.z += (fz * -axes.y - Math.sin(yaw) * axes.x) * speed * dt;
-      this.playerMesh.position.x = clamp(this.playerMesh.position.x, -WORLD.half + 4, WORLD.half - 4);
-      this.playerMesh.position.z = clamp(this.playerMesh.position.z, -WORLD.half + 4, WORLD.half - 4);
-      this.playerMesh.rotation.y = yaw + Math.PI;
-    }
     // 鼠标视角
     const look = this.input.consumeLook();
     this.cameraYaw -= look.dx * 0.004;
     this.cameraPitch = clamp(this.cameraPitch + look.dy * 0.003, -0.05, 1.15);
 
-    // 占位车跟随（保留供后续 commit 接管）
-    if (this.placeholderCar) {
-      // 待 vehicle.js 实现后移除占位逻辑
-    }
-
-    // 城市/实体模块
-    if (this.world && this.world.update) this.world.update(dt);
+    // 玩家（步行/驾驶）与载具系统
     if (this.player && this.player.update) this.player.update(dt);
+    if (this.vehicles && this.vehicles.update) {
+      this.vehicles.update(dt, this.player ? this.player.pos : { x: 0, z: 0 });
+    }
+    if (this.world && this.world.update) this.world.update(dt);
     if (this.sfx && this.sfx.update) this.sfx.update(dt);
 
     this._updateCamera();
+    this._syncHud();
   }
 
   _applyDayNight() {
@@ -347,19 +362,25 @@ export class ViceCityGame {
   }
 
   _updateCamera() {
-    // 第三人称跟随
-    if (this.playerMesh) {
-      const target = this.playerMesh.position;
-      const dist = this.cameraDist;
-      const cy = Math.cos(this.cameraPitch);
-      const cx = Math.sin(this.cameraYaw) * cy * dist;
-      const cz = Math.cos(this.cameraYaw) * cy * dist;
-      const yr = Math.sin(this.cameraPitch) * dist;
-      this.camera.position.set(target.x - cx, target.y + yr + 2, target.z - cz);
-      this.camera.lookAt(target.x, target.y + 1.5, target.z);
-    } else {
+    const target = this.player ? this.player.getCameraTarget() : null;
+    if (!target) {
       this.camera.lookAt(0, 0, 0);
+      return;
     }
+    // 驾驶时摄像机向后拉到车后
+    if (target.inCar) {
+      this.cameraYaw = angleLerp(this.cameraYaw, target.angle, 0.06);
+      this.cameraDist = lerp(this.cameraDist, 12, 0.05);
+    } else {
+      this.cameraDist = lerp(this.cameraDist, 7.5, 0.08);
+    }
+    const dist = this.cameraDist;
+    const cy = Math.cos(this.cameraPitch);
+    const cx = Math.sin(this.cameraYaw) * cy * dist;
+    const cz = Math.cos(this.cameraYaw) * cy * dist;
+    const yr = Math.sin(this.cameraPitch) * dist;
+    this.camera.position.set(target.x - cx, yr + 2.2, target.z - cz);
+    this.camera.lookAt(target.x, 1.6, target.z);
   }
 
   render() {

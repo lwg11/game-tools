@@ -657,10 +657,11 @@ export class City {
       for (let k = -half + 50; k < half - 60 && count < 70; k += 70) {
         if (rnd() < 0.55) continue;
         const side = rnd() < 0.5 ? 1 : -1;
+        // 沿道路停放（右侧通行）：东侧朝 +Z(0)，西侧朝 -Z(π)
         this.parkingSpots.push({
           x: p + side * (roadW / 2 + 2.2),
           z: k + (rnd() - 0.5) * 30,
-          angle: side > 0 ? Math.PI / 2 : -Math.PI / 2,
+          angle: side > 0 ? 0 : Math.PI,
         });
         count++;
       }
