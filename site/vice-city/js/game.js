@@ -23,6 +23,7 @@ import { VehicleSystem } from "./vehicle.js";
 import { PedestrianSystem } from "./ped.js";
 import { PoliceSystem } from "./police.js";
 import { TrafficSystem } from "./traffic.js";
+import { WeaponSystem, WEAPONS, PLAYER_WEAPON_ORDER, UNLOCKED_AT_START } from "./weapons.js";
 
 // 固定步长
 const STEP = 1 / 60;
@@ -247,19 +248,25 @@ export class ViceCityGame {
       this._setLoadText("正在生成车辆与行人…");
       this._setLoadFill(70);
       this.player = new Player(this);
+      this.player.weapons = PLAYER_WEAPON_ORDER.slice(0, 1 + UNLOCKED_AT_START);
       this.vehicles = new VehicleSystem(this, 26);
       this.traffic = new TrafficSystem(this, 8);
       this.police = new PoliceSystem(this);
       this.peds = new PedestrianSystem(this, 36);
+      this.weapons = new WeaponSystem(this);
+      const _w0 = WEAPONS[this.player.weapons[0]];
+      this.setWeapon(_w0.icon, _w0.name, "");
       this._setLoadFill(100);
       this._showMenu();
       this._raf = requestAnimationFrame((ts) => this._loop(ts));
     } else {
       this.player = new Player(this);
+      this.player.weapons = PLAYER_WEAPON_ORDER.slice(0, 1 + UNLOCKED_AT_START);
       this.vehicles = new VehicleSystem(this, 26);
       this.traffic = new TrafficSystem(this, 8);
       this.police = new PoliceSystem(this);
       this.peds = new PedestrianSystem(this, 36);
+      this.weapons = new WeaponSystem(this);
       this.running = true;
     }
     await this.store.init();
@@ -400,6 +407,7 @@ export class ViceCityGame {
     if (this.peds && this.peds.update) {
       this.peds.update(dt, this.player.pos.x, this.player.pos.z);
     }
+    if (this.weapons && this.weapons.update) this.weapons.update(dt);
     if (this.police && this.police.update) {
       this.police.update(dt, !this.player.inVehicle, this.player.speed || (this.player.vehicle ? Math.abs(this.player.vehicle.kmh / 3.6) : 0));
     }

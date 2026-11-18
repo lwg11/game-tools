@@ -173,9 +173,15 @@ export class PoliceSystem {
             car.damage(relSpeed * 0.4);
           }
         }
-        // 持续贴近：警察开枪（玩家掉血）
-        if (dist < 9 && car.kmh < 15) {
-          game.player.damage(1.2);
+        // 持续贴近：警察开枪（玩家掉血 + 曳光）
+        if (dist < 7 && car.kmh < 15) {
+          game.player.damage(0.6);
+          car._shootT = (car._shootT || 0) - dt;
+          if (car._shootT <= 0 && game.weapons) {
+            car._shootT = 0.3;
+            game.weapons.fireTracer(car.pos.x, 1.2, car.pos.z, ppos.x, 1.2, ppos.z);
+            if (game.sfx && game.sfx.playShot) game.sfx.playShot("pistol");
+          }
         }
       } else if (playerOnFoot) {
         // 徒步：高速撞倒玩家
