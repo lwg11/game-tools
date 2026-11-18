@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0c0e12">
-  <meta name="description" content="石器游戏厅：石器大战、植物大战僵尸加强版、保卫萝卜、精灵宝可梦，手机与电脑打开即玩，进度随账号云端保存。">
+  <meta name="description" content="石器游戏厅：石器大战、植物大战僵尸加强版、保卫萝卜、精灵宝可梦，还有 3D 开放世界罪恶都市，手机与电脑打开即玩，进度随账号云端保存。">
   <title>石器游戏厅 · 经典怀旧游戏</title>
   <link rel="icon" href="./favicon.svg" type="image/svg+xml">
   <link rel="manifest" href="./manifest.webmanifest">
@@ -51,7 +51,7 @@
           <div class="eyebrow"><span class="pulse"></span>手机 · 电脑 · 打开即玩</div>
           <h1>回到石器时代<br><span class="hl">守住最后草坪</span></h1>
           <p class="hero-sub">
-            四款刻在记忆里的经典：投石、守草坪、摆炮塔，再去丰缘地区收服宝可梦。
+            五款刻在记忆里的经典：投石、守草坪、摆炮塔、收服宝可梦，再去 1986 年的赛博迈阿密——3D 开放世界罪恶都市。
             手机触控与电脑键鼠自动适配，关卡进度跟着账号走。
           </p>
           <div class="hero-actions">
@@ -62,8 +62,8 @@
             <button class="btn ghost" id="howBtn" type="button">玩法与存档说明</button>
           </div>
           <div class="hero-stats">
-            <div><strong>4</strong><span>款经典游戏</span></div>
-            <div><strong>40</strong><span>个手工关卡</span></div>
+            <div><strong>5</strong><span>款游戏</span></div>
+            <div><strong>40+</strong><span>个关卡</span></div>
             <div><strong>∞</strong><span>无尽挑战</span></div>
           </div>
         </div>
@@ -169,7 +169,7 @@
         <div class="section-head">
           <div>
             <h2>选择游戏</h2>
-            <p>四款都支持手机横屏与电脑全屏，进度自动保存。</p>
+            <p>五款都支持手机与电脑，进度自动保存。</p>
           </div>
           <span class="device-tag" id="deviceTag2"></span>
         </div>
@@ -519,9 +519,94 @@
                 <div class="bar green"><i id="pkBar" style="width:0%"></i></div>
                 <span id="pkProgress">读取中…</span>
               </div>
+          <article class="game-card" data-game="vice-city">
+            <a class="cover" href="./vice-city/" aria-label="进入罪恶都市">
+              <svg viewBox="0 0 640 360" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+                <defs>
+                  <linearGradient id="vcSky" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0" stop-color="#1a0f3a"/><stop offset=".45" stop-color="#6b1d6e"/>
+                    <stop offset=".78" stop-color="#ff5fa2"/><stop offset="1" stop-color="#ffb36b"/>
+                  </linearGradient>
+                  <linearGradient id="vcRoad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0" stop-color="#2c2440"/><stop offset="1" stop-color="#0d0a15"/>
+                  </linearGradient>
+                  <linearGradient id="vcCar" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0" stop-color="#fffb96"/><stop offset="1" stop-color="#01cdfe"/>
+                  </linearGradient>
+                </defs>
+                <rect width="640" height="360" fill="url(#vcSky)"/>
+                <circle cx="320" cy="196" r="70" fill="#ffd8ec"/>
+                <circle cx="320" cy="196" r="96" fill="#ff9fd2" opacity=".22"/>
+                <g fill="#22103e">
+                  <path d="M0 236V118h26l8-16 8 16h40v118z"/>
+                  <path d="M84 236v-72h52v72z"/>
+                  <path d="M140 236V96h14l6-12 6 12h30v140z"/>
+                  <path d="M364 236v-58h46v58z"/>
+                  <path d="M414 236v-96h34l8-14 8 14h38v96z"/>
+                  <path d="M472 236v-52h58v52z"/>
+                </g>
+                <g fill="#ff71ce" opacity=".8">
+                  <rect x="150" y="112" width="5" height="6"/><rect x="162" y="112" width="5" height="6"/><rect x="174" y="112" width="5" height="6"/>
+                  <rect x="150" y="130" width="5" height="6"/><rect x="174" y="130" width="5" height="6"/>
+                  <rect x="424" y="112" width="5" height="6"/><rect x="436" y="112" width="5" height="6"/><rect x="448" y="112" width="5" height="6"/>
+                </g>
+                <g fill="#01cdfe" opacity=".8">
+                  <rect x="20" y="132" width="5" height="6"/><rect x="34" y="132" width="5" height="6"/><rect x="48" y="132" width="5" height="6"/>
+                  <rect x="34" y="150" width="5" height="6"/><rect x="48" y="150" width="5" height="6"/>
+                  <rect x="372" y="192" width="5" height="6"/><rect x="384" y="192" width="5" height="6"/><rect x="396" y="192" width="5" height="6"/>
+                  <rect x="482" y="188" width="5" height="6"/><rect x="496" y="188" width="5" height="6"/>
+                </g>
+                <rect x="0" y="236" width="640" height="16" fill="#3a2a55"/>
+                <rect x="0" y="252" width="640" height="108" fill="url(#vcRoad)"/>
+                <g stroke="#fffb96" stroke-width="4" opacity=".5">
+                  <path d="M0 308h64M118 308h64M236 308h64M354 308h64M472 308h64M590 308h50"/>
+                </g>
+                <g transform="translate(74 240)" fill="#0a1024">
+                  <path d="M0 54c-3-22 0-42 6-54l7 4c-5 12-8 30-6 50z"/>
+                  <path d="M8 4c-14-8-28-6-38 2 10-1 20 1 28 6z"/>
+                  <path d="M8 4c14-8 28-6 38 2-10-1-20 1-28 6z"/>
+                  <path d="M8 4c-8-14-6-26 4-34 0 10 1 20-4 34z"/>
+                  <path d="M8 4c8-14 6-26-4-34 0 10-1 20 4 34z"/>
+                  <circle cx="6" cy="2" r="3"/><circle cx="12" cy="3" r="3"/>
+                </g>
+                <g transform="translate(320 264)">
+                  <ellipse cx="58" cy="42" rx="92" ry="10" fill="#000" opacity=".4"/>
+                  <rect x="6" y="8" width="104" height="28" rx="13" fill="url(#vcCar)"/>
+                  <rect x="26" y="-8" width="60" height="20" rx="10" fill="url(#vcCar)"/>
+                  <rect x="32" y="-3" width="22" height="12" rx="4" fill="#0a1428"/>
+                  <rect x="60" y="-3" width="22" height="12" rx="4" fill="#0a1428"/>
+                  <circle cx="26" cy="36" r="11" fill="#0a1428"/>
+                  <circle cx="88" cy="36" r="11" fill="#0a1428"/>
+                  <circle cx="26" cy="36" r="4" fill="#c9d4e8"/>
+                  <circle cx="88" cy="36" r="4" fill="#c9d4e8"/>
+                  <rect x="104" y="16" width="9" height="5" rx="2" fill="#ffe98a"/>
+                  <rect x="6" y="16" width="8" height="5" rx="2" fill="#ff3a5e"/>
+                </g>
+                <text x="30" y="330" font-family="Arial Black, sans-serif" font-size="24" fill="#fff0f7" letter-spacing="3">VICE CITY</text>
+                <text x="32" y="348" font-family="Arial, sans-serif" font-size="11" fill="#ffc7e8" letter-spacing="4" opacity=".9">罪恶都市 · 3D 开放世界</text>
+              </svg>
+              <span class="badge hot">3D 开放世界</span>
+              <span class="play-fab">
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>
+              </span>
+            </a>
+            <div class="card-body">
+              <div class="card-title-row">
+                <div>
+                  <h3>罪恶都市</h3>
+                  <p class="card-sub">Vice City · 1986</p>
+                </div>
+                <span class="level-pill" id="vcLevel">3 主线 · 自由探索</span>
+              </div>
+              <p class="card-desc">3D 开放世界：开 6 种车横穿海滨都市，5 种武器火并、1-5 星通缉、3 段主线任务、合成器电台与警笛全配齐。</p>
+              <div class="tags"><span>3D 开放世界</span><span>驾驶火并</span><span>1-5 星通缉</span></div>
+              <div class="progress-line">
+                <div class="bar"><i id="vcBar" style="width:0%"></i></div>
+                <span id="vcProgress">读取中…</span>
+              </div>
               <div class="card-actions">
-                <span class="sync-hint" id="pkSync">游客进度 · 登录可同步</span>
-                <a class="btn primary" href="./pokemon/" id="pkEnter">开始游戏</a>
+                <span class="sync-hint" id="vcSync">游客进度 · 登录可同步</span>
+                <a class="btn primary" href="./vice-city/" id="vcEnter">开始游戏</a>
               </div>
             </div>
           </article>
@@ -541,7 +626,7 @@
       <div class="modal-head">
         <div>
           <div class="modal-title">怎么玩 & 怎么存档</div>
-          <div class="modal-sub">四款游戏的操作与进度规则</div>
+          <div class="modal-sub">五款游戏的操作与进度规则</div>
         </div>
         <button class="modal-close" id="howClose" aria-label="关闭">✕</button>
       </div>
@@ -564,6 +649,10 @@
         </div>
         <div class="how-item">
           <span class="how-num">5</span>
+          <div><h4>罪恶都市 · Vice City</h4><p>电脑：WASD 开车、E 上下车/接任务、鼠标左键开火、1-5/Q 换枪、R 换电台、空格手刹。<br>手机：左侧摇杆移动或驾驶，右侧按钮开火/上下车/换枪。<br>开车撞人、开枪都会涨通缉星，被警察围住就 BUSTED。</p></div>
+        </div>
+        <div class="how-item">
+          <span class="how-num">6</span>
           <div><h4>账号与进度</h4><p>支持用户名或手机号登录。手机号绑定后全局唯一，可直接用于登录，不需要验证码。<br>未登录也能玩，进度保存在当前浏览器；登录时自动合并两者。</p></div>
         </div>
       </div>

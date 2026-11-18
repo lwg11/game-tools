@@ -28,7 +28,7 @@ if (modeBtn) {
   window.addEventListener("gt:mode-changed", paintMode);
 }
 
-const TOTAL = { "stone-wars": 20, pvz: 12, carrot: 8, pokemon: 8 };
+const TOTAL = { "stone-wars": 20, pvz: 12, carrot: 8 };
 const els = {
   "stone-wars": {
     bar: document.getElementById("swBar"),
@@ -54,6 +54,12 @@ const els = {
     sync: document.getElementById("pkSync"),
     enter: document.getElementById("pkEnter"),
   },
+  "vice-city": {
+    bar: document.getElementById("vcBar"),
+    text: document.getElementById("vcProgress"),
+    sync: document.getElementById("vcSync"),
+    enter: document.getElementById("vcEnter"),
+  },
 };
 
 function starCount(stars) {
@@ -63,6 +69,16 @@ function starCount(stars) {
 function paint(gameId, progress, isGuest) {
   const el = els[gameId];
   if (!el) return;
+  if (gameId === "vice-city") {
+    const money = Number(progress.money) || 0;
+    const missions = Number(progress.missionsDone) || 0;
+    const weapons = Array.isArray(progress.weapons) ? progress.weapons.length : 1;
+    el.bar.style.width = Math.min(100, Math.round((missions / 3) * 100)) + "%";
+    el.text.textContent = `任务 ${missions}/3 · 武器 ${weapons} · $${money.toLocaleString()}`;
+    el.sync.textContent = isGuest ? "游客进度 · 登录可同步" : "已登录 · 云端存档";
+    el.enter.textContent = missions > 0 ? "继续任务" : "进入罪恶城";
+    return;
+  }
   if (gameId === "pokemon") {
     const caught = Object.keys(progress.caught || {}).length;
     const questsDone = Number(progress.questsDone) || 0;
