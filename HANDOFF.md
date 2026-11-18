@@ -72,7 +72,6 @@ js/
 
 全部功能 commit 已入库（13 个，如上节 1 + 1.2），仅 `tools/_vc_headless_test.mjs`
 作为回归工具入库；临时验证脚本（截图/结构断言）不提交。
-构建产物 `dist/vice-city.html` 同步生成。
 
 ## 四、剩余工作（按优先级）
 
