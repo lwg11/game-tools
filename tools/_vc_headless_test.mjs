@@ -384,6 +384,39 @@ if (M.missions[5].status !== "done") throw new Error("m6 not done");
 if (!player.weapons.includes("rifle")) throw new Error("m6 did not unlock rifle");
 console.log("m6 eliminate OK, rifle unlocked");
 
+// ---- 出租车支线
+{
+  const T = game.taxi;
+  if (!T) throw new Error("taxi system missing");
+  const taxi = game.vehicles.cars.find((c) => c.def.taxi && !c.dead);
+  if (!taxi) throw new Error("no parked taxi found");
+  player.pos.set(taxi.pos.x + 2, 0, taxi.pos.z);
+  player.enterVehicle(taxi);
+  if (!player.inVehicle || player.vehicle !== taxi) throw new Error("did not enter taxi");
+  const money0 = player.money;
+  // 靠边停稳 0.6s → 自动上客（最多重试 5 次，防目的地采样过近）
+  for (let tries = 0; tries < 5 && T.state !== "delivering"; tries++) {
+    taxi.vx = taxi.vz = 0;
+    for (let i = 0; i < 45; i++) {
+      taxi.vx = taxi.vz = 0;
+      game.update(1 / 60);
+    }
+  }
+  if (T.state !== "delivering") throw new Error("taxi did not pick up, state=" + T.state);
+  const fare = T.fare;
+  if (!(fare > 80)) throw new Error("taxi fare too small: " + fare);
+  // 直接开到目的地
+  taxi.pos.x = T.dest.x;
+  taxi.pos.z = T.dest.z;
+  taxi.vx = taxi.vz = 0;
+  player.pos.set(taxi.pos.x, 0, taxi.pos.z);
+  for (let i = 0; i < 5; i++) game.update(1 / 60);
+  if (T.state !== "idle") throw new Error("taxi fare not completed, state=" + T.state);
+  if (player.money !== money0 + fare) throw new Error(`taxi fare wrong: ${player.money} vs ${money0} + ${fare}`);
+  if ((game.store.state.taxiDone || 0) < 1) throw new Error("taxiDone not saved");
+  console.log("taxi OK, fare =", fare, "taxiDone =", game.store.state.taxiDone);
+}
+
 // ---- 音效系统（headless 下安全跳过/无 ctx）
 if (!game.sfx) throw new Error("sfx missing");
 game.sfx.ensure();

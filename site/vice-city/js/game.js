@@ -25,6 +25,7 @@ import { PoliceSystem } from "./police.js";
 import { TrafficSystem } from "./traffic.js";
 import { SfxSystem } from "./sfx.js";
 import { MissionSystem } from "./missions.js";
+import { TaxiSystem } from "./taxi.js";
 import { WeaponSystem, WEAPONS, PLAYER_WEAPON_ORDER, UNLOCKED_AT_START } from "./weapons.js";
 
 // 固定步长
@@ -345,8 +346,9 @@ export class ViceCityGame {
       this.police = new PoliceSystem(this);
       this.peds = new PedestrianSystem(this, 36);
       this.weapons = new WeaponSystem(this);
-      this.sfx = new SfxSystem(this);
-      this.missions = new MissionSystem(this);
+this.sfx = new SfxSystem(this);
+this.missions = new MissionSystem(this);
+this.taxi = new TaxiSystem(this);
       const _w0 = WEAPONS[this.player.weapons[0]];
       this.setWeapon(_w0.icon, _w0.name, "");
       this.setMission("任务", "前往青色标记处与中间人会面 · 或自由探索");
@@ -361,8 +363,9 @@ export class ViceCityGame {
       this.police = new PoliceSystem(this);
       this.peds = new PedestrianSystem(this, 36);
       this.weapons = new WeaponSystem(this);
-      this.sfx = new SfxSystem(this);
-      this.missions = new MissionSystem(this);
+this.sfx = new SfxSystem(this);
+this.missions = new MissionSystem(this);
+this.taxi = new TaxiSystem(this);
       this.running = true;
     }
     await this.store.init();
@@ -719,6 +722,7 @@ const p = this.player;
       this.police.update(dt, !this.player.inVehicle, this.player.speed || (this.player.vehicle ? Math.abs(this.player.vehicle.kmh / 3.6) : 0));
     }
     if (this.missions && this.missions.update) this.missions.update(dt);
+if (this.taxi && this.taxi.update) this.taxi.update(dt);
     // 死亡（非驾驶时）→ WASTED
     if (this.player.hp <= 0) this.wasted();
     if (this.world && this.world.update) this.world.update(dt);
@@ -1112,10 +1116,14 @@ const p = this.player;
     this.renderer.setSize(window.innerWidth, window.innerHeight);
   }
 
-  /** 停止循环与渲染（测试用） */
-  dispose() {
-    if (typeof cancelAnimationFrame === "function") cancelAnimationFrame(this._raf);
-  }
+/** 停止循环与渲染（测试用） */
+dispose() {
+if (typeof cancelAnimationFrame === "function") cancelAnimationFrame(this._raf);
+if (this.taxi) {
+  this.taxi.dispose();
+  this.taxi = null;
+}
+}
 }
 
 // ---------------------------------------------------------------- 入口
