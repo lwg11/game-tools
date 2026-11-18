@@ -108,3 +108,4 @@ python deploy/deploy.py
    重做主线前注意别突破上限。
 5. 距离 LOD（traffic/police >800m 跳过）会让“传送远处 NPC 再测”的断言失效——测试时先把目标放回玩家 30m 内。
 6. PowerShell 无 `<` 重定向；`node --check` 前用 `Copy-Item xx.js $env:TEMP\chk.mjs` 包一层。
+7. **CSP 限制**：`server/app.py` 对所有 `.html` 下发 `Content-Security-Policy: script-src 'self'`，页面**不允许内联脚本/事件处理器**（曾导致 vice-city 内联 boot 被拦截、卡在加载页）。新页面/新游戏入口一律写成 `<script type="module" src="./js/boot.js">` 外链；同理避免 `onclick=` 属性。
