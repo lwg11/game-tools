@@ -40,6 +40,9 @@ export class PedestrianSystem {
 
     for (const inst of [this.bodyInst, this.headInst, this.legLInst, this.legRInst, this.armLInst, this.armRInst]) {
       inst.castShadow = true;
+      // 包围球只在首次渲染时按原点初始矩阵算一次；行人四处走动后必须禁用剔除，
+      // 否则相机离开原点视野时整个行人系统被整体剔除（走近人反而消失）
+      inst.frustumCulled = false;
       this.game.scene.add(inst);
     }
     this._m4 = new THREE.Matrix4();
