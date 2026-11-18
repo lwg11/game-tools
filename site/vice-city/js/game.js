@@ -49,6 +49,10 @@ class InputManager {
     if (!game.headless) {
       window.addEventListener("keydown", (e) => {
         if (e.code === "Tab") e.preventDefault();
+        // 对话推进键阻止默认（空格翻页/回车按钮重触发）
+        if (game._dialogOpen && (e.code === "Space" || e.code === "Enter" || e.code === "KeyE")) {
+          e.preventDefault();
+        }
         this.keys[e.code] = true;
         game.onKey(e.code, true);
       });
@@ -76,7 +80,81 @@ class InputManager {
           this.pointerLocked = document.pointerLockElement === canvas;
         });
       }
+      this._initTouch();
     }
+  }
+
+  // ------------------------------------------------------------ 移动端触屏控件
+  _initTouch() {
+    // 左摇杆：移动/驾驶油门与转向；右摇杆：横移/转向 + 纵推视角
+    const bindStick = (id, onMove) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const knob = el.querySelector(".vc-stick-knob");
+      const R = 52;
+      let pid = null;
+      let cx = 0;
+      let cy = 0;
+      const apply = (nx, ny) => {
+        onMove(nx, ny);
+        if (knob) {
+          knob.style.transform = nx || ny
+            ? `translate(${nx * R * 0.6}px, ${ny * R * 0.6}px)`
+            : "";
+        }
+      };
+      el.addEventListener("pointerdown", (e) => {
+        pid = e.pointerId;
+        if (el.setPointerCapture) el.setPointerCapture(pid);
+        const r = el.getBoundingClientRect();
+        cx = r.left + r.width / 2;
+        cy = r.top + r.height / 2;
+        const dx = e.clientX - cx;
+        const dy = e.clientY - cy;
+        const len = Math.hypot(dx, dy);
+        const s = len > R ? R / len : 1;
+        apply((dx * s) / R, (dy * s) / R);
+        e.preventDefault();
+      });
+      el.addEventListener("pointermove", (e) => {
+        if (pid === null || e.pointerId !== pid) return;
+        const dx = e.clientX - cx;
+        const dy = e.clientY - cy;
+        const len = Math.hypot(dx, dy);
+        const s = len > R ? R / len : 1;
+        apply((dx * s) / R, (dy * s) / R);
+        e.preventDefault();
+      });
+      const end = (e) => {
+        if (pid === null || e.pointerId !== pid) return;
+        pid = null;
+        apply(0, 0);
+        e.preventDefault();
+      };
+      el.addEventListener("pointerup", end);
+      el.addEventListener("pointercancel", end);
+    };
+    bindStick("vc-stick-left", (x, y) => {
+      this.touchMove.x = x;
+      this.touchMove.y = y;
+    });
+    bindStick("vc-stick-right", (x, y) => {
+      this.touchLookX = x;
+      this.touchLookY = y;
+      if (y) this.lookDY -= y * 3.2; // 纵推调俯仰
+    });
+    // 动作键：A=开火 B=上/下车 🚗=上/下车 🛑=手刹
+    const bindBtn = (id, onDown, onUp) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener("pointerdown", (e) => { onDown(); e.preventDefault(); });
+      el.addEventListener("pointerup", () => onUp && onUp());
+      el.addEventListener("pointercancel", () => onUp && onUp());
+    };
+    bindBtn("vc-tb-a", () => { this.touchFire = true; }, () => { this.touchFire = false; });
+    bindBtn("vc-tb-b", () => { this.touchButtons["car"] = true; }, () => { this.touchButtons["car"] = false; });
+    bindBtn("vc-tb-car", () => { this.touchButtons["car"] = true; }, () => { this.touchButtons["car"] = false; });
+    bindBtn("vc-tb-brake", () => { this.touchButtons["brake"] = true; }, () => { this.touchButtons["brake"] = false; });
   }
 
   isDown(code) {
@@ -587,12 +665,19 @@ export class ViceCityGame {
       nm.textContent = speaker || name;
       tx.textContent = text;
     };
+    // 键盘（Enter/Space/E）+ 鼠标/触屏点击 双通道推进
+    this._advDialog = () => btn.click();
+    btn.focus && btn.focus();
+    const finish = () => {
+      dlg.classList.add("hidden");
+      this._dialogOpen = false;
+      this._advDialog = null;
+      if (onDone) onDone();
+    };
     btn.onclick = () => {
       i++;
       if (i >= lines.length) {
-        dlg.classList.add("hidden");
-        this._dialogOpen = false;
-        if (onDone) onDone();
+        finish();
       } else {
         showLine();
       }
@@ -693,6 +778,12 @@ export class ViceCityGame {
       else this.pause();
     }
     if (down === false) return;
+    // 对话中：Enter/Space/E 推进下一句
+    if (this._dialogOpen && this._advDialog
+        && (code === "Enter" || code === "Space" || code === "KeyE")) {
+      this._advDialog();
+      return;
+    }
     // 电台切换
     if (code === "KeyR" && this.sfx) this.sfx.nextStation();
   }

@@ -126,6 +126,13 @@ export class Player {
 
   // ------------------------------------------------------------ 主更新
   update(dt) {
+    // 对话/过场期间冻结移动输入（世界照常运转，仅交互被接管）
+    if (this.game._dialogOpen) {
+      this.vx = 0;
+      this.vz = 0;
+      this.speed = 0;
+      return;
+    }
     const k = this.game.input;
     // E / 触屏「车」键：edge 触发
     const e = k.isDown("KeyE") || !!k.touchButtons["car"];
@@ -152,8 +159,10 @@ export class Player {
     const yaw = this.game.cameraYaw;
     const fx = Math.sin(yaw);
     const fz = Math.cos(yaw);
-    const dx = fx * -axes.y + Math.cos(yaw) * axes.x;
-    const dz = fz * -axes.y - Math.sin(yaw) * axes.x;
+    // A/D（含右摇杆）为屏幕横向：相机系右向 = (-cos yaw, sin yaw)
+    const strafe = axes.x + this.game.input.touchLookX;
+    const dx = fx * -axes.y - Math.cos(yaw) * strafe;
+    const dz = fz * -axes.y + Math.sin(yaw) * strafe;
     const target = Math.hypot(dx, dz);
 
     this.speed = lerp(this.speed, target * speedMax, clamp(10 * dt, 0, 1));
@@ -194,7 +203,9 @@ export class Player {
       return;
     }
     const axes = this.game.input.moveAxes();
-    let steer = axes.x + (this.game.input.touchLookX || 0);
+    // D = 右转（正舵量使车头向 +X 偏 = 屏幕左，故取负）
+    const strafe = axes.x + this.game.input.touchLookX;
+    let steer = -clamp(strafe, -1, 1);
     const handbrake = this.game.input.isDown("Space") || !!this.game.input.touchButtons["brake"];
     const throttle = -axes.y;
 
