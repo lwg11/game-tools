@@ -179,8 +179,10 @@ export class Player {
       return;
     }
     const k = this.game.input;
-    // E / 触屏「车」键：edge 触发
-    const e = k.isDown("KeyE") || !!k.touchButtons["car"];
+    // E / 触屏（✋/🚗）：edge 触发；任务发放人跟前由任务系统独占，避免同帧上车
+    const m = this.game.missions;
+    const e = (k.isDown("KeyE") || !!k.touchButtons["car"] || !!k.touchButtons["use"])
+      && !(m && m.offerInteract);
     if (e && !this.prevE) this.toggleVehicle();
     this.prevE = e;
 

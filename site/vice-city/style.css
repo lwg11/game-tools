@@ -218,27 +218,28 @@ body {
 }
 
 /* ---------------- 移动端控件 ---------------- */
+/* 布局：左下移动摇杆 / 右下转向摇杆 / 动作键簇悬在右摇杆上方（右手拇指全覆盖） */
 .vc-touch { position: absolute; inset: 0; z-index: 20; pointer-events: none; }
 .vc-stick {
-  position: absolute; bottom: 90px; width: 120px; height: 120px; pointer-events: auto;
+  position: absolute; bottom: calc(84px + env(safe-area-inset-bottom)); width: 116px; height: 116px; pointer-events: auto;
 }
-#vc-stick-left { left: 26px; }
-#vc-stick-right { right: 26px; }
+#vc-stick-left { left: 22px; }
+#vc-stick-right { right: 22px; }
 .vc-stick-base {
   position: absolute; inset: 0; border-radius: 50%;
   background: rgba(255,255,255,.08); border: 2px solid rgba(35,213,232,.5);
 }
 .vc-stick-knob {
-  position: absolute; left: 50%; top: 50%; width: 52px; height: 52px;
-  margin: -26px 0 0 -26px; border-radius: 50%;
+  position: absolute; left: 50%; top: 50%; width: 50px; height: 50px;
+  margin: -25px 0 0 -25px; border-radius: 50%;
   background: rgba(35,213,232,.35); border: 2px solid rgba(35,213,232,.9);
 }
 .vc-touch-buttons {
-  position: absolute; right: 160px; bottom: 96px; display: grid;
-  grid-template-columns: repeat(2, 58px); gap: 10px; pointer-events: auto;
+  position: absolute; right: 20px; bottom: calc(208px + env(safe-area-inset-bottom)); display: grid;
+  grid-template-columns: repeat(2, 54px); gap: 10px; pointer-events: auto;
 }
 .vc-tb {
-  width: 58px; height: 58px; border-radius: 50%; font-weight: 900; font-size: 18px;
+  width: 54px; height: 54px; border-radius: 50%; font-weight: 900; font-size: 17px;
   background: rgba(0,0,0,.5); border: 2px solid rgba(255,79,163,.7); color: var(--text);
 }
 .vc-tb-car { border-color: var(--neon-cyan); }
@@ -254,4 +255,15 @@ body[data-device="desktop"] .vc-touch { display: none !important; }
   .vc-logo-big { font-size: 48px; }
   .vc-bars { transform: scale(.85); transform-origin: top left; }
   .vc-money { font-size: 20px; }
+}
+/* 矮屏（手机横屏常见）：摇杆与按钮进一步压缩靠边 */
+@media (max-height: 400px) {
+  #vc-minimap { width: 84px; height: 84px; }
+  .vc-stick { width: 94px; height: 94px; bottom: calc(28px + env(safe-area-inset-bottom)); }
+  .vc-stick-knob { width: 40px; height: 40px; margin: -20px 0 0 -20px; }
+  .vc-touch-buttons {
+    right: 12px; bottom: calc(126px + env(safe-area-inset-bottom));
+    grid-template-columns: repeat(4, 44px); gap: 8px;
+  }
+  .vc-tb { width: 44px; height: 44px; font-size: 14px; }
 }

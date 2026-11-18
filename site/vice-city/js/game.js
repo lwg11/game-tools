@@ -152,7 +152,7 @@ class InputManager {
       el.addEventListener("pointercancel", () => onUp && onUp());
     };
     bindBtn("vc-tb-a", () => { this.touchFire = true; }, () => { this.touchFire = false; });
-    bindBtn("vc-tb-b", () => { this.touchButtons["car"] = true; }, () => { this.touchButtons["car"] = false; });
+    bindBtn("vc-tb-b", () => { this.touchButtons["use"] = true; }, () => { this.touchButtons["use"] = false; });
     bindBtn("vc-tb-car", () => { this.touchButtons["car"] = true; }, () => { this.touchButtons["car"] = false; });
     bindBtn("vc-tb-brake", () => { this.touchButtons["brake"] = true; }, () => { this.touchButtons["brake"] = false; });
   }
@@ -319,8 +319,9 @@ export class ViceCityGame {
     this._floaters = null;
     this._mmTick = 0;
 
-    // 移动端标记
+      // 移动端标记
     if (!this.headless) {
+      this.isTouch = !!isMobile;
       const touch = document.getElementById("vc-touch");
       if (touch && isMobile) touch.classList.remove("hidden");
       this._bindMenus();
@@ -405,9 +406,9 @@ export class ViceCityGame {
     if (mTip) {
       this.setInteractTip(mTip);
     } else if (p.inVehicle) {
-      this.setInteractTip('按 <b>E</b> 下车');
+      this.setInteractTip(this.isTouch ? "点 <b>🚗</b> 下车" : '按 <b>E</b> 下车');
     } else if (this.vehicles && this.vehicles.nearestEnterable(p.pos.x, p.pos.z, 3.4)) {
-      this.setInteractTip('按 <b>E</b> 上车');
+      this.setInteractTip(this.isTouch ? "点 <b>🚗</b> 上车" : '按 <b>E</b> 上车');
     } else {
       this.setInteractTip(null);
     }

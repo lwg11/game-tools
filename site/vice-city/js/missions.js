@@ -11,6 +11,7 @@
  */
 import * as THREE from "../lib/three.module.min.js";
 import { WORLD, clamp } from "./common.js";
+import { isMobile } from "../../assets/js/device.js";
 import { WEAPONS } from "./weapons.js";
 
 const COLORS = {
@@ -176,6 +177,14 @@ export class MissionSystem {
   }
 
   // ------------------------------------------------------------ 外部接口
+  /** 任务发放人跟前且有可接任务时，E/触屏接取由任务系统独占（玩家不再同帧上车） */
+  get offerInteract() {
+    if (this.activeIdx >= 0 || this._dialogRunning) return false;
+    const p = this.game.player;
+    if (!p || !this.missions.some((m) => m.status === "open")) return false;
+    return Math.hypot(p.pos.x - this.giverPos.x, p.pos.z - this.giverPos.z) < 5;
+  }
+
   /** 供 HUD 读取 */
   get missionTip() {
     if (this.activeIdx >= 0) {
@@ -186,7 +195,11 @@ export class MissionSystem {
     if (!next) return null;
     const p = this.game.player.pos;
     const d = Math.hypot(p.x - this.giverPos.x, p.z - this.giverPos.z);
-    if (d < 5) return `按 E 开始任务：${next.title}`;
+    if (d < 5) {
+      return isMobile
+        ? `点 ✋ 或 🚗 开始任务：${next.title}`
+        : `按 E 开始任务：${next.title}`;
+    }
     return null;
   }
 
@@ -352,7 +365,8 @@ export class MissionSystem {
     const nearGiver = Math.hypot(p.pos.x - this.giverPos.x, p.pos.z - this.giverPos.z) < 5;
     // 接任务判定（在 giver 面前任务优先于上车，避免与上下车按键冲突）
     if (!this._dialogRunning && !this.game.paused && nearGiver) {
-      const eDown = g.input.isDown("KeyE");
+      const k = g.input;
+      const eDown = k.isDown("KeyE") || !!k.touchButtons["car"] || !!k.touchButtons["use"];
       if (eDown && !this._prevE) {
         const idx = this.missions.findIndex((mm) => mm.status === "open");
         if (idx >= 0) {
