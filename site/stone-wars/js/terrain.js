@@ -38,6 +38,9 @@ export class Terrain {
     this.canvas.height = WORLD.h;
     this.ctx = this.canvas.getContext("2d");
     this._build();
+    // 无尽模式铺一层不可破坏的基岩，防止玩家把敌人脚下整片地面挖空后自动刷波
+    if (level.endless) this.fillRect(0, this.rows - 2, this.cols - 1, this.rows - 1, 2);
+    this._addObstacles(level);
     this._makeDecor();
     this.redraw(THEMES[level.theme] || THEMES.day);
   }
@@ -49,7 +52,7 @@ export class Terrain {
     if (c < 0 || c >= this.cols) return true; // 左右边界视为墙
     if (r < 0) return false;
     if (r >= this.rows) return false;
-    return this.grid[this.idx(c, r)] === 1;
+    return this.grid[this.idx(c, r)] !== 0;
   }
 
   solidAt(x, y) {
@@ -112,7 +115,9 @@ export class Terrain {
         const dx = px - cx;
         const dy = py - cy;
         const edge = 0.82 + hash2(c, r, this.level.seed || 1) * 0.36;
-        if (dx * dx + dy * dy <= r2 * edge) this.grid[this.idx(c, r)] = 0;
+        if (dx * dx + dy * dy <= r2 * edge && this.grid[this.idx(c, r)] !== 2) {
+          this.grid[this.idx(c, r)] = 0;
+        }
       }
     }
   }
@@ -291,6 +296,57 @@ export class Terrain {
     this.fillRect(46, 24, 49, 25);
   }
 
+  // ------------------------------------------------------------ 额外障碍
+  /** 关卡越靠后，战场上的石柱、浮台、掩体与拱门越多 */
+  _addObstacles(level) {
+    const id = Number(level.id) || 0;
+    if (level.endless) {
+      const rng = mulberry32((level.seed || 1) * 7 + 31);
+      for (let i = 0; i < 4; i++) this._placeObstacle(rng, ["pillar", "platform", "bunker", "arch"][i]);
+      return;
+    }
+    const target = Math.min(10, Math.floor(id / 2));
+    if (target <= 0) return;
+    const rng = mulberry32((level.seed || 1) * 13 + 77);
+    const types = ["pillar", "platform", "bunker", "arch", "bunker", "pillar", "platform", "arch"];
+    for (let i = 0; i < target; i++) {
+      this._placeObstacle(rng, types[Math.floor(rng() * types.length)]);
+    }
+  }
+
+  _placeObstacle(rng, type) {
+    const c0 = 22 + Math.floor(rng() * 28);
+    const c1 = Math.min(54, c0 + 2 + Math.floor(rng() * 4));
+    if (type === "pillar") {
+      const h = 6 + Math.floor(rng() * 7);
+      const top = this.rows - 3 - h;
+      this.fillRect(c0, top, c1, this.rows - 3, 3);
+      // 中间留一个可穿越的缺口，避免把战场完全封死
+      if (rng() > 0.3) {
+        const gap = top + 2 + Math.floor(rng() * Math.max(1, h - 4));
+        this.clearRect(c0, gap, c1, gap + 1);
+      }
+    } else if (type === "platform") {
+      const top = this.rows - 9 - Math.floor(rng() * 7);
+      this.fillRect(c0, top, c1, top, 3);
+      if (rng() > 0.35) {
+        const leg = rng() > 0.5 ? c0 : c1;
+        this.fillRect(leg, top + 1, leg, top + 2 + Math.floor(rng() * 3), 3);
+      }
+    } else if (type === "arch") {
+      const h = 5 + Math.floor(rng() * 6);
+      const top = this.rows - 3 - h;
+      this.fillRect(c0, top, c0 + 1, this.rows - 3, 3);
+      this.fillRect(c1 - 1, top, c1, this.rows - 3, 3);
+      this.fillRect(c0, top, c1, top + 1, 3);
+    } else {
+      // 地面掩体：只在地表以上堆 2~4 层石头
+      const ground = this.surfaceTop(c0 * this.tile + this.tile) ?? (this.rows - 6) * this.tile;
+      const top = Math.max(12, Math.floor(ground / this.tile) - 4);
+      this.fillRect(c0, top, c1, Math.floor(ground / this.tile) - 1, 3);
+    }
+  }
+
   // ------------------------------------------------------------ 装饰
   _makeDecor() {
     const rng = mulberry32((this.level.seed || 1) * 7 + 3);
@@ -324,8 +380,11 @@ export class Terrain {
         const y = r * tile;
         const n = hash2(c, r, this.level.seed || 1);
         const depth = this._depth(c, r);
+        const tileValue = this.grid[this.idx(c, r)];
         let color;
-        if (depth === 0) color = t.grass;
+        if (tileValue === 2) color = "#2b3038"; // 无尽模式基岩
+        else if (tileValue === 3) color = "#6d665c"; // 关卡障碍石
+        else if (depth === 0) color = t.grass;
         else if (depth < 3) color = dirt[0];
         else if (depth < 8) color = dirt[1];
         else color = dirt[2];
@@ -334,17 +393,36 @@ export class Terrain {
         ctx.fillRect(x, y, tile, tile);
         ctx.fillStyle = `rgba(0,0,0,${0.03 + n * 0.07})`;
         if (n > 0.55) ctx.fillRect(x + (n * 10) % 10, y + (n * 13) % 10, 3, 3);
-        // 顶面草皮
+        // 顶面草皮 / 石头高光
         if (!this.solid(c, r - 1)) {
-          ctx.fillStyle = t.grassLight;
-          ctx.fillRect(x, y, tile, 4);
-          ctx.fillStyle = t.grass;
-          ctx.fillRect(x, y + 4, tile, 2);
-          if (hash2(c, 7, 99) > 0.45) {
+          if (tileValue === 2) {
+            ctx.fillStyle = "rgba(150,210,255,.35)";
+            ctx.fillRect(x, y, tile, 3);
+          } else if (tileValue === 3) {
+            ctx.fillStyle = "rgba(232,220,200,.42)";
+            ctx.fillRect(x, y, tile, 3);
+            ctx.fillStyle = "rgba(38,33,27,.5)";
+            ctx.fillRect(x, y + tile - 3, tile, 3);
+            // 石缝
+            if (n > 0.6) {
+              ctx.strokeStyle = "rgba(34,29,23,.45)";
+              ctx.lineWidth = 1;
+              ctx.beginPath();
+              ctx.moveTo(x + 2, y + 5);
+              ctx.lineTo(x + 9 + n * 4, y + 11);
+              ctx.stroke();
+            }
+          } else {
             ctx.fillStyle = t.grassLight;
-            const gx = x + 2 + n * 9;
-            ctx.fillRect(gx, y - 3, 1.5, 3);
-            ctx.fillRect(gx + 3, y - 2, 1.5, 2);
+            ctx.fillRect(x, y, tile, 4);
+            ctx.fillStyle = t.grass;
+            ctx.fillRect(x, y + 4, tile, 2);
+            if (hash2(c, 7, 99) > 0.45) {
+              ctx.fillStyle = t.grassLight;
+              const gx = x + 2 + n * 9;
+              ctx.fillRect(gx, y - 3, 1.5, 3);
+              ctx.fillRect(gx + 3, y - 2, 1.5, 2);
+            }
           }
         }
         // 边缘阴影

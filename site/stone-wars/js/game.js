@@ -10,6 +10,7 @@ import { ProgressStore } from "../../assets/js/progress.js";
 import { initAccount } from "../../assets/js/account.js";
 import { icon, toast } from "../../assets/js/ui.js";
 import { audio } from "../../assets/js/audio.js";
+import { isCrazy, applyBodyMode } from "../../assets/js/mode.js";
 import {
   WORLD, LEVELS, WEAPONS, ENEMY_TYPES, THEMES, ERAS, ERA_WEAPONS,
   getLevel, getEndlessLevel, getEra, ammoFor,
@@ -721,14 +722,12 @@ class Projectile {
       let pierced = false;
       for (const u of this.game.units) {
         if (!u.alive || u.team === this.team) continue;
-        const dx = nx - u.x;
-        const dy = ny - (u.y - 28);
-        if (dx * dx + dy * dy < 20 * 20) {
+        if (this.hitsUnit(u, nx, ny)) {
           if (w.pierce) {
             // 电磁炮：贯穿沿途敌人，每个目标只结算一次
             if (!this.hitSet.has(u)) {
               this.hitSet.add(u);
-              u.takeDamage(w.damage * 0.85, this.team);
+              u.takeDamage(w.damage * 0.85 * (this.damageMul || 1), this.team);
               this.game.spawnParticles(u.x, u.y - 30, 8, w.color, "spark");
             }
             pierced = true;
@@ -798,9 +797,7 @@ class Projectile {
     const g = this.game;
     for (const u of g.units) {
       if (!u.alive || u.team === this.team) continue;
-      const dx = this.x - u.x;
-      const dy = this.y - (u.y - 24);
-      if (dx * dx + dy * dy < 24 * 24) {
+      if (this.hitsUnit(u, this.x, this.y, 4)) {
         this.explode();
         return;
       }
@@ -855,11 +852,9 @@ class Projectile {
     }
     for (const u of g.units) {
       if (!u.alive || u.team === this.team || this.hitSet.has(u)) continue;
-      const dx = this.x - u.x;
-      const dy = this.y - (u.y - 28);
-      if (dx * dx + dy * dy < 24 * 24) {
+      if (this.hitsUnit(u, this.x, this.y, 4)) {
         this.hitSet.add(u);
-        u.takeDamage(this.weapon.damage, this.team);
+        u.takeDamage(this.weapon.damage * (this.damageMul || 1), this.team);
         g.spawnParticles(this.x, this.y, 6, this.weapon.color, "spark");
       }
     }
@@ -868,20 +863,40 @@ class Projectile {
     if (this.age > 2.6) this.dead = true;
   }
 
+  /** 命中判定：头、躯干、坐骑分开算，避免打头时从身体上方穿过去 */
+  hitsUnit(u, px, py, pad = 0) {
+    const s = u.scale || 1;
+    const lift = u.mount ? 26 * s : 0;
+    const circles = [
+      [u.x, u.y - lift - 49 * s, 14 * s + pad], // 头部
+      [u.x, u.y - lift - 28 * s, 19 * s + pad], // 躯干与腿
+    ];
+    if (u.mount) circles.push([u.x, u.y - 24 * s, 20 * s + pad]); // 战马
+    for (const [cx, cy, r] of circles) {
+      const dx = px - cx;
+      const dy = py - cy;
+      if (dx * dx + dy * dy < r * r) return true;
+    }
+    return false;
+  }
+
   explode() {
     if (this.dead) return;
     this.dead = true;
     const g = this.game;
+    const dmg = this.weapon.damage * (this.damageMul || 1);
+    const blast = this.weapon.blast * (this.blastMul || 1);
     if (this.type === "banana") {
-      g.explode(this.x, this.y, this.weapon.blast, this.weapon.damage, this.team, "blast");
+      g.explode(this.x, this.y, blast, dmg, this.team, "blast");
       for (let i = 0; i < 3; i++) {
         const p = new Projectile(g, "bananaSmall", this.x + rand(-6, 6), this.y - 4, rand(-230, 230), rand(-390, -160), this.team);
+        p.damageMul = this.damageMul;
         g.projectiles.push(p);
       }
     } else if (this.kind === "spear") {
-      g.explode(this.x, this.y, 22, this.weapon.damage, this.team, "spear");
+      g.explode(this.x, this.y, 22 * (this.blastMul || 1), dmg, this.team, "spear");
     } else {
-      g.explode(this.x, this.y, this.weapon.blast, this.weapon.damage, this.team, this.kind);
+      g.explode(this.x, this.y, blast, dmg, this.team, this.kind);
     }
   }
 
@@ -1173,6 +1188,9 @@ class StoneWars {
     this.activePlayerIndex = 0;
     this.activeEnemyIndex = 0;
     this.era = ERAS.stone;
+    this.crazy = isCrazy();
+    applyBodyMode();
+    this.fires = [];
     this.weaponIds = [...ERA_WEAPONS.stone];
     this.selectedWeapon = "spear";
     this.ammo = {};
@@ -1203,6 +1221,7 @@ class StoneWars {
     this.cheatOpen = false;
     this.muzzleFlashes = [];
     this.glows = [];
+    this.fires = [];
     this.screenFlash = 0;
     this.flashColor = "#ffd08a";
     this.bg = null;
@@ -1480,6 +1499,7 @@ class StoneWars {
     this.timers = [];
     this.muzzleFlashes = [];
     this.glows = [];
+    this.fires = [];
     this.screenFlash = 0;
     this.units = [];
     this.players = [];
@@ -1739,22 +1759,33 @@ class StoneWars {
       this.selectedWeapon = id;
     }
     const w = WEAPONS[id];
+    const crazy = this.crazy;
     const readyAt = this.weaponReadyAt[id] || 0;
     if (this.time < readyAt) {
       toast(`${w.name}冷却中`);
       return false;
     }
-    if (this.ammo[id] !== Infinity && !this.cheatInfiniteAmmo) {
+    if (this.ammo[id] !== Infinity && !this.cheatInfiniteAmmo && !crazy) {
       this.ammo[id] = Math.max(0, this.ammo[id] - 1);
     }
-    this.weaponReadyAt[id] = this.time + (w.cooldown || 1);
+    // 疯狂模式：射速翻倍、双发齐射、伤害与爆炸范围暴涨
+    this.weaponReadyAt[id] = this.time + (w.cooldown || 1) * (crazy ? 0.42 : 1);
     const speed = w.speed * (0.5 + 0.5 * power);
     const ox = u.x;
     const oy = u.y - 44;
-    this.projectiles.push(new Projectile(
-      this, id, ox + Math.cos(angle) * 26, oy + Math.sin(angle) * 26,
-      Math.cos(angle) * speed, Math.sin(angle) * speed, 0
-    ));
+    const shots = crazy
+      ? [{ a: angle - 0.05, mul: 1.8 }, { a: angle + 0.05, mul: 1.8 }]
+      : [{ a: angle, mul: 1 }];
+    for (const s of shots) {
+      const p = new Projectile(
+        this, id,
+        ox + Math.cos(s.a) * 26, oy + Math.sin(s.a) * 26,
+        Math.cos(s.a) * speed, Math.sin(s.a) * speed, 0
+      );
+      p.damageMul = s.mul;
+      p.blastMul = crazy ? 1.4 : 1;
+      this.projectiles.push(p);
+    }
     u.facing = Math.cos(angle) >= 0 ? 1 : -1;
     this.aim.angle = angle;
     this.aim.power = power;
@@ -2376,6 +2407,7 @@ class StoneWars {
   }
 
   _updateEffects(dt) {
+    this._updateFires(dt);
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const p = this.particles[i];
       p.life -= dt;
@@ -2466,12 +2498,12 @@ class StoneWars {
         color: this.theme.dirt[1], kind: "dirt", gravity: 900,
       });
     }
-    const fireCount = kind === "spear" ? 6 : Math.min(38, 10 + Math.floor(radius * 0.26));
+    const fireCount = kind === "spear" ? 6 : Math.min(44, 12 + Math.floor(radius * 0.3));
     for (let i = 0; i < fireCount; i++) {
       this.particles.push({
         x: x + rand(-8, 8), y: y + rand(-8, 8),
         vx: rand(-230, 230), vy: rand(-300, 20),
-        life: rand(0.24, 0.7), maxLife: 0.7, size: rand(3, 11),
+        life: rand(0.26, 0.78), maxLife: 0.78, size: rand(4, 13),
         color: beam
           ? (Math.random() < 0.5 ? "#9ff4ff" : "#5fd4ff")
           : (Math.random() < 0.5 ? "#ffd15c" : "#ff6a2a"),
@@ -2497,12 +2529,29 @@ class StoneWars {
         color: "rgba(60,55,50,.45)", kind: "smoke", gravity: -30,
       });
     }
+    // 火焰残留：爆炸后地面继续燃烧，火舌、余烬与灼烧伤害
+    if (kind !== "spear" && kind !== "laser") {
+      const groundY = this.terrain.surfaceBelow(x, Math.min(H - 16, y + radius * 0.9));
+      if (groundY !== null) {
+        const life = 1.0 + Math.min(1.0, radius / 240);
+        this.fires.push({
+          x, y: groundY, r: Math.max(24, radius * 0.5),
+          life, max: life, acc: 0, dot: 0, team,
+          damage: Math.max(1, Math.round(damage * 0.05)),
+          seed: Math.random() * 10,
+        });
+      }
+    }
     // 伤害与击退（含友军误伤）
     const diff = this._difficulty();
     for (const u of this.units) {
       if (!u.alive) continue;
+      // 以单位命中胶囊上离爆点最近的位置计算距离，爆头也能打满伤害
+      const s = u.scale || 1;
+      const topY = u.y - (u.mount ? 76 : 63) * s;
+      const cy = clamp(y, topY, u.y - 6);
       const dx = u.x - x;
-      const dy = u.y - 26 - y;
+      const dy = cy - y;
       const d = Math.hypot(dx, dy);
       const reach = radius + 16;
       if (d < reach) {
@@ -2915,6 +2964,7 @@ class StoneWars {
 
     const sorted = this.units.slice().sort((a, b) => Number(a.alive) - Number(b.alive));
     for (const u of sorted) u.draw(ctx, this);
+    this._drawFires(ctx);
     for (const p of this.projectiles) p.draw(ctx);
 
     if (this.phase === "aim" && (this.aim.active || this.aim.locked)) this._drawPlayerAim(ctx);
@@ -2934,6 +2984,83 @@ class StoneWars {
       ctx.fillRect(0, 0, W, H);
       ctx.restore();
     }
+  }
+
+  _updateFires(dt) {
+    if (!this.fires.length) return;
+    for (let i = this.fires.length - 1; i >= 0; i--) {
+      const f = this.fires[i];
+      f.life -= dt;
+      if (f.life <= 0) {
+        this.fires.splice(i, 1);
+        continue;
+      }
+      f.acc += dt;
+      if (f.acc >= 0.055) {
+        f.acc = 0;
+        const a = rand(0, TAU);
+        const rr = rand(0, f.r * 0.85);
+        this.particles.push({
+          x: f.x + Math.cos(a) * rr,
+          y: f.y + Math.sin(a) * rr * 0.22 - 2,
+          vx: rand(-20, 20), vy: rand(-105, -35),
+          life: rand(0.32, 0.78), maxLife: 0.78, size: rand(4, 10),
+          color: Math.random() < 0.5 ? "#ffb347" : "#ff6a2a",
+          kind: "fire", gravity: -90,
+        });
+        if (Math.random() < 0.28) {
+          this.particles.push({
+            x: f.x + rand(-f.r * 0.6, f.r * 0.6), y: f.y - rand(2, 18),
+            vx: rand(-18, 18), vy: rand(-90, -28),
+            life: rand(0.5, 1.1), maxLife: 1.1, size: rand(8, 16),
+            color: "rgba(70,62,55,.38)", kind: "smoke", gravity: -20,
+          });
+        }
+      }
+      // 站在火里的敌人会持续被灼烧
+      f.dot += dt;
+      if (f.dot >= 0.45) {
+        f.dot = 0;
+        for (const u of this.units) {
+          if (!u.alive || u.team === f.team) continue;
+          if (Math.abs(u.x - f.x) < f.r && Math.abs(u.y - f.y) < 46) {
+            u.takeDamage(f.damage, f.team);
+          }
+        }
+      }
+    }
+  }
+
+  _drawFires(ctx) {
+    if (!this.fires.length) return;
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    for (const f of this.fires) {
+      const k = clamp(f.life / f.max, 0, 1);
+      const pulse = 0.75 + Math.sin(this.time * 15 + f.seed) * 0.25;
+      const grad = ctx.createRadialGradient(f.x, f.y - 8, 0, f.x, f.y - 8, f.r * 1.2);
+      grad.addColorStop(0, `rgba(255,180,80,${0.34 * k * pulse})`);
+      grad.addColorStop(0.55, `rgba(255,110,40,${0.16 * k})`);
+      grad.addColorStop(1, "rgba(255,80,20,0)");
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(f.x, f.y - 8, f.r * 1.2, 0, TAU);
+      ctx.fill();
+      const flames = 7;
+      for (let i = 0; i < flames; i++) {
+        const ox = Math.sin(f.seed * 3 + i * 1.7) * f.r * 0.72;
+        const h = (11 + Math.sin(this.time * 9 + i * 2.1 + f.seed) * 5 + (i % 3) * 5) * (0.6 + k * 0.7);
+        const sway = Math.sin(this.time * 7 + i * 1.3 + f.seed) * 5;
+        ctx.fillStyle = i % 2 ? "rgba(255,150,60,.5)" : "rgba(255,88,28,.46)";
+        ctx.beginPath();
+        ctx.moveTo(f.x + ox - 5, f.y + 2);
+        ctx.quadraticCurveTo(f.x + ox + sway, f.y + 2 - h * 0.55, f.x + ox + sway * 0.4, f.y + 2 - h);
+        ctx.quadraticCurveTo(f.x + ox + 5, f.y + 2 - h * 0.5, f.x + ox + 5, f.y + 2);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+    ctx.restore();
   }
 
   _drawGlows(ctx) {
@@ -3220,7 +3347,9 @@ class StoneWars {
   }
 
   _drawParticles(ctx) {
-    for (const p of this.particles) {
+    // 烟雾先画，火光后画，避免黑烟把火焰盖住
+    const ordered = this.particles.slice().sort((a, b) => (a.kind === "smoke" ? 0 : 1) - (b.kind === "smoke" ? 0 : 1));
+    for (const p of ordered) {
       const a = clamp(p.life / p.maxLife, 0, 1);
       ctx.globalAlpha = a;
       if (p.kind === "smoke") {
@@ -3230,9 +3359,21 @@ class StoneWars {
         ctx.fill();
       } else if (p.kind === "fire") {
         ctx.globalCompositeOperation = "lighter";
+        const r = p.size * (0.45 + a * 0.85);
+        ctx.globalAlpha = a * 0.35;
+        ctx.fillStyle = "#ff7a2a";
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, r * 1.7, 0, TAU);
+        ctx.fill();
+        ctx.globalAlpha = a;
         ctx.fillStyle = p.color;
         ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size * a, 0, TAU);
+        ctx.arc(p.x, p.y, r, 0, TAU);
+        ctx.fill();
+        ctx.globalAlpha = a * 0.9;
+        ctx.fillStyle = "#fff4c8";
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, r * 0.42, 0, TAU);
         ctx.fill();
         ctx.globalCompositeOperation = "source-over";
       } else if (p.kind === "spark") {
