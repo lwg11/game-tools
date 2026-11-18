@@ -8,6 +8,7 @@
   /etc/nginx/conf.d/game-tools.conf
 - 不修改 80 / 8090 上已有的任何站点配置
 - 新服务只监听 127.0.0.1:8930，由独立的 nginx 3011 端口对外提供
+- 远端 backups/ 目录仅保留最近 20 份历史备份，超出自动清理，防止磁盘占满
 
 用法：
     python deploy/deploy.py
@@ -25,6 +26,7 @@ REMOTE_DIR = "/opt/game-tools"
 SERVICE_PATH = "/etc/systemd/system/game-tools.service"
 NGINX_CONF = "/etc/nginx/conf.d/game-tools.conf"
 PUBLIC_PORT = 8092
+BACKUP_KEEP = 20                        # 远端历史备份保留份数（超出自动清理）
 STAMP = time.strftime("%Y%m%d_%H%M%S")
 
 
@@ -118,6 +120,9 @@ def main():
         run(client, "cp -a %s %s/backups/nginx-game-tools.conf.%s 2>/dev/null || true" % (NGINX_CONF, REMOTE_DIR, STAMP))
         run(client, "install -m 644 /tmp/game-tools.service %s" % SERVICE_PATH)
         run(client, "install -m 644 /tmp/game-tools.conf %s" % NGINX_CONF)
+        # 清理历史备份：按修改时间保留最近 BACKUP_KEEP 份，其余删除（首次部署目录为空也安全）
+        run(client, "cd %s/backups && ls -1t 2>/dev/null | tail -n +%d | xargs -r rm -f" % (
+            REMOTE_DIR, BACKUP_KEEP + 1), check=False)
 
         print("[6/7] 启动后端并重载 nginx")
         run(client, "systemctl daemon-reload")
