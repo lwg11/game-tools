@@ -1,7 +1,7 @@
 # 交接文档：罪恶都市（vice-city）3D Web 游戏开发
 
-> 面向**接续任务的模型**。当前状态：13 个功能 commit 已提交（见下），核心可玩闭环完成
-> （城市/驾驶/行人/警察/武器/音效/任务），并完成一轮体验/视觉/AI 专项打磨（见「1.2 打磨轮」）。
+> 面向**接续任务的模型**。当前状态：16 个功能 commit 已提交（见下），核心可玩闭环完成
+> （城市/驾驶/行人/警察/武器/音效/10 章主线/出租车支线），并完成两轮体验/视觉/AI/内容专项打磨（见「1.2 」「1.3」）。
 > 完整调研与规划见 `VICE_CITY_PLAN.md`（用户已确认：Three.js r160 本地化 / 标准版内容 / 双端）。
 
 ## 一、已完成并提交
@@ -27,6 +27,14 @@
 | `95e0f92` | 视觉升级：玩家模型精细化（发/眼/手/鞋/持枪模型）、行人发色、建筑屋顶檐口/设备/遮阳棚/霓虹竖牌、5×6 窗贴图、全交叉口斑马线、60% 随机车漆 |
 | `a2c01a2` | 碰撞火花粒子池 + 受损冒烟（玩家车 hp<40% 必冒）+ 车辆可见受损形变（压扁/侧倾），爆炸加烟 |
 
+### 1.3 第二轮打磨（移动端+内容扩展，见 git log）
+
+| commit | 内容 |
+|---|---|
+| `5111546` | 移动端任务交互与触屏布局：✋ 独立互动键；任务发放人跟前 inputs 由任务系统独占（offerInteract）；提示文案设备自适应；动作键簇移至右摇杆上方 + 安全区/矮屏适配 |
+| `548ab8e` | 主线扩展到 10 章：新增 chase（路点追击者 AI+切线绕行+玩家碰撞互伤）/escape（强制升星+保持警车距离计时）类型；BUSTED/WASTED 联动任务失败；命中扫描纳入追击者 |
+| `e8cc2f1` | 出租车支线：靠边停车自动接客、限时送达、车费 $、`taxiDone` 存档；含 dispose 与 headless 断言 |
+
 另：`boot.js` 暴露 `window.__vc = game` 调试句柄。
 
 ## 二、架构与模块（`site/vice-city/`）
@@ -45,7 +53,9 @@ js/
   traffic.js  TrafficSystem：网格路点驾驶 + 转向随机 + 与玩家车碰撞
   weapons.js  WeaponSystem：5 武器参数/半自&自动/命中扫描/曳光池
   sfx.js      SfxSystem：WebAudio 合成（引擎/电台/警笛/单次音效），首次交互 unlock
-  missions.js MissionSystem：3 任务/giver E 接取/对话/标记/奖励/存档
+  missions.js MissionSystem：10 章主线（reach/delivery/eliminate/chase/escape）/giver 接取/对话/标记/奖励/存档；chase 含追击者 AI（_runner）
+  taxi.js    TaxiSystem：出租车支线（靠边接客/送达计费/taxiDone）
+  —— 移动端任务接取必须经 missions.offerInteract 通道（玩家 toggleVehicle 会被拦截）
   game.js     ViceCityGame 主类：场景/相机/昼夜（_applyDayNight/HUD/小地图/_syncMinimap/
               startDialog/floater/toast/BUSTED/WASTED/爆炸 FX/镜头震动/火花&烟雾粒子池）+ InputManager（含 _initTouch 触屏接线）
 ```
@@ -80,16 +90,16 @@ js/
   左摇杆=移动/油门，右摇杆=横移/转向 + 纵推俯仰，A=开火、B/🚗=上下车、🛑=手刹。
 - 后续可选：横屏提示、射击目标辅助、 HUD 密度设置。
 
-### 4.2 主线扩展到 10 章（计划为 10 章，现为 3 章）
-- `missions.js` 的 MISSION 数组已按 reach/delivery/eliminate 三型参数化，
-  新增任务只需复制对象：新增「追逐型 chase」（更新 `_currentTarget` + update 分支，
-  目标=移动车辆）与「逃脱型 escape」（限时保持与最近警车 >X 米）。
-- 任务进度当前**不写 store**（只写 missionsDone），跨会话任务链重启会重置
-  （可接受，或在 store 增加 `missionStage` 字段）。
+### 4.2 主线扩展到 10 章（已完成）
+- `missions.js` 已有 10 章（m1..m10），覆盖 reach/delivery/eliminate/chase/escape 五型。
+  新任务复制对象并设置 type/path/stars/radius 即可；chase 目标车支持 runnerSpeed。
+- BUSTED/WASTED 会让当前任务失败（`game.busted/wasted` → `missions._failMission`）。
+- 任务进度仍只写 `missionsDone`，跨会话任务链重启会重置（可加 `missionStage` 字段）。
 
-### 4.3 深度打磨（可选）
+### 4.3 深度打磨（进行中）
 - 车流车被炸后的残骸保留（现 25s 后消失）；更多车型（货车/摩托）；
-- 出租车支线（计划有 `taxiDone` 字段但系统未实现）；房产购买；4 座电台（现 3 座）。
+- 房产购买；4 座电台（现 3 座）。
+- 出租车支线已实现（taxi.js，taxiDone 存档）。
 
 ## 五、验证命令（每次改动必跑）
 
@@ -126,6 +136,7 @@ python deploy/deploy.py
 4. 行人血包上限 48（`MAX_PEDS`），gang 任务杀完/失败后从 `peds.peds` 数组**移除**（`_clearGang` 已实现），
    重做主线前注意别突破上限。
 5. 距离 LOD（traffic/police >800m 跳过）会让“传送远处 NPC 再测”的断言失效——测试时先把目标放回玩家 30m 内。
+   - **浏览器 vs headless**：startDialog 在浏览器需点击推进（异步），headless 同步回调；浏览器验证任务流程时必须模拟点击 `.vc-dialog-next`，否则 `_dialogRunning` 卡住任务逻辑。
 6. PowerShell 无 `<` 重定向；`node --check` 前用 `Copy-Item xx.js $env:TEMP\chk.mjs` 包一层。
 7. **CSP 限制**：`server/app.py` 对所有 `.html` 下发 `Content-Security-Policy: script-src 'self'`，页面**不允许内联脚本/事件处理器**（曾导致 vice-city 内联 boot 被拦截、卡在加载页）。新页面/新游戏入口一律写成 `<script type="module" src="./js/boot.js">` 外链；同理避免 `onclick=` 属性。
 8. `Car` 的 `damage()` 使用 `this.body/this.cabin/this._bodyY` 等实例引用——这些引用在两处 `_buildMesh` 中赋值；若为 headless 新建更轻量的车身模型，注意同步。`game` 新增粒子/公告板 FX 接口均以 `spawnSparks/spawnSmoke(x,y,z,...)` 命名，headless 自动跳过。
