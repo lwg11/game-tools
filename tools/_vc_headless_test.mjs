@@ -251,6 +251,44 @@ if (!targetPed.dead) throw new Error("pistol shot missed ped");
 if (game.police.stars < 2) throw new Error("shooting a ped did not raise heat: " + game.police.stars);
 console.log("pistol OK, stars =", game.police.stars);
 
+// ---- ADS 瞄准（右键）：FOV 收窄 / 越肩 / 据枪姿势 / 散布降低
+{
+  player.pos.set(0, 0, 0);
+  player.angle = 0;
+  game.cameraYaw = 0;
+  game.cameraPitch = 0.05;
+  game.input.mouseAim = true;
+  for (let i = 0; i < 40; i++) game.update(1 / 60);
+  if (!(game._aimK > 0.9)) throw new Error("aimK low: " + game._aimK);
+  if (!player.aiming) throw new Error("player.aiming false");
+  if (!(game.camera.fov < 50)) throw new Error("ads fov: " + game.camera.fov);
+  if (!(game.cameraDist < 7.0)) throw new Error("ads dist: " + game.cameraDist);
+  console.log("aim OK, fov =", game.camera.fov.toFixed(0), "dist =", game.cameraDist.toFixed(1));
+  // 瞄准射击命中（每帧回正俯仰，模拟玩家压枪）
+  const aimPed = game.peds.peds.find((p) => !p.dead);
+  aimPed.x = player.pos.x;
+  aimPed.z = player.pos.z + 20;
+  aimPed.state = "idle";
+  aimPed.timer = 999;
+  ws.select(1);
+  game.input.mouseFire = true;
+  let killed = false;
+  for (let i = 0; i < 60 && !killed; i++) {
+    game.cameraPitch = 0.05;
+    game.update(1 / 60);
+    killed = aimPed.dead;
+  }
+  game.input.mouseFire = false;
+  if (!killed) throw new Error("aim shot missed");
+  console.log("aim shot OK");
+  game.input.mouseAim = false;
+  for (let i = 0; i < 40; i++) game.update(1 / 60);
+  if (!(game.camera.fov > 54)) throw new Error("fov restore: " + game.camera.fov);
+  if (player.aiming) throw new Error("aiming stuck");
+  console.log("aim release OK");
+}
+
+
 // 命中扫描：直接调用打静态车
 const c = game.vehicles.cars[0];
 c.hp = c.maxHp;

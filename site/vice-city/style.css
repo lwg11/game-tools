@@ -209,7 +209,11 @@ body {
   left: 50%; top: 50%; width: 18px; height: 18px; margin: -9px 0 0 -9px;
   border: 2px solid rgba(255,255,255,.8); border-radius: 50%;
   box-shadow: 0 0 8px rgba(0,0,0,.8), inset 0 0 4px rgba(0,0,0,.4);
-  opacity: .85;
+  opacity: .85; transition: width .12s, height .12s, margin .12s, border-color .12s;
+}
+.vc-crosshair.aim {
+  width: 7px; height: 7px; margin: -3.5px 0 0 -3.5px;
+  border-color: var(--neon-cyan); background: rgba(35,213,232,.45);
 }
 .vc-interact-tip {
   left: 50%; bottom: 22%; transform: translateX(-50%);
@@ -261,6 +265,7 @@ body {
   position: absolute; right: 20px; bottom: calc(208px + env(safe-area-inset-bottom)); display: grid;
   grid-template-columns: repeat(2, 54px); gap: 10px; pointer-events: auto;
 }
+.vc-touch-buttons .vc-tb:last-child { grid-column: 1 / -1; border-radius: 27px; }
 .vc-tb {
   width: 54px; height: 54px; border-radius: 50%; font-weight: 900; font-size: 17px;
   background: rgba(0,0,0,.5); border: 2px solid rgba(255,79,163,.7); color: var(--text);
@@ -286,7 +291,8 @@ body[data-device="desktop"] .vc-touch { display: none !important; }
   .vc-stick-knob { width: 40px; height: 40px; margin: -20px 0 0 -20px; }
   .vc-touch-buttons {
     right: 12px; bottom: calc(126px + env(safe-area-inset-bottom));
-    grid-template-columns: repeat(4, 44px); gap: 8px;
+    grid-template-columns: repeat(5, 44px); gap: 8px;
   }
   .vc-tb { width: 44px; height: 44px; font-size: 14px; }
+  .vc-touch-buttons .vc-tb:last-child { grid-column: span 1; border-radius: 22px; }
 }

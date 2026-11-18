@@ -137,27 +137,31 @@ export class WeaponSystem {
     const g = this.game;
     const p = g.player;
     const cam = g.camera;
-    const origin = new THREE.Vector3(p.pos.x, 1.45, p.pos.z);
+    // 命中扫描从相机（准星）出发，保证“指哪打哪”；曳光与枪口焰从玩家枪口出发
+    const origin = new THREE.Vector3(cam.position.x, cam.position.y - 0.12, cam.position.z);
 
     // 基向量（相机朝向）
     const baseDir = new THREE.Vector3();
     cam.getWorldDirection(baseDir);
 
+    // ADS 时散布降低 55%
+    const spread = w.spread * (1 - 0.55 * (g._aimK || 0));
+    // 枪口世界位置（右手前伸）
+    const mx = p.pos.x + Math.sin(p.angle) * 0.5 + Math.cos(p.angle) * 0.3;
+    const mz = p.pos.z + Math.cos(p.angle) * 0.5 - Math.sin(p.angle) * 0.3;
+
     let anyHit = false;
     for (let i = 0; i < w.pellets; i++) {
       const dir = baseDir.clone();
-      dir.x += (Math.random() - 0.5) * 2 * w.spread;
-      dir.y += (Math.random() - 0.5) * 2 * w.spread;
-      dir.z += (Math.random() - 0.5) * 2 * w.spread;
+      dir.x += (Math.random() - 0.5) * 2 * spread;
+      dir.y += (Math.random() - 0.5) * 2 * spread;
+      dir.z += (Math.random() - 0.5) * 2 * spread;
       dir.normalize();
       if (dir.y > 0.2) dir.y = 0.2; // 禁止对天开枪
       dir.normalize();
       const end = this._hitscan(origin, dir, w.range, w.damage);
-      this._spawnTracer(
-        origin.x + dir.x, 1.35, origin.z + dir.z,
-        end.x, end.y, end.z,
-      );
-      this._muzzleFlash(origin.x + dir.x * 0.8, 1.35, origin.z + dir.z * 0.8);
+      this._spawnTracer(mx, 1.32, mz, end.x, end.y, end.z);
+      this._muzzleFlash(mx, 1.32, mz);
       if (end.hit) anyHit = true;
     }
 

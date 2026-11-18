@@ -38,6 +38,7 @@ class InputManager {
     this.game = game;
     this.keys = Object.create(null);
     this.mouseFire = false;
+    this.mouseAim = false;
     this.lookDX = 0;
     this.lookDY = 0;
     this.touchMove = { x: 0, y: 0 };   // 移动端左摇杆（-1..1）
@@ -65,12 +66,15 @@ class InputManager {
       if (canvas) {
         canvas.addEventListener("mousedown", (e) => {
           if (e.button === 0) this.mouseFire = true;
+          if (e.button === 2) this.mouseAim = true;
           canvas.requestPointerLock && canvas.requestPointerLock();
           if (this.game.sfx && this.game.sfx.unlock) this.game.sfx.unlock();
         });
         window.addEventListener("mouseup", (e) => {
           if (e.button === 0) this.mouseFire = false;
+          if (e.button === 2) this.mouseAim = false;
         });
+        canvas.addEventListener("contextmenu", (e) => e.preventDefault());
         window.addEventListener("mousemove", (e) => {
           if (this.pointerLocked || e.buttons === 1) {
             this.lookDX += e.movementX || 0;
@@ -156,6 +160,7 @@ class InputManager {
     bindBtn("vc-tb-b", () => { this.touchButtons["use"] = true; }, () => { this.touchButtons["use"] = false; });
     bindBtn("vc-tb-car", () => { this.touchButtons["car"] = true; }, () => { this.touchButtons["car"] = false; });
     bindBtn("vc-tb-brake", () => { this.touchButtons["brake"] = true; }, () => { this.touchButtons["brake"] = false; });
+    bindBtn("vc-tb-aim", () => { this.touchButtons["aim"] = true; }, () => { this.touchButtons["aim"] = false; });
   }
 
   isDown(code) {
@@ -404,6 +409,9 @@ this.taxi = new TaxiSystem(this);
     this.setWanted(this.police ? this.police.stars : 0);
     this.setVehiclePanel(p.inVehicle, p.vehicle ? p.vehicle.kmh : 0, p.vehicle ? p.vehicle.hp / p.vehicle.maxHp : 1);
     this.setCrosshair(!p.inVehicle);
+    // 准星 ADS 样式
+    const ch = document.getElementById("vc-crosshair");
+    if (ch) ch.classList.toggle("aim", !p.inVehicle && (this._aimK || 0) > 0.4);
     // 交互提示（任务提示优先于上下车）
     const mTip = this.missions ? this.missions.missionTip : null;
     if (mTip) {
@@ -706,6 +714,14 @@ const p = this.player;
     this.cameraYaw -= look.dx * 0.004;
     this.cameraPitch = clamp(this.cameraPitch + look.dy * 0.003, -0.05, 1.15);
 
+    // ADS（仅步行）：右键/触屏 🔍 瞄准，FOV 收窄 + 越肩视角 + 散布降低
+    this._aimK = lerp(this._aimK || 0,
+      !this.player.inVehicle && (this.input.mouseAim || this.input.touchButtons["aim"]) ? 1 : 0,
+      clamp(10 * dt, 0, 1));
+    if (this.player.aiming !== undefined) {
+      this.player.aiming = !this.player.inVehicle && this._aimK > 0.4;
+    }
+
     // 玩家（步行/驾驶）与载具系统
     if (this.player && this.player.update) this.player.update(dt);
     if (this.vehicles && this.vehicles.update) {
@@ -893,7 +909,7 @@ if (this.taxi && this.taxi.update) this.taxi.update(dt);
       this.cameraYaw = angleLerp(this.cameraYaw, target.angle, 0.06);
       this.cameraDist = lerp(this.cameraDist, 12, 0.05);
     } else {
-      this.cameraDist = lerp(this.cameraDist, 7.5, 0.08);
+      this.cameraDist = lerp(this.cameraDist, 7.5 - 3.2 * (this._aimK || 0), 0.08);
     }
     const dist = this.cameraDist;
     const cy = Math.cos(this.cameraPitch);
@@ -901,6 +917,12 @@ if (this.taxi && this.taxi.update) this.taxi.update(dt);
     const cz = Math.cos(this.cameraYaw) * cy * dist;
     const yr = Math.sin(this.cameraPitch) * dist;
     this.camera.position.set(target.x - cx, yr + 2.2, target.z - cz);
+    // ADS：镜头右移过肩
+    if (this._aimK > 0.01) {
+      const ox = Math.cos(this.cameraYaw), oz = -Math.sin(this.cameraYaw);
+      this.camera.position.x += ox * 0.85 * this._aimK;
+      this.camera.position.z += oz * 0.85 * this._aimK;
+    }
     // 镜头震动（爆炸/撞击）
     if (this._shakeAmp > 0.005) {
       this.camera.position.x += (Math.random() - 0.5) * this._shakeAmp;
@@ -910,7 +932,16 @@ if (this.taxi && this.taxi.update) this.taxi.update(dt);
     } else {
       this._shakeAmp = 0;
     }
-    this.camera.lookAt(target.x, 1.6, target.z);
+    // ADS 时视线在 30m 外交会（越肩视差收敛），准星即弹着点
+    const lx = target.x + Math.sin(this.cameraYaw) * 30 * (this._aimK || 0);
+    const lz = target.z + Math.cos(this.cameraYaw) * 30 * (this._aimK || 0);
+    this.camera.lookAt(lx, 1.6 - 0.1 * (this._aimK || 0), lz);
+    // FOV 收窄（55 → 38）
+    const targetFov = 55 - 17 * (this._aimK || 0);
+    if (Math.abs(this.camera.fov - targetFov) > 0.05) {
+      this.camera.fov = targetFov;
+      this.camera.updateProjectionMatrix();
+    }
   }
 
   render() {
