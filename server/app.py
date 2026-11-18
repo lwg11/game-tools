@@ -149,7 +149,7 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         try:
             self.wfile.write(body)
-        except (BrokenPipeError, ConnectionResetError):
+        except ConnectionError:
             pass
 
     def _json(self, status, obj, headers=None):
@@ -190,7 +190,8 @@ class Handler(BaseHTTPRequestHandler):
             self._json(404, {"error": "未找到该路径"})
         except ApiError as exc:
             self._json(exc.status, {"error": exc.message})
-        except (BrokenPipeError, ConnectionResetError):
+        except ConnectionError:
+            # 客户端提前断开（含 BrokenPipe / ConnectionReset / ConnectionAborted）
             pass
         except Exception as exc:  # 兜底，避免线程异常导致连接悬挂
             sys.stderr.write("unhandled error: %r\n" % (exc,))
