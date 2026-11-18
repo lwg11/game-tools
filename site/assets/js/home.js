@@ -28,7 +28,7 @@ if (modeBtn) {
   window.addEventListener("gt:mode-changed", paintMode);
 }
 
-const TOTAL = { "stone-wars": 14, pvz: 12, carrot: 8, pokemon: 8 };
+const TOTAL = { "stone-wars": 20, pvz: 12, carrot: 8, pokemon: 8 };
 const els = {
   "stone-wars": {
     bar: document.getElementById("swBar"),
