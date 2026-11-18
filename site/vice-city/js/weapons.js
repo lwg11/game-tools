@@ -193,8 +193,11 @@ export class WeaponSystem {
       }
     }
 
-    // 车辆（所有系统）
+    // 车辆（所有系统 + 任务追击者）
     const carGroups = [g.vehicles.cars, g.traffic ? g.traffic.cars : [], g.police ? g.police.cars.map((c) => c.car) : []];
+    if (g.missions && g.missions._runner && !g.missions._runner.car.dead) {
+      carGroups.push([g.missions._runner.car]);
+    }
     for (const list of carGroups) {
       for (const car of list) {
         if (car.dead) continue;

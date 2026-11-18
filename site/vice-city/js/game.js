@@ -622,10 +622,13 @@ export class ViceCityGame {
   }
 
   /** 被逮捕：传送回警局，扣除现金 15% */
-  busted() {
-    if (this._busted) return;
-    this._busted = true;
-    const p = this.player;
+busted() {
+if (this._busted) return;
+this._busted = true;
+if (this.missions && this.missions.activeIdx >= 0) {
+  this.missions._failMission("你被警方逮捕了");
+}
+const p = this.player;
     if (p.inVehicle) p.exitVehicle();
     this.police.clearCrime();
     p.pos.set(this.police.station.x, 0, this.police.station.z);
@@ -638,10 +641,13 @@ export class ViceCityGame {
   }
 
   /** 伤残：送往医院，扣除现金 15% */
-  wasted() {
-    if (this._wasted) return;
-    this._wasted = true;
-    const p = this.player;
+wasted() {
+if (this._wasted) return;
+this._wasted = true;
+if (this.missions && this.missions.activeIdx >= 0) {
+  this.missions._failMission("你倒下了");
+}
+const p = this.player;
     if (p.inVehicle) p.exitVehicle();
     if (this.police) this.police.clearCrime();
     const h = this.police ? this.police.hospital : { x: 320, z: 380 };

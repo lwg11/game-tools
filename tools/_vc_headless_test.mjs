@@ -333,6 +333,57 @@ console.log("mission m3 OK");
 if ((game.store.state.missionsDone || 0) < 3) throw new Error("missionsDone not saved: " + game.store.state.missionsDone);
 console.log("mission store OK, missionsDone =", game.store.state.missionsDone);
 
+// ---- 十章扩展：chase / escape / eliminate 复用
+if (M.missions.length !== 10) throw new Error("missions != 10: " + M.missions.length);
+const types = new Set(M.missions.map((mm) => mm.type));
+for (const t of ["reach", "delivery", "eliminate", "chase", "escape"]) {
+  if (!types.has(t)) throw new Error("missing mission type: " + t);
+}
+console.log("10 missions & types OK");
+
+// m4 码头眼线（chase）
+M._startMission(3);
+if (M.missions[3].status !== "active") throw new Error("m4 not active");
+if (!M._runner) throw new Error("m4 runner not spawned");
+{
+  const R = M._runner;
+  const sx = R.car.pos.x, sz = R.car.pos.z;
+  for (let i = 0; i < 90; i++) game.update(1 / 60);
+  const moved = Math.hypot(R.car.pos.x - sx, R.car.pos.z - sz);
+  if (moved < 3) throw new Error("runner did not drive: " + moved);
+  console.log("m4 runner drove", moved.toFixed(1), "m, hp=", R.car.hp);
+  // 射击摧毁：玩家车受损路径已由命中扫描覆盖；此处直接模拟撞击伤害到毁损
+  R.car.damage(99999);
+  for (let i = 0; i < 3; i++) game.update(1 / 60);
+  if (M.missions[3].status !== "done") throw new Error("m4 not done after runner destroyed");
+  if (M._runner) throw new Error("runner not cleaned up");
+}
+if (M.missions[4].status !== "open") throw new Error("m5 not unlocked");
+console.log("m4 chase OK");
+
+// m5 全城通缉（escape）
+game.police.clearCrime();
+M._startMission(4);
+if (M.missions[4].status !== "active") throw new Error("m5 not active");
+if (game.police.stars !== 2) throw new Error("m5 stars != 2: " + game.police.stars);
+// 传送到远离警车刷新点的位置，并把计时压缩到 0.5s
+player.pos.set(-1050, 0, -1050);
+M._timer = 0.5;
+for (let i = 0; i < 40; i++) game.update(1 / 60);
+if (M.missions[4].status !== "done") throw new Error("m5 escape not done, timer=" + M._timer);
+if (game.police.stars !== 0) throw new Error("m5 escape did not clear stars: " + game.police.stars);
+console.log("m5 escape OK");
+
+// m6 机场拦截（eliminate x6，解锁步枪）
+M._startMission(5);
+if (M.missions[5].status !== "active") throw new Error("m6 not active");
+if (M._gang.length !== 6) throw new Error("m6 gang != 6: " + M._gang.length);
+for (const gp of M._gang) { gp.dead = true; gp.deadTimer = 0; }
+for (let i = 0; i < 3; i++) game.update(1 / 60);
+if (M.missions[5].status !== "done") throw new Error("m6 not done");
+if (!player.weapons.includes("rifle")) throw new Error("m6 did not unlock rifle");
+console.log("m6 eliminate OK, rifle unlocked");
+
 // ---- 音效系统（headless 下安全跳过/无 ctx）
 if (!game.sfx) throw new Error("sfx missing");
 game.sfx.ensure();

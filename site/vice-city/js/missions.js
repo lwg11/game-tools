@@ -1,18 +1,26 @@
 /**
  * 罪恶都市 · 任务系统
  * ------------------------------------------------------------
- * 三个主线任务：
- *  - m1 无名小卒：与律师会面，跑三个地点（reach 型）
- *  - m2 快递包裹：限时取包送达（delivery 型）
- *  - m3 一网打尽：消灭迪亚兹部署的 5 名打手（eliminate 型，生成 gang 行人）
+ * 十章主线（arc）：
+ *  - m1 无名小卒（reach：跑三个地点）
+ *  - m2 快递包裹（delivery：限时取包送达）
+ *  - m3 一网打尽（eliminate：消灭打手）
+ *  - m4 码头眼线（chase：追截并摧毁目标车辆）
+ *  - m5 全城通缉（escape：限时与警车保持距离）
+ *  - m6 机场拦截（eliminate×6，解锁步枪）
+ *  - m7 急诊包裹（delivery：小哈瓦那→海星岛 240s）
+ *  - m8 警网逃生（escape：三星 120s）
+ *  - m9 决战仓库（eliminate×8）
+ *  - m10 胜利追击（chase：沿海公路长追击）
  *
- * 流程：giver 处按 E 接取 → 对话 → 标记指引 → 完成发奖励/解锁武器 → 存档
- * 任务难度/内容与 1986 年罪恶城氛围对齐（黄色 M / 粉色电话亭风格）。
+ * 流程：giver 处接取（E / ✋ / 🚗）→ 对话 → 标记指引 → 完成发奖励/解锁武器 → 存档
+ * BUSTED/WASTED 会让当前任务失败。
  */
 import * as THREE from "../lib/three.module.min.js";
-import { WORLD, clamp } from "./common.js";
+import { WORLD, clamp, angleDiff } from "./common.js";
 import { isMobile } from "../../assets/js/device.js";
 import { WEAPONS } from "./weapons.js";
+import { Car } from "./vehicle.js";
 
 const COLORS = {
   giver: 0x6fd3ff,   // 可接取：青蓝
@@ -83,6 +91,124 @@ export class MissionSystem {
         rewardMoney: 8000,
         unlockWeapon: "shotgun",
       },
+      {
+        id: "m4",
+        status: "locked",
+        title: "码头眼线",
+        giver: "保罗",
+        desc: "截停迪亚兹的运货跑车，别让它开到码头。",
+        dialog: [
+          ["保罗", "迪亚兹的运货跑车正沿主路往南码头跑，车上有他的账本。"],
+          ["你", "所以把这辆车拦下来。"],
+          ["保罗", "别让它到码头。开什么都行——撞烂它！"],
+        ],
+        type: "chase",
+        path: [[7, 9], [7, 12], [10, 12], [10, 13]],
+        time: 240,
+        runnerSpeed: 1.0,
+        rewardMoney: 12000,
+      },
+      {
+        id: "m5",
+        status: "locked",
+        title: "全城通缉",
+        giver: "肯",
+        desc: "被警方通缉：90 秒内别让任何警车贴近 25 米。",
+        dialog: [
+          ["肯", "你被条子盯上了。消失 90 秒——别让任何警车贴到你 25 米内。"],
+          ["你", "25 米？你当我是舒马赫？"],
+          ["肯", "就当是为了我这张老脸。"],
+        ],
+        type: "escape",
+        stars: 2,
+        time: 90,
+        radius: 25,
+        rewardMoney: 15000,
+      },
+      {
+        id: "m6",
+        status: "locked",
+        title: "机场拦截",
+        giver: "艾尔",
+        desc: "消灭把守机场仓库的 6 名武装分子。",
+        dialog: [
+          ["艾尔", "机场跑道的仓库里有一批货，迪亚兹的六个手下守着。"],
+          ["你", "又是我干活。"],
+          ["艾尔", "这批货值钱。干了这票，够你换一把好枪。"],
+        ],
+        type: "eliminate",
+        arena: [this.road(2), this.road(2)],
+        count: 6,
+        rewardMoney: 12000,
+        unlockWeapon: "rifle",
+      },
+      {
+        id: "m7",
+        status: "locked",
+        title: "急诊包裹",
+        giver: "保罗",
+        desc: "4 分钟内把血浆从小哈瓦那送到海星岛诊所。",
+        dialog: [
+          ["保罗", "小哈瓦那有人等着这批血浆，4 分钟内送到海星岛诊所。"],
+          ["你", "四分钟？"],
+          ["保罗", "所以别撞车。"],
+        ],
+        type: "delivery",
+        pickup: [this.road(3), this.road(3)],
+        dropoff: [this.road(12), this.road(10)],
+        time: 240,
+        rewardMoney: 20000,
+        rewardArmor: 50,
+      },
+      {
+        id: "m8",
+        status: "locked",
+        title: "警网逃生",
+        giver: "肯",
+        desc: "三星通缉：坚持 120 秒，别被警车贴到 30 米内。",
+        dialog: [
+          ["肯", "警局局长亲自批了通缉令——三星。撑住 120 秒，别被咬住。"],
+          ["你", "这次我可真要谢谢你了。"],
+        ],
+        type: "escape",
+        stars: 3,
+        time: 120,
+        radius: 30,
+        rewardMoney: 18000,
+      },
+      {
+        id: "m9",
+        status: "locked",
+        title: "决战仓库",
+        giver: "里科",
+        desc: "消灭迪亚兹最后的 8 人武装小队。",
+        dialog: [
+          ["里科", "迪亚兹把最后的武装小队藏在港口仓库——八个人，最好的装备。"],
+          ["你", "八个人。行吧。"],
+          ["里科", "干掉他们，这座城市就是你的。"],
+        ],
+        type: "eliminate",
+        arena: [this.road(10), this.road(10)],
+        count: 8,
+        rewardMoney: 25000,
+      },
+      {
+        id: "m10",
+        status: "locked",
+        title: "胜利追击",
+        giver: "肯",
+        desc: "迪亚兹沿东部沿海公路逃車——追上他的车，结束这一切。",
+        dialog: [
+          ["肯", "迪亚兹跑了，沿海公路往东。追上他的车，结束这一切。"],
+          ["你", "等我回来喝酒。"],
+          ["肯", "一定。"],
+        ],
+        type: "chase",
+        path: [[2, 6], [2, 2], [5, 2], [5, 8], [8, 8], [8, 12], [12, 12]],
+        time: 300,
+        runnerSpeed: 1.15,
+        rewardMoney: 40000,
+      },
     ];
 
     this.activeIdx = -1;
@@ -91,6 +217,10 @@ export class MissionSystem {
     this._prevE = false;
     this._gang = [];
     this._dialogRunning = false;
+    this._runner = null;
+    this._escapeR = 0;
+    this._escapeNearest = Infinity;
+    this._escapeSafe = false;
     this._buildMarker();
     this._buildGiverMesh();
     this._refreshMarker();
@@ -173,6 +303,9 @@ export class MissionSystem {
     if (m.type === "eliminate") {
       return m.arena;
     }
+    if (m.type === "chase" && this._runner && !this._runner.car.dead) {
+      return [this._runner.car.pos.x, this._runner.car.pos.z];
+    }
     return null;
   }
 
@@ -218,6 +351,16 @@ export class MissionSystem {
       const alive = this._gang.filter((g) => !g.dead).length;
       return `${m.desc}（剩余 ${alive}）`;
     }
+    if (m.type === "chase") {
+      const car = this._runner ? this._runner.car : null;
+      const hpTxt = car ? Math.max(0, Math.round((car.hp / car.maxHp) * 100)) : 0;
+      return `追截目标 · 剩余 ${Math.max(0, Math.ceil(this._timer))}s · 车况 ${hpTxt}%`;
+    }
+    if (m.type === "escape") {
+      const near = Math.round(this._escapeNearest);
+      const txt = this._escapeSafe ? `甩开警察（最近 ${near}m）` : "被贴住了！拉开距离！";
+      return `${txt} · 还需 ${Math.max(0, Math.ceil(this._timer))}s`;
+    }
     return m.desc;
   }
 
@@ -237,6 +380,11 @@ export class MissionSystem {
     this._wpIdx = 0;
     this._timer = m.time || 0;
     if (m.type === "eliminate") this._spawnGang(m);
+    if (m.type === "chase") this._spawnRunner(m);
+    if (m.type === "escape") {
+      this._escapeR = m.radius || 25;
+      if (this.game.police) this.game.police.reportCrime(m.stars || 2);
+    }
     this._refreshMarker();
     this._setMissionHud(m);
     const begin = () => {
@@ -280,6 +428,8 @@ export class MissionSystem {
     // 解锁下一个
     const nextIdx = this.missions.findIndex((mm) => mm.status === "locked");
     if (nextIdx >= 0) this.missions[nextIdx].status = "open";
+    if (m.type === "escape") this.game.police && this.game.police.clearCrime();
+    if (m.type === "chase") this._destroyRunner();
     this._setMissionHud(null);
     this._refreshMarker();
   }
@@ -291,6 +441,7 @@ export class MissionSystem {
     this.activeIdx = -1;
     this._wpIdx = 0;
     if (m.type === "eliminate") this._clearGang();
+    if (m.type === "chase") this._destroyRunner();
     if (!this.game.headless) this.game.showToast(`任务失败：${reason}`);
     if (this.game.sfx && this.game.sfx.playBusted) this.game.sfx.playBusted();
     this._setMissionHud(null);
@@ -344,6 +495,103 @@ export class MissionSystem {
       this.game.peds.peds = this.game.peds.peds.filter((pp) => !gangSet.has(pp));
     }
     this._gang = [];
+  }
+
+  // ------------------------------------------------------------ 追击者（chase 型）
+  _spawnRunner(m) {
+    const g = this.game;
+    this._destroyRunner();
+    const first = m.path[0];
+    const car = new Car("sport", this.road(first[0]), this.road(first[1]), 0);
+    car.maxSpeedScale = m.runnerSpeed || 1.0;
+    car.onExplode = () => {
+      if (g.headless) return;
+      g.spawnExplosion(car.pos.x, car.pos.z);
+      if (g.sfx && g.sfx.playExplode) g.sfx.playExplode();
+    };
+    g.scene.add(car.group);
+    this._runner = {
+      car,
+      path: m.path.map(([i, k]) => [
+        clamp(this.road(i), -1180, 1180),
+        clamp(this.road(k), -1180, 1180),
+      ]),
+      idx: 0,
+      hitCd: 0,
+    };
+  }
+
+  _destroyRunner() {
+    if (!this._runner) return;
+    this.game.scene.remove(this._runner.car.group);
+    this._runner = null;
+  }
+
+  _updateRunner(dt) {
+    const g = this.game;
+    const R = this._runner;
+    const car = R.car;
+
+    this._timer -= dt;
+    if (this._timer <= 0) {
+      this._failMission("目标逃走了");
+      return;
+    }
+
+    // 目标沿路点行驶，带前方障碍切线绕行
+    const next = R.path[R.idx + 1];
+    if (next) {
+      const desired = Math.atan2(next[0] - car.pos.x, next[1] - car.pos.z);
+      let steer = clamp(angleDiff(desired, car.angle) * 1.6, -1, 1);
+      const aheadX = car.pos.x + Math.sin(car.angle) * 9;
+      const aheadZ = car.pos.z + Math.cos(car.angle) * 9;
+      const hitAhead = g.world && g.world.collideCircle(aheadX, aheadZ, car.radius);
+      if (hitAhead) {
+        const t1x = -hitAhead.nz;
+        const t1z = hitAhead.nx;
+        const s1 = Math.abs(angleDiff(Math.atan2(t1x, t1z), desired));
+        const tx = s1 < Math.PI / 2 ? t1x : -t1x;
+        const tz = s1 < Math.PI / 2 ? t1z : -t1z;
+        steer = clamp(angleDiff(Math.atan2(tx, tz), car.angle) * 2.2, -1, 1);
+      }
+      car.drive(Math.abs(steer) > 0.9 ? 0.55 : 1, steer, false, dt, g.world);
+      if (Math.hypot(next[0] - car.pos.x, next[1] - car.pos.z) < 14) R.idx++;
+    }
+    if (R.idx >= R.path.length - 1) {
+      this._failMission("目标逃脱了");
+      return;
+    }
+
+    if (car.dead) {
+      this._completeMission();
+      return;
+    }
+
+    // 与玩家车碰撞：互相损伤 + 推离 + 火花
+    const pv = this.game.player.vehicle;
+    if (pv && !pv.dead) {
+      const dx = car.pos.x - pv.pos.x;
+      const dz = car.pos.z - pv.pos.z;
+      const d = Math.hypot(dx, dz);
+      const minD = pv.radius + car.radius;
+      R.hitCd = Math.max(0, R.hitCd - dt);
+      if (d < minD && R.hitCd <= 0) {
+        R.hitCd = 0.5;
+        const nx = dx / (d || 1);
+        const nz = dz / (d || 1);
+        const rel = Math.hypot(pv.vx - car.vx, pv.vz - car.vz);
+        car.damage(Math.max(6, rel * 0.8));
+        pv.damage(Math.max(3, rel * 0.4));
+        car.pos.x = pv.pos.x + nx * minD;
+        car.pos.z = pv.pos.z + nz * minD;
+        if (g.spawnSparks) g.spawnSparks(car.pos.x, 0.7, car.pos.z, 8, 0xffc266, 5);
+        if (g.sfx && g.sfx.playCrash) g.sfx.playCrash(rel);
+        if (car.dead) { this._completeMission(); return; }
+      }
+    }
+
+    this._refreshMarker();
+    if (!g.headless) this._setMissionHud(this.missions[this.activeIdx]);
   }
 
   // ------------------------------------------------------------ 帧更新
@@ -419,6 +667,28 @@ export class MissionSystem {
       if (alive === 0) {
         this._completeMission();
       }
+    } else if (m.type === "chase") {
+      if (this._runner) this._updateRunner(dt);
+    } else if (m.type === "escape") {
+      // 与最近警车保持 _escapeR 米以上才计时；被贴住则暂停计时
+      let nearest = Infinity;
+      if (g.police) {
+        for (const c of g.police.cars) {
+          if (c.car.dead) continue;
+          const d = Math.hypot(c.car.pos.x - p.pos.x, c.car.pos.z - p.pos.z);
+          if (d < nearest) nearest = d;
+        }
+      }
+      this._escapeNearest = nearest;
+      this._escapeSafe = nearest > this._escapeR;
+      if (this._escapeSafe) {
+        this._timer -= dt;
+        if (this._timer <= 0) {
+          this._completeMission();
+          return;
+        }
+      }
+      if (!this.game.headless) this._setMissionHud(m);
     }
   }
 }
