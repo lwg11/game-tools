@@ -161,6 +161,8 @@ class InputManager {
     bindBtn("vc-tb-car", () => { this.touchButtons["car"] = true; }, () => { this.touchButtons["car"] = false; });
     bindBtn("vc-tb-brake", () => { this.touchButtons["brake"] = true; }, () => { this.touchButtons["brake"] = false; });
     bindBtn("vc-tb-aim", () => { this.touchButtons["aim"] = true; }, () => { this.touchButtons["aim"] = false; });
+    bindBtn("vc-tb-cop", () => { if (this.game.callCop) this.game.callCop(); });
+    bindBtn("vc-tb-stations", () => { if (this.game.police) this.game.police.toggleStations(); });
   }
 
   isDown(code) {
@@ -324,6 +326,7 @@ export class ViceCityGame {
     this._hud = {};
     this._floaters = null;
     this._mmTick = 0;
+    this._copGuard = false;
 
       // 移动端标记
     if (!this.headless) {
@@ -986,6 +989,9 @@ if (this.taxi && this.taxi.update) this.taxi.update(dt);
     }
     // 电台切换
     if (code === "KeyR" && this.sfx) this.sfx.nextStation();
+    // 路障开关 / 呼叫巡逻车（12s 冷却）
+    if (code === "KeyG" && !this._dialogOpen && this.police) this.police.toggleStations();
+    if (code === "KeyC" && !this._dialogOpen) this.callCop();
   }
 
   _bindMenus() {
@@ -995,6 +1001,14 @@ if (this.taxi && this.taxi.update) this.taxi.update(dt);
     $("vc-btn-missions").addEventListener("click", () => this._showMissionPanel());
     $("vc-missions-close").addEventListener("click", () => {
       document.getElementById("vc-missions").classList.add("hidden");
+      if (this.sfx && this.sfx.playUi) this.sfx.playUi();
+    });
+    $("vc-btn-stations").addEventListener("click", () => {
+      if (this.police) this.police.toggleStations();
+      if (this.sfx && this.sfx.playUi) this.sfx.playUi();
+    });
+    $("vc-btn-cop").addEventListener("click", () => {
+      this.callCop();
       if (this.sfx && this.sfx.playUi) this.sfx.playUi();
     });
     $("vc-btn-resume").addEventListener("click", () => this.resume());
@@ -1196,11 +1210,19 @@ if (this.taxi && this.taxi.update) this.taxi.update(dt);
 /** 停止循环与渲染（测试用） */
 dispose() {
 if (typeof cancelAnimationFrame === "function") cancelAnimationFrame(this._raf);
-if (this.taxi) {
-  this.taxi.dispose();
-  this.taxi = null;
-}
-}
+      if (this.taxi) {
+        this.taxi.dispose();
+        this.taxi = null;
+      }
+    }
+
+  /** 手动呼叫巡逻车（C）；12s 冷却，避免刷屏 */
+  callCop() {
+    if (this._copGuard || !this.police) return;
+    this._copGuard = true;
+    this.police.callReinforcements();
+    setTimeout(() => { this._copGuard = false; }, 12000);
+  }
 }
 
 // ---------------------------------------------------------------- 入口

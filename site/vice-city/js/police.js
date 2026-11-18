@@ -43,6 +43,44 @@ export class PoliceSystem {
     this.stars = 0;
     this.memory = 0;
     this._despawnAll();
+    this.showStations = false;
+  }
+
+  // N5：G/菜单按钮开关检查站（最多 2 个，与追逐单位互不影响）
+  toggleStations() {
+    this.showStations = !this.showStations;
+    if (this.showStations) {
+      this._spawnCooldown = 0;
+      this.spawnUpTo(2);
+      if (!this.game.headless) {
+        this.game.showToast(`🚧 已设置 ${this.cars.length} 处警方检查站 · 再按 G 撤销`);
+      }
+    } else {
+      this._despawnAll();
+      this._spawnCooldown = 2;
+      if (!this.game.headless) this.game.showToast("🚧 检查站已撤销");
+    }
+  }
+
+  // N6：手动呼叫增援（不升星，最多补足到 2 辆）
+  callReinforcements() {
+    if (this.stars === 0) this.stars = 1;
+    this.memory = Math.max(this.memory, 60);
+    this.spawnUpTo(2);
+    if (!this.game.headless) {
+      this.game.showToast(this.cars.length
+        ? `🚔 增援已出动（${this.cars.length} 辆）`
+        : "🚔 附近没有可用的巡逻车");
+    }
+  }
+
+  // 至少生成 n 辆（调用方负责冷却/提示）
+  spawnUpTo(n) {
+    for (let i = 0; i < n; i++) {
+      if (this.cars.length >= n) break;
+      this._spawnCop();
+      if (this.cars.length === 0) break; // 生成失败兜底
+    }
   }
 
   _desiredCount() {

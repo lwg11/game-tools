@@ -291,8 +291,8 @@ body[data-device="desktop"] .vc-touch { display: none !important; }
   .vc-stick-knob { width: 40px; height: 40px; margin: -20px 0 0 -20px; }
   .vc-touch-buttons {
     right: 12px; bottom: calc(126px + env(safe-area-inset-bottom));
-    grid-template-columns: repeat(5, 44px); gap: 8px;
+    grid-template-columns: repeat(7, 42px); gap: 8px;
   }
-  .vc-tb { width: 44px; height: 44px; font-size: 14px; }
-  .vc-touch-buttons .vc-tb:last-child { grid-column: span 1; border-radius: 22px; }
+  .vc-tb { width: 42px; height: 42px; font-size: 13px; }
+  .vc-touch-buttons .vc-tb:last-child { grid-column: span 1; border-radius: 21px; }
 }

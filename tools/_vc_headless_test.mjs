@@ -158,6 +158,27 @@ for (let i = 0; i < 120; i++) game.update(1 / 60);
 if (game.police.cars.length < 1) throw new Error("no cops spawned, stars=" + game.police.stars);
 console.log("cops spawned:", game.police.cars.length);
 
+// ---- 路障开关（G）与呼叫巡逻车（C，冷却守卫）
+game.police.toggleStations();
+for (let i = 0; i < 60; i++) game.update(1 / 60);
+if (game.police.cars.length < 1) throw new Error("stations deploy failed");
+console.log("stations on:", game.police.cars.length);
+game.police.toggleStations();
+for (let i = 0; i < 30; i++) game.update(1 / 60);
+if (game.police.cars.length !== 0) throw new Error("stations remove failed: " + game.police.cars.length);
+game.police.toggleStations();
+for (let i = 0; i < 60; i++) game.update(1 / 60);
+game.police.toggleStations();
+for (let i = 0; i < 30; i++) game.update(1 / 60);
+console.log("stations toggle OK");
+game.police.clearCrime();
+game.callCop();
+const n1 = game.police.cars.length;
+game.callCop(); // 12s 冷却中应被拦截
+const n2 = game.police.cars.length;
+if (!(n1 >= 1 && n2 === n1)) throw new Error(`callCop guard wrong: ${n1} -> ${n2}`);
+console.log("callCop OK, count =", n1);
+
 // 车流移动（先把测量车放到玩家 30m 内，避开 traffic 800m LOD）
 {
   const d0 = Math.hypot(t0.pos.x - player.pos.x, t0.pos.z - player.pos.z);
