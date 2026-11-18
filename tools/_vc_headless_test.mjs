@@ -148,7 +148,6 @@ if (city._nightF < 0.9) throw new Error("nightFactor too low at 22h");
 if (game.peds.peds.length < 20) throw new Error("peds too few");
 let ped0 = game.peds.peds[0];
 const t0 = game.traffic.cars[0];
-const t0x = t0.pos.x, t0z = t0.pos.z;
 
 // 通缉升星：先清零，再 +2
 game.police.clearCrime();
@@ -410,11 +409,28 @@ console.log("m6 eliminate OK, rifle unlocked");
   taxi.pos.z = T.dest.z;
   taxi.vx = taxi.vz = 0;
   player.pos.set(taxi.pos.x, 0, taxi.pos.z);
-  for (let i = 0; i < 5; i++) game.update(1 / 60);
-  if (T.state !== "idle") throw new Error("taxi fare not completed, state=" + T.state);
-  if (player.money !== money0 + fare) throw new Error(`taxi fare wrong: ${player.money} vs ${money0} + ${fare}`);
+  for (let i = 0; i < 3; i++) game.update(1 / 60);
+  // 注：送达后仍坐在车里且停稳会立即自动接下一单，此处只断言首次计费
+  if (!(player.money >= money0 + fare)) {
+    throw new Error(`taxi fare wrong: ${player.money} vs ${money0} + ${fare}`);
+  }
   if ((game.store.state.taxiDone || 0) < 1) throw new Error("taxiDone not saved");
+  if (player.inVehicle) player.exitVehicle();
   console.log("taxi OK, fare =", fare, "taxiDone =", game.store.state.taxiDone);
+}
+
+// ---- 车流重投：远车 N 秒后出现在玩家周边
+{
+  const tc = game.traffic.cars[game.traffic.cars.length - 1];
+  if (player.inVehicle) player.exitVehicle();
+  const fx = 1150, fz = 1150;
+  player.pos.set(fx, 0, fz);
+  tc.pos.x = -1150; tc.pos.z = -1150; tc.vx = tc.vz = 0; tc._target = null; tc._loafT = 0;
+  for (let i = 0; i < 360; i++) { player.pos.set(fx, 0, fz); game.update(1 / 60); }
+  const dd = Math.hypot(tc.pos.x - fx, tc.pos.z - fz);
+  if (dd > 800) throw new Error(`traffic recycle failed: ${dd.toFixed(0)} loaf=${(tc._loafT || 0).toFixed(1)} pos=${tc.pos.x.toFixed(0)},${tc.pos.z.toFixed(0)}`);
+  player.pos.set(0, 0, 0);
+  console.log("traffic recycle OK, dist =", dd.toFixed(0));
 }
 
 // ---- 音效系统（headless 下安全跳过/无 ctx）

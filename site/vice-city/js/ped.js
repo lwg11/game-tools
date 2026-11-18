@@ -8,7 +8,7 @@
 import * as THREE from "../lib/three.module.min.js";
 import { WORLD, clamp, lerp } from "./common.js";
 
-const MAX_PEDS = 48;
+const MAX_PEDS = 64;
 const WALK_SPEED = 1.35;
 const RUN_SPEED = 4.6;
 
@@ -18,7 +18,7 @@ const SKIN_COLORS = [0xe8b890, 0xc8956c, 0x8a5a3a, 0xf0c8a0];
 const HAIR_COLORS = [0x201410, 0x3a2414, 0x5a3a1a, 0x8a8a8a, 0x141414, 0xc8a050];
 
 export class PedestrianSystem {
-  constructor(game, count = 36) {
+  constructor(game, count = 56) {
     this.game = game;
     this.count = Math.min(count, MAX_PEDS);
     this.peds = [];
@@ -39,8 +39,18 @@ export class PedestrianSystem {
     this.armLInst = mk(0.13, 0.5, 0.16);
     this.armRInst = mk(0.13, 0.5, 0.16);
     this.hairInst = mk(0.34, 0.14, 0.34);
+    // 新增细节件：颈 / 手 / 鞋 / 眉眼条
+    this.neckInst = mk(0.1, 0.12, 0.12);
+    this.handLInst = mk(0.11, 0.14, 0.13);
+    this.handRInst = mk(0.11, 0.14, 0.13);
+    this.shoeLInst = mk(0.2, 0.1, 0.28);
+    this.shoeRInst = mk(0.2, 0.1, 0.28);
+    this.faceInst = mk(0.26, 0.05, 0.03);
 
-    for (const inst of [this.bodyInst, this.headInst, this.legLInst, this.legRInst, this.armLInst, this.armRInst, this.hairInst]) {
+    const parts = [this.bodyInst, this.headInst, this.legLInst, this.legRInst,
+      this.armLInst, this.armRInst, this.hairInst, this.neckInst,
+      this.handLInst, this.handRInst, this.shoeLInst, this.shoeRInst, this.faceInst];
+    for (const inst of parts) {
       inst.castShadow = true;
       // 包围球只在首次渲染时按原点初始矩阵算一次；行人四处走动后必须禁用剔除，
       // 否则相机离开原点视野时整个行人系统被整体剔除（走近人反而消失）
@@ -92,19 +102,23 @@ export class PedestrianSystem {
       this.armRInst.setColorAt(i, new THREE.Color(SHIRT_COLORS[p.colorIdx]));
       this.headInst.setColorAt(i, new THREE.Color(SKIN_COLORS[p.skinIdx]));
       this.hairInst.setColorAt(i, new THREE.Color(HAIR_COLORS[p.hairIdx]));
+      this.neckInst.setColorAt(i, new THREE.Color(SKIN_COLORS[p.skinIdx]));
+      this.handLInst.setColorAt(i, new THREE.Color(SKIN_COLORS[p.skinIdx]));
+      this.handRInst.setColorAt(i, new THREE.Color(SKIN_COLORS[p.skinIdx]));
+      this.shoeLInst.setColorAt(i, new THREE.Color(0x1c1c22));
+      this.shoeRInst.setColorAt(i, new THREE.Color(0x1c1c22));
+      this.faceInst.setColorAt(i, new THREE.Color(0x14161a));
       m4.makeScale(0, 0, 0); // 初始隐藏，update 时写入
       this.bodyInst.setMatrixAt(i, m4);
     }
     // 其余实例隐藏
     const hide = new THREE.Matrix4().makeScale(0, 0, 0);
     for (let i = this.peds.length; i < MAX_PEDS; i++) {
-      this.bodyInst.setMatrixAt(i, hide);
-      this.headInst.setMatrixAt(i, hide);
-      this.legLInst.setMatrixAt(i, hide);
-      this.legRInst.setMatrixAt(i, hide);
-      this.armLInst.setMatrixAt(i, hide);
-      this.armRInst.setMatrixAt(i, hide);
-      this.hairInst.setMatrixAt(i, hide);
+      for (const inst of [this.bodyInst, this.headInst, this.legLInst, this.legRInst,
+        this.armLInst, this.armRInst, this.hairInst, this.neckInst,
+        this.handLInst, this.handRInst, this.shoeLInst, this.shoeRInst, this.faceInst]) {
+        inst.setMatrixAt(i, hide);
+      }
     }
     this.bodyInst.instanceMatrix.needsUpdate = true;
     this.bodyInst.instanceColor.needsUpdate = true;
@@ -114,6 +128,12 @@ export class PedestrianSystem {
     this.armLInst.instanceColor.needsUpdate = true;
     this.armRInst.instanceColor.needsUpdate = true;
     this.hairInst.instanceColor.needsUpdate = true;
+    this.neckInst.instanceColor.needsUpdate = true;
+    this.handLInst.instanceColor.needsUpdate = true;
+    this.handRInst.instanceColor.needsUpdate = true;
+    this.shoeLInst.instanceColor.needsUpdate = true;
+    this.shoeRInst.instanceColor.needsUpdate = true;
+    this.faceInst.instanceColor.needsUpdate = true;
   }
 
   /** 触发恐慌：某点附近行人四散 */
@@ -257,13 +277,11 @@ export class PedestrianSystem {
     for (let i = 0; i < this.peds.length; i++) {
       const p = this.peds[i];
       if (p.dead && p.deadTimer <= 0) {
-        this.bodyInst.setMatrixAt(i, hidden);
-        this.headInst.setMatrixAt(i, hidden);
-        this.legLInst.setMatrixAt(i, hidden);
-        this.legRInst.setMatrixAt(i, hidden);
-        this.armLInst.setMatrixAt(i, hidden);
-        this.armRInst.setMatrixAt(i, hidden);
-        this.hairInst.setMatrixAt(i, hidden);
+        for (const inst of [this.bodyInst, this.headInst, this.legLInst, this.legRInst,
+          this.armLInst, this.armRInst, this.hairInst, this.neckInst,
+          this.handLInst, this.handRInst, this.shoeLInst, this.shoeRInst, this.faceInst]) {
+          inst.setMatrixAt(i, hidden);
+        }
         continue;
       }
       // base：位置 + 朝向；死亡时向侧面放倒
@@ -273,11 +291,17 @@ export class PedestrianSystem {
 
       const swing = p.dead ? 0 : Math.sin(p.phase * 3) * clamp(p.speed / WALK_SPEED, 0, 1.2) * 0.6;
       this._setPart(this.bodyInst, i, m4, 0, 0.98, 0, 0);
+      this._setPart(this.neckInst, i, m4, 0, 1.32, 0, 0);
       this._setPart(this.headInst, i, m4, 0, 1.45, 0, 0);
+      this._setPart(this.faceInst, i, m4, 0, 1.50, 0.155, 0);
       this._setPart(this.legLInst, i, m4, -0.13, 0.32, 0, swing);
       this._setPart(this.legRInst, i, m4, 0.13, 0.32, 0, -swing);
+      this._setPart(this.shoeLInst, i, m4, -0.13, 0.04, 0.05, swing);
+      this._setPart(this.shoeRInst, i, m4, 0.13, 0.04, 0.05, -swing);
       this._setPart(this.armLInst, i, m4, -0.33, 0.98, 0, -swing * 0.9);
       this._setPart(this.armRInst, i, m4, 0.33, 0.98, 0, swing * 0.9);
+      this._setPart(this.handLInst, i, m4, -0.33, 0.68, 0, -swing * 0.9);
+      this._setPart(this.handRInst, i, m4, 0.33, 0.68, 0, swing * 0.9);
       this._setPart(this.hairInst, i, m4, 0, 1.58, -0.01, 0);
     }
     this.bodyInst.instanceMatrix.needsUpdate = true;
@@ -287,6 +311,12 @@ export class PedestrianSystem {
     this.armLInst.instanceMatrix.needsUpdate = true;
     this.armRInst.instanceMatrix.needsUpdate = true;
     this.hairInst.instanceMatrix.needsUpdate = true;
+    this.neckInst.instanceMatrix.needsUpdate = true;
+    this.handLInst.instanceMatrix.needsUpdate = true;
+    this.handRInst.instanceMatrix.needsUpdate = true;
+    this.shoeLInst.instanceMatrix.needsUpdate = true;
+    this.shoeRInst.instanceMatrix.needsUpdate = true;
+    this.faceInst.instanceMatrix.needsUpdate = true;
   }
 
   _setPart(inst, idx, baseM4, ox, oy, oz, swing) {

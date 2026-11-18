@@ -8,9 +8,10 @@ import * as THREE from "../lib/three.module.min.js";
 import { Car, paintCar, CAR_PAINTS } from "./vehicle.js";
 import { WORLD, clamp, angleDiff } from "./common.js";
 
-const TRAFFIC_COUNT = 8;
+const TRAFFIC_COUNT = 16;
 const LANE_OFFSET = 3.0;
 const TURN_RANDOM = 0.35;
+const RELOCATE_T = 5;   // 远离玩家 N 秒后重新投放到其他路段
 
 export class TrafficSystem {
   constructor(game, count = TRAFFIC_COUNT) {
@@ -23,7 +24,8 @@ export class TrafficSystem {
   _spawnAll() {
     const half = WORLD.half;
     const step = WORLD.size / WORLD.gridN;
-    const types = ["sedan", "taxi", "pickup", "sedan", "ambulance", "pickup", "sedan", "taxi"];
+    const types = ["sedan", "taxi", "pickup", "sedan", "ambulance", "pickup", "sport", "sedan",
+      "taxi", "sedan", "pickup", "sedan", "taxi", "pickup", "sedan", "sport"];
     for (let i = 0; i < this.count; i++) {
       const nodes = this._gridNodes();
       const idx = Math.floor(Math.random() * nodes.length);
@@ -58,6 +60,35 @@ export class TrafficSystem {
       }
     }
     return nodes;
+  }
+
+  /** 将远处“看不见”的车重新投放到玩家 300~700m 的随机路段节点 */
+  _relocate(car, playerPos) {
+    const half = WORLD.half;
+    const step = WORLD.size / WORLD.gridN;
+    const pgx = Math.min(WORLD.gridN - 1, Math.max(1, Math.round((playerPos.x + half) / step)));
+    const pgz = Math.min(WORLD.gridN - 1, Math.max(1, Math.round((playerPos.z + half) / step)));
+    let gx = pgx;
+    let gz = pgz;
+    for (let t = 0; t < 8; t++) {
+      const candX = Math.min(WORLD.gridN - 1, Math.max(1, pgx + Math.floor(Math.random() * 13) - 6));
+      const candZ = Math.min(WORLD.gridN - 1, Math.max(1, pgz + Math.floor(Math.random() * 13) - 6));
+      const wx = -half + candX * step;
+      const wz = -half + candZ * step;
+      const d = Math.hypot(wx - playerPos.x, wz - playerPos.z);
+      if (d > 300 && d < 750) { gx = candX; gz = candZ; break; }
+    }
+    const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    const dir = dirs[Math.floor(Math.random() * 4)];
+    car._grid = { gx, gz, dir };
+    const rightX = Math.cos(Math.atan2(dir[0], dir[1]));
+    const rightZ = -Math.sin(Math.atan2(dir[0], dir[1]));
+    car.pos.x = -half + gx * step + rightX * LANE_OFFSET;
+    car.pos.z = -half + gz * step + rightZ * LANE_OFFSET;
+    car.angle = Math.atan2(dir[0], dir[1]);
+    car._target = null;
+    car.vx = car.vz = 0;
+    if (car.group) car.group.visible = true;
   }
 
   _nextNode(car) {
@@ -101,10 +132,16 @@ export class TrafficSystem {
         }
         continue;
       }
-      // 距离 LOD：800m 外不跑驾驶 AI/碰撞（玩家看不见）
+      // 距离 LOD：800m 外不跑驾驶 AI（玩家看不见），但定期重投到玩家周边
       if (playerPos && Math.hypot(car.pos.x - playerPos.x, car.pos.z - playerPos.z) > 800) {
+        car._loafT = (car._loafT || 0) + dt;
+        if (car._loafT > RELOCATE_T) {
+          car._loafT = 0;
+          this._relocate(car, playerPos);
+        }
         continue;
       }
+      car._loafT = 0;
       let target = car._target;
       if (!target || Math.hypot(target.x - car.pos.x, target.z - car.pos.z) < 6) {
         target = this._nextNode(car);

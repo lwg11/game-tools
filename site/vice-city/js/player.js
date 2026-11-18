@@ -51,12 +51,18 @@ export class Player {
     const shoeMat = new THREE.MeshLambertMaterial({ color: 0x1c1c22 });
     const darkMat = new THREE.MeshLambertMaterial({ color: 0x14161a });
 
-    // 躯干 + 肩部
+    // 躯干 + 肩部 + 衣领 + 拉链 + 腰带
     const body = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.62, 0.3), shirtMat);
     body.position.y = 0.98;
     body.castShadow = true;
+    const collar = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.07, 0.22), new THREE.MeshLambertMaterial({ color: 0xf0d0a8 }));
+    collar.position.set(0, 1.31, 0.02);
+    const zipper = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.52, 0.02), darkMat);
+    zipper.position.set(0, 0.98, 0.155);
     const shoulders = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.12, 0.34), shirtMat);
     shoulders.position.y = 1.26;
+    const belt = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.08, 0.34), darkMat);
+    belt.position.y = 0.70;
 
     // 颈 + 头 + 头发 + 眼睛
     const neck = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.1, 0.12), skinMat);
@@ -68,11 +74,26 @@ export class Player {
     hair.position.set(0, 0.13, -0.02);
     const hairBack = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.22, 0.1), hairMat);
     hairBack.position.set(0, 0.02, -0.15);
-    head.add(hair, hairBack);
+    const hairSideL = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.14, 0.26), hairMat);
+    hairSideL.position.set(-0.16, 0.0, -0.02);
+    const hairSideR = hairSideL.clone();
+    hairSideR.position.x = 0.16;
+    // 鼻
+    const nose = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.08, 0.05), skinMat);
+    nose.position.set(0, -0.02, 0.16);
+    head.add(hair, hairBack, hairSideL, hairSideR, nose);
+    // 眼白 + 瞳孔 + 眉
+    const whiteMat = new THREE.MeshLambertMaterial({ color: 0xf5f5f5 });
+    const browMat = new THREE.MeshLambertMaterial({ color: 0x2e1d12 });
     for (const sx of [-0.07, 0.07]) {
-      const eye = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.02), darkMat);
-      eye.position.set(sx, 0.0, 0.16);
-      head.add(eye);
+      const eye = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.02), whiteMat);
+      eye.position.set(sx, 0.0, 0.155);
+      const pupil = new THREE.Mesh(new THREE.BoxGeometry(0.028, 0.03, 0.012), darkMat);
+      pupil.position.set(0, 0, 0.012);
+      eye.add(pupil);
+      const brow = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.02, 0.02), browMat);
+      brow.position.set(sx, 0.085, 0.155);
+      head.add(eye, brow);
     }
 
     // 手臂（袖 + 手）
@@ -105,7 +126,7 @@ export class Player {
     const legL = mkLeg(-1);
     const legR = mkLeg(1);
 
-    g.add(body, shoulders, neck, head, armL, armR, legL, legR);
+    g.add(body, collar, zipper, shoulders, belt, neck, head, armL, armR, legL, legR);
     this.legL = legL;
     this.legR = legR;
     this.armL = armL;
@@ -113,6 +134,7 @@ export class Player {
     this.body = body;
     this.gun = gun;
     this.group = g;
+    this.aiming = false;
     if (!this.headless) this.game.scene.add(g);
   }
 
@@ -272,6 +294,14 @@ export class Player {
   }
 
   _animate(dt) {
+    if (this.aiming) {
+      // 据枪姿势：右手前伸、左手托举
+      this.armR.rotation.x = lerp(this.armR.rotation.x, -1.3, clamp(10 * dt, 0, 1));
+      this.armL.rotation.x = lerp(this.armL.rotation.x, -0.85, clamp(10 * dt, 0, 1));
+      this.legL.rotation.x = lerp(this.legL.rotation.x, 0, clamp(8 * dt, 0, 1));
+      this.legR.rotation.x = lerp(this.legR.rotation.x, 0, clamp(8 * dt, 0, 1));
+      return;
+    }
     if (this.speed > 0.3) {
       this._walkPhase += dt * (4 + this.speed * 1.2);
       const s = Math.sin(this._walkPhase);
