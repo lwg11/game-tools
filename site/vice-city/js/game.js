@@ -170,7 +170,7 @@ export class ViceCityGame {
     // 渲染器
     if (!this.headless) {
       this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true, powerPreference: "high-performance" });
-      this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isMobile() ? 1.5 : 2));
+      this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isMobile ? 1.5 : 2));
       this.renderer.setSize(window.innerWidth, window.innerHeight);
       this.renderer.outputColorSpace = THREE.SRGBColorSpace;
       this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -240,7 +240,7 @@ export class ViceCityGame {
     // 移动端标记
     if (!this.headless) {
       const touch = document.getElementById("vc-touch");
-      if (touch && isMobile()) touch.classList.remove("hidden");
+      if (touch && isMobile) touch.classList.remove("hidden");
       this._bindMenus();
       window.addEventListener("resize", () => this._resize());
     }
