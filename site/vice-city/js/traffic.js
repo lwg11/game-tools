@@ -98,6 +98,10 @@ export class TrafficSystem {
         }
         continue;
       }
+      // 距离 LOD：800m 外不跑驾驶 AI/碰撞（玩家看不见）
+      if (playerPos && Math.hypot(car.pos.x - playerPos.x, car.pos.z - playerPos.z) > 800) {
+        continue;
+      }
       let target = car._target;
       if (!target || Math.hypot(target.x - car.pos.x, target.z - car.pos.z) < 6) {
         target = this._nextNode(car);

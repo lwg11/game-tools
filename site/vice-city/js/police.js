@@ -135,6 +135,7 @@ export class PoliceSystem {
       const dx = target.x - car.pos.x;
       const dz = target.z - car.pos.z;
       const dist = Math.hypot(dx, dz);
+      if (dist > 800) continue; // 距离 LOD：远处不跑 AI
       const desired = Math.atan2(dx, dz);
       const diff = angleDiff(desired, car.angle);
       const steer = clamp(diff * 1.6, -1, 1);

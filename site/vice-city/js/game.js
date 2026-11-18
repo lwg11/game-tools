@@ -204,6 +204,10 @@ export class ViceCityGame {
     this.hemi = new THREE.HemisphereLight(0xb8d8f0, 0x44503a, 0.85);
     this.scene.add(this.sun, this.hemi);
 
+    // 一次性特效池（爆炸）与镜头震动
+    this._fx = [];
+    this._shakeAmp = 0;
+
     // 输入
     this.input = new InputManager(this);
     this.inVehicle = false;
@@ -337,13 +341,62 @@ export class ViceCityGame {
     if (this.sfx && this.sfx.playCrash) this.sfx.playCrash(impact);
     if (!this.headless && this.player && this.player.vehicle === car && impact > 12) {
       this.showToast("车辆受损严重！注意车况");
+      this._shakeAmp = Math.max(this._shakeAmp, Math.min(0.5, impact * 0.02));
     }
   }
 
-  /** 车辆爆炸（玩家当前车） */
+  /** 车辆爆炸（玩家当前车）：火球 + 镜头震动 */
   onCarExplode(car) {
+    const x = car.pos.x;
+    const z = car.pos.z;
+    if (!this.headless) this.spawnExplosion(x, z);
+    if (this.player) {
+      const d = Math.hypot(this.player.pos.x - x, this.player.pos.z - z);
+      this._shakeAmp = Math.max(this._shakeAmp, Math.min(0.8, 6 / Math.max(6, d)));
+    }
     if (!this.headless && this.player && this.player.vehicle === car) {
       this.showToast("车辆报废！快逃离现场");
+    }
+  }
+
+  /** 爆炸火球特效（程序化） */
+  spawnExplosion(x, z) {
+    if (this.headless) return;
+    const core = new THREE.Mesh(
+      new THREE.SphereGeometry(1.2, 14, 12),
+      new THREE.MeshBasicMaterial({ color: 0xffe98a, transparent: true, opacity: 0.95 }),
+    );
+    core.position.set(x, 1.2, z);
+    const halo = new THREE.Mesh(
+      new THREE.SphereGeometry(2.0, 14, 12),
+      new THREE.MeshBasicMaterial({ color: 0xff7a20, transparent: true, opacity: 0.55, depthWrite: false }),
+    );
+    halo.position.set(x, 1.2, z);
+    this.scene.add(core, halo);
+    this._fx.push({ g: core, g2: halo, t: 0, dur: 0.65 });
+  }
+
+  /** 特效推进（仅渲染进程） */
+  _updateFx(dt) {
+    if (this.headless || !this._fx) return;
+    for (let i = this._fx.length - 1; i >= 0; i--) {
+      const f = this._fx[i];
+      f.t += dt;
+      const k = f.t / f.dur;
+      if (k >= 1) {
+        this.scene.remove(f.g, f.g2);
+        f.g.geometry.dispose();
+        f.g.material.dispose();
+        f.g2.geometry.dispose();
+        f.g2.material.dispose();
+        this._fx.splice(i, 1);
+        continue;
+      }
+      const s = 1 + k * 9;
+      f.g.scale.setScalar(s);
+      f.g2.scale.setScalar(s * 1.15);
+      f.g.material.opacity = 0.95 * (1 - k);
+      f.g2.material.opacity = 0.55 * (1 - k);
     }
   }
 
@@ -454,6 +507,7 @@ export class ViceCityGame {
     if (this.sfx && this.sfx.update) this.sfx.update(dt);
 
     this._updateCamera();
+    this._updateFx(dt);
     this._syncHud();
     if (++this._mmTick % 10 === 0) this._syncMinimap();
   }
@@ -593,6 +647,15 @@ export class ViceCityGame {
     const cz = Math.cos(this.cameraYaw) * cy * dist;
     const yr = Math.sin(this.cameraPitch) * dist;
     this.camera.position.set(target.x - cx, yr + 2.2, target.z - cz);
+    // 镜头震动（爆炸/撞击）
+    if (this._shakeAmp > 0.005) {
+      this.camera.position.x += (Math.random() - 0.5) * this._shakeAmp;
+      this.camera.position.y += (Math.random() - 0.5) * this._shakeAmp * 0.6;
+      this.camera.position.z += (Math.random() - 0.5) * this._shakeAmp;
+      this._shakeAmp *= 0.88;
+    } else {
+      this._shakeAmp = 0;
+    }
     this.camera.lookAt(target.x, 1.6, target.z);
   }
 
