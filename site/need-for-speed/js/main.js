@@ -358,6 +358,7 @@ class Game {
     this.coins -= price;
     this.owned.push(id);
     JSON_STORE.set("owned_cars", this.owned);
+    store.set("coins", String(this.coins));
     if (this._updateCoins) this._updateCoins();
     if (this._rebuildCarPills) this._rebuildCarPills();
     this.setCar(id);
@@ -377,6 +378,7 @@ class Game {
     mods[partId] = lvl + 1;
     this.modsMap[this.carId] = mods;
     JSON_STORE.set("mods", this.modsMap);
+    store.set("coins", String(this.coins));
     if (this._updateCoins) this._updateCoins();
     this.setCar(this.carId);
     if (this._renderM4) this._renderM4();
