@@ -1,4 +1,11 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
+/* 移动端：禁止长按复制/系统菜单/高亮（与其他游戏一致） */
+html, body {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
 html, body { width: 100%; height: 100%; overflow: hidden; background: #0b0e16; }
 body { font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; color: #fff; }
 #app { position: fixed; inset: 0; }

@@ -4,7 +4,6 @@
  */
 import * as THREE from "../lib/three.module.min.js";
 import { GLTFLoader } from "../lib/GLTFLoader.js";
-import { DRACOLoader } from "../lib/DRACOLoader.js";
 import { CarSim, makeTrack, projectToTrack, clamp, wrapAngle } from "./sim.js";
 import { buildTrackMeshes } from "./track.js";
 import { Input } from "./input.js";
@@ -140,10 +139,7 @@ class Game {
 
   /** 真实 glTF 车模（ferrari.glb，three.js 示例模型，MIT），失败则保留程序化回退 */
   _loadCarModel() {
-    const draco = new DRACOLoader();
-    draco.setDecoderPath("./lib/draco/gltf/");
-    const loader = new GLTFLoader();
-    loader.setDRACOLoader(draco);
+    const loader = new GLTFLoader(); // 无压缩 glb：无需 Draco/worker，兼容严格 CSP
     loader.load(
       "./assets/models/ferrari.glb",
       (gltf) => {

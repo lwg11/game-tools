@@ -220,16 +220,26 @@ class Handler(BaseHTTPRequestHandler):
         ctype = mimetypes.guess_type(target)[0] or "application/octet-stream"
         if ctype.startswith("text/") or ctype in ("application/javascript", "application/json", "image/svg+xml"):
             ctype += "; charset=utf-8"
-        with open(target, "rb") as fh:
-            data = fh.read()
         cache = "no-cache" if target.endswith(".html") else "public, max-age=300"
         headers = {"Cache-Control": cache}
+        data = None
+        # 大体积静态资源：存在同名 .gz 且客户端支持时下发 gzip
+        zpath = target + ".gz"
+        if "gzip" in (self.headers.get("Accept-Encoding") or "") and os.path.isfile(zpath):
+            with open(zpath, "rb") as fh:
+                data = fh.read()
+            headers["Content-Encoding"] = "gzip"
+            headers["Vary"] = "Accept-Encoding"
+            headers["Cache-Control"] = "public, max-age=31536000"
         if target.endswith(".html"):
             headers["Content-Security-Policy"] = (
                 "default-src 'self'; img-src 'self' data:; "
                 "style-src 'self' 'unsafe-inline'; script-src 'self'; "
                 "connect-src 'self'; font-src 'self'; media-src 'self' blob:"
             )
+        if data is None:
+            with open(target, "rb") as fh:
+                data = fh.read()
         self._send(200, b"" if head else data, ctype, headers)
 
     # ---------------- API
