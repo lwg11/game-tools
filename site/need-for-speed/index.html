@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>霓虹海岸 · 竞速原型（M1）</title>
+<link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+<div id="app"></div>
+
+<!-- HUD：速度 / 氮气 / 圈速 / 漂移分 -->
+<div id="nfs-hud" class="nfs-hud hidden">
+  <div class="nfs-tl">
+    <div id="nfs-speed" class="nfs-speed">0</div>
+    <div class="nfs-unit">km/h</div>
+    <div class="nfs-nitro"><div id="nfs-nitro-fill"></div></div>
+  </div>
+  <div class="nfs-tr">
+    <div id="nfs-lap">圈 1</div>
+    <div id="nfs-time">0:00.00</div>
+    <div id="nfs-best">最佳 --</div>
+  </div>
+  <div class="nfs-br">
+    <div id="nfs-drift">漂移 0</div>
+  </div>
+  <div id="nfs-msg">WASD 驾驶 / Space 漂移 / Shift 氮气</div>
+</div>
+
+<!-- 开始菜单 -->
+<div id="nfs-menu" class="nfs-menu">
+  <div class="nfs-panel">
+    <h1>霓虹海岸</h1>
+    <p>M1 灰色原型 · 验证驾驶手感</p>
+    <button id="nfs-btn-start">点火出发</button>
+    <p class="nfs-keys">W/S 油门刹车 · A/D 转向 · Space 手刹漂移 · Shift 氮气</p>
+  </div>
+</div>
+
+<script type="module" src="./js/main.js"></script>
+</body>
+</html>
