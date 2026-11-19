@@ -13,6 +13,8 @@ import { TouchControls } from "./touch.js";
 import { Garage, tintModel } from "./garage.js";
 import { Traffic } from "./traffic.js";
 import { RaceManager, RACE_MODES, DIFFS } from "./race.js";
+import { Sfx } from "./sfx.js";
+import { TrackMap } from "./map.js";
 import { isTouch } from "../../assets/js/device.js";
 
 const FIXED_DT = 1 / 60;
@@ -105,6 +107,10 @@ class Game {
 
     // 比赛管理（M3）
     this.race = new RaceManager(); this.modeId = store.get("mode", "race"); this.diffId = parseInt(store.get("diff", "1"), 10); if (![0, 1, 2].includes(this.diffId)) this.diffId = 1; this.coins = parseInt(store.get("coins", "0"), 10) || 0;
+    this.sfx = new Sfx(store.get("mute", "0") === "1");
+    this._cdLast = -1;
+    this._mapTick = 0;
+
     // M4 成长：解锁/部件/涂装
     this.owned = JSON_STORE.get("owned_cars", ["mini", "street"]);
     this.modsMap = JSON_STORE.get("mods", {});
@@ -166,6 +172,28 @@ class Game {
 
     this.input.attach();
     this._bindHud();
+    // M5：小地图 + 后视镜 + 静音键
+    this.map = new TrackMap(document.getElementById("nfs-map"), this.track);
+    const rt = new THREE.WebGLRenderTarget(512, 180);
+    rt.texture.wrapS = THREE.RepeatWrapping;
+    rt.texture.repeat.x = -1; // 镜面左右翻转
+    this._mirrorRT = rt;
+    this._rearCam = new THREE.PerspectiveCamera(72, 512 / 180, 0.1, 600);
+    this._overlayScene = new THREE.Scene();
+    this._overlayCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 10);
+    const mq = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: rt.texture }));
+    mq.position.z = 1;
+    this._overlayScene.add(mq);
+    this._mirrorQuad = mq;
+    this._layoutMirror();
+    window.addEventListener("keydown", (e) => {
+      if ((e.key === "m" || e.key === "M") && !e.repeat) this._toggleMute();
+    });
+    const muteBtn = document.getElementById("nfs-mute");
+    if (muteBtn) {
+      muteBtn.addEventListener("click", () => this._toggleMute());
+      this._updateMuteBtn(muteBtn);
+    }
     if (this.touch) {
       document.getElementById("nfs-keys-pc").style.display = "none";
       document.getElementById("nfs-keys-touch").style.display = "block";
@@ -635,6 +663,8 @@ class Game {
 
     this.running = true;
     this._last = performance.now();
+    this.sfx.resume();
+    this._cdLast = -1;
     if (this.hud.msg) this.hud.msg.textContent = "WASD 驾驶 / Space 漂移 / Shift 氮气";
   }
 
@@ -658,6 +688,7 @@ class Game {
     const lines = (res.lines || []).concat([`获得金币 +${res.coins}`]);
     document.getElementById("nfs-res-lines").innerHTML = lines.map((l) => `<div>${l}</div>`).join("");
     document.getElementById("nfs-results").classList.remove("hidden");
+    this.sfx.stinger(res.win);
   }
 
   /** 警匪：警车碰撞 */
@@ -676,6 +707,7 @@ class Game {
     if (this._copHitCd && this._copHitCd > this.time) return;
     this._copHitCd = this.time + 0.4;
     this.car.hp = Math.max(0, this.car.hp - 14);
+    this.sfx.hit(0.9);
     this._shake = Math.max(this._shake, 0.09);
     this._flash("🚔 警车撞击！");
   }
@@ -848,6 +880,8 @@ class Game {
     this.camera.aspect = window.innerWidth / window.innerHeight;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this._layoutMirror();
+    if (this.garage) this.garage._resize();
   }
 
   // ------------------------------------------------ 物理推进
@@ -855,6 +889,7 @@ class Game {
     this.time += dt;
     this._lastDt = dt;
     const rawInput = this.input.sample();
+    this._frameThrottle = rawInput.throttle;
     // 氮气：点按也至少持续 0.55s（QQ 手感，按下即爆发）
     const nitroDown = !!rawInput.nitro;
     if (nitroDown && !this._nitroPrev) this._nitroMin = 0.55;
@@ -910,6 +945,7 @@ class Game {
       this._trafficHits.length = 0;
       this.traffic.update(dt, this.car.x, this.car.z, this._trafficHits);
       for (const h of this._trafficHits) {
+        this.sfx.hit(0.5);
         const d = h.d || 1;
         const nx = h.dx / d, nz = h.dz / d;
         const push = 2.3 - d;
@@ -943,6 +979,15 @@ class Game {
       });
       if (this.race.state === "countdown" && this.hud.msg) {
         this.hud.msg.textContent = `准备 ${Math.ceil(this.race.countdown)}…`;
+      }
+      // M5 倒计时哔
+      const rc = Math.ceil(this.race.countdown);
+      if (this.race.state === "countdown" && rc !== this._cdLast && rc > 0) {
+        this._cdLast = rc;
+        this.sfx.beepCountdown(false);
+      } else if (this.race.state === "running" && this._cdLast !== 0) {
+        this._cdLast = 0;
+        this.sfx.beepCountdown(true);
       }
     }
 
@@ -1090,9 +1135,55 @@ class Game {
         steps++;
       }
       this._updateHud();
+      // M5 音效：引擎/漂移/氮气
+      this.sfx.update(this.car.speed, this._frameThrottle || 0, Math.abs(this.car.slip), this.car.nitroActive);
+      // M5 小地图（降额到 ~20Hz）
+      if (++this._mapTick >= 3) {
+        this._mapTick = 0;
+        const others = [];
+        if (this.race.cops) for (const c of this.race.cops) if (c.model) others.push({ x: c.x, z: c.z, color: "#4f7bff", r: 3 });
+        if (this.race.cars) for (const a of this.race.cars) if (a.model) others.push({ x: a.x, z: a.z, color: "#ff5a5a", r: 3 });
+        if (this.traffic && this.traffic.cars) for (const v of this.traffic.cars) if (v.x !== undefined) others.push({ x: v.x, z: v.z, color: "#cfd6e4", r: 2 });
+        this.map.draw(this.running ? this.car : null, others.filter((o) => o.color === "#ff5a5a"), others.filter((o) => o.color !== "#ff5a5a"));
+      }
     }
     this.renderer.render(this.scene, this.camera);
+    // M5 后视镜：车尾视角渲到 RT 再叠加到顶部
+    if (this.running && this._mirrorRT) {
+      const fx = Math.sin(this.car.angle), fz = Math.cos(this.car.angle);
+      this._rearCam.position.set(this.car.x, 1.45, this.car.z);
+      this._rearCam.lookAt(this.car.x - fx * 24, 1.1, this.car.z - fz * 24);
+      this.renderer.setRenderTarget(this._mirrorRT);
+      this.renderer.render(this.scene, this._rearCam);
+      this.renderer.setRenderTarget(null);
+      this.renderer.autoClear = false;
+      this.renderer.clearDepth();
+      this.renderer.render(this._overlayScene, this._overlayCam);
+      this.renderer.autoClear = true;
+    }
     requestAnimationFrame((tt) => this._frame(tt));
+  }
+
+  _layoutMirror() {
+    if (!this._mirrorQuad) return;
+    const w = window.innerWidth, h = window.innerHeight;
+    const mw = Math.min(w * 0.32, 440);
+    const mh = mw * (180 / 512);
+    const topMargin = 14;
+    this._mirrorQuad.scale.set((mw / w) * 2, (mh / h) * 2, 1);
+    this._mirrorQuad.position.set(0, 1 - (topMargin * 2 + mh) / h, 1);
+  }
+
+  _toggleMute() {
+    this.sfx.setMuted(!this.sfx.muted);
+    store.set("mute", this.sfx.muted ? "1" : "0");
+    const btn = document.getElementById("nfs-mute");
+    if (btn) this._updateMuteBtn(btn);
+  }
+
+  _updateMuteBtn(btn) {
+    btn.textContent = this.sfx.muted ? "🔇" : "🔊";
+    btn.title = this.sfx.muted ? "已静音（M）" : "声音开（M）";
   }
 
   _updateHud() {

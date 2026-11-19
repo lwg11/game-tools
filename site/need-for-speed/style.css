@@ -118,6 +118,24 @@ body { font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; co
 }
 #nfs-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
+/* ---------------- M5 小地图 / 静音按钮 ---------------- */
+#nfs-map {
+  position: fixed; left: 14px; bottom: 14px; z-index: 24;
+  border-radius: 10px; border: 1px solid rgba(255,255,255,.22);
+  box-shadow: 0 6px 20px rgba(0,0,0,.45); pointer-events: none;
+  width: 120px; height: 120px;
+}
+@media (max-width: 640px) {
+  #nfs-map { width: 84px; height: 84px; left: 8px; bottom: 8px; }
+}
+#nfs-mute {
+  position: absolute; top: 12px; right: 14px; z-index: 30;
+  width: 38px; height: 38px; border-radius: 50%; cursor: pointer;
+  border: 1px solid rgba(255,255,255,.25); background: rgba(10,12,22,.7);
+  font-size: 17px; color: #fff;
+}
+.nfs-menu:not(.hidden) #nfs-mute { display: inline-block; }
+
 .nfs-stat { display: flex; align-items: center; gap: 6px; font-size: 10px; }
 .nfs-stat-label { width: 26px; opacity: .75; letter-spacing: 1px; }
 .nfs-stat-bar { flex: 1; height: 6px; border-radius: 999px; background: rgba(255,255,255,.1); overflow: hidden; }
