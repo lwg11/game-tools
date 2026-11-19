@@ -12,6 +12,7 @@ import { Input } from "./input.js";
 import { TouchControls } from "./touch.js";
 import { Garage } from "./garage.js";
 import { Traffic } from "./traffic.js";
+import { RaceManager, RACE_MODES, DIFFS } from "./race.js";
 import { isTouch } from "../../assets/js/device.js";
 
 const FIXED_DT = 1 / 60;
@@ -71,6 +72,13 @@ class Game {
     this._accum = 0;
     this._last = performance.now();
     this._shake = 0;
+
+    // 比赛管理（M3）
+    this.race = new RaceManager();
+    this.modeId = store.get("mode", "race");
+    this.diffId = parseInt(store.get("diff", "1"), 10);
+    if (![0, 1, 2].includes(this.diffId)) this.diffId = 1;
+    this.coins = parseInt(store.get("coins", "0"), 10) || 0;
   }
 
   init() {
@@ -483,12 +491,18 @@ class Game {
       best: document.getElementById("nfs-best"),
       drift: document.getElementById("nfs-drift"),
       msg: document.getElementById("nfs-msg"),
+      racehud: document.getElementById("nfs-racehud"),
+      racePos: document.getElementById("nfs-race-pos"),
+      raceLap: document.getElementById("nfs-race-lap"),
+      raceTime: document.getElementById("nfs-race-time"),
+      raceExtra: document.getElementById("nfs-race-extra"),
     };
   }
 
   start() {
     document.getElementById("nfs-menu").classList.add("hidden");
     document.getElementById("nfs-hud").classList.remove("hidden");
+    document.getElementById("nfs-results").classList.add("hidden");
     if (this.touch) this.touch.show();
     // 起跑信号灯变绿
     const lights = this.scenery ? this.scenery.userData.startLights : null;
@@ -497,14 +511,141 @@ class Game {
       if (m && m.color) m.color.setHex(0x2bff5a);
     }
     if (this.garage) this.garage.hide();
+    // 整局重置
+    this.lap = 0;
+    this.lapStart = 0;
+    this.lapTimes = [];
+    this.bestLap = null;
+    this.driftScore = 0;
+    this._driftChain = 0;
+    this._sProgress = 0;
+    this._sPrev = this.track.samples[2].s;
+    // 车归位起跑线 + 状态重置
+    const s0 = this.track.samples[2];
+    this.car.x = s0.x; this.car.z = s0.z;
+    this.car.angle = Math.atan2(s0.tx, s0.tz);
+    this.car.vx = 0; this.car.vz = 0; this.car.speed = 0;
+    this.car.hp = 100; this.car.nitro = 1; this.car.slip = 0;
+    this._nitroPrev = false; this._nitroMin = 0;
+
+    if (this.modeId !== "free" && RACE_MODES.some((m) => m.id === this.modeId)) {
+      this.race.start(this.modeId, this.diffId, {
+        track: this.track,
+        scene: this.scene,
+        onFinish: (res) => this._onRaceFinish(res),
+      });
+      document.getElementById("nfs-racehud").classList.remove("hidden");
+      this._flash(`${(RACE_MODES.find((m) => m.id === this.modeId) || {}).name || "比赛"} · 准备`);
+    } else {
+      this.race.stop();
+      document.getElementById("nfs-racehud").classList.add("hidden");
+      this._flash("自由漫游 · 随心开");
+    }
+
     this.running = true;
     this._last = performance.now();
     if (this.hud.msg) this.hud.msg.textContent = "WASD 驾驶 / Space 漂移 / Shift 氮气";
   }
 
+  /** 比赛结束回调 */
+  _onRaceFinish(res) {
+    this.coins += res.coins;
+    store.set("coins", String(this.coins));
+    if (this._updateCoins) this._updateCoins();
+    document.getElementById("nfs-res-title").textContent = res.title;
+    const lines = (res.lines || []).concat([`获得金币 +${res.coins}`]);
+    document.getElementById("nfs-res-lines").innerHTML = lines.map((l) => `<div>${l}</div>`).join("");
+    document.getElementById("nfs-results").classList.remove("hidden");
+  }
+
+  /** 警匪：警车碰撞 */
+  _onCopHit(cop, d) {
+    // 推开（每帧）
+    const nx = (this.car.x - cop.x) / (d || 1);
+    const nz = (this.car.z - cop.z) / (d || 1);
+    this.car.x += nx * 0.35;
+    this.car.z += nz * 0.35;
+    const vn = this.car.vx * nx + this.car.vz * nz;
+    if (vn < 0) {
+      this.car.vx -= nx * vn * 1.3;
+      this.car.vz -= nz * vn * 1.3;
+    }
+    // 伤害冷却 0.4s
+    if (this._copHitCd && this._copHitCd > this.time) return;
+    this._copHitCd = this.time + 0.4;
+    this.car.hp = Math.max(0, this.car.hp - 14);
+    this._shake = Math.max(this._shake, 0.09);
+    this._flash("🚔 警车撞击！");
+  }
+
+  /** 返回主菜单 */
+  backToMenu() {
+    this.race.stop();
+    this.running = false;
+    document.getElementById("nfs-hud").classList.add("hidden");
+    document.getElementById("nfs-racehud").classList.add("hidden");
+    document.getElementById("nfs-results").classList.add("hidden");
+    document.getElementById("nfs-menu").classList.remove("hidden");
+    if (this.touch) this.touch.hide();
+    if (this.garage && this._carCfg) this.garage.show(this._carCfg);
+  }
+
   _bindMenu() {
     const carList = document.getElementById("nfs-car-list");
     const todList = document.getElementById("nfs-tod-list");
+    const modeList = document.getElementById("nfs-mode-list");
+    const diffList = document.getElementById("nfs-diff-list");
+    const coinsEl = document.getElementById("nfs-coins");
+    const updateCoins = () => {
+      if (coinsEl) coinsEl.textContent = String(this.coins);
+    };
+    this._updateCoins = updateCoins;
+    updateCoins();
+    const resAgain = document.getElementById("nfs-res-again");
+    const resRoam = document.getElementById("nfs-res-roam");
+    const resMenu = document.getElementById("nfs-res-menu");
+    if (resAgain) resAgain.addEventListener("click", () => {
+      document.getElementById("nfs-results").classList.add("hidden");
+      this.start();
+    });
+    if (resRoam) resRoam.addEventListener("click", () => {
+      document.getElementById("nfs-results").classList.add("hidden");
+      this.race.stop();
+      this.running = true;
+      this._last = performance.now();
+    });
+    if (resMenu) resMenu.addEventListener("click", () => this.backToMenu());
+    if (modeList) {
+      [{ id: "free", name: "自由漫游", desc: "无目标·全城开" }, ...RACE_MODES].forEach((m) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "nfs-pill" + (m.id === this.modeId ? " on" : "");
+        btn.textContent = m.name;
+        btn.title = m.desc;
+        btn.addEventListener("click", () => {
+          modeList.querySelectorAll(".nfs-pill").forEach((b) => b.classList.remove("on"));
+          btn.classList.add("on");
+          this.modeId = m.id;
+          store.set("mode", m.id);
+        });
+        modeList.appendChild(btn);
+      });
+    }
+    if (diffList) {
+      DIFFS.forEach((d) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "nfs-pill" + (d.id === this.diffId ? " on" : "");
+        btn.textContent = d.name;
+        btn.addEventListener("click", () => {
+          diffList.querySelectorAll(".nfs-pill").forEach((b) => b.classList.remove("on"));
+          btn.classList.add("on");
+          this.diffId = d.id;
+          store.set("diff", String(d.id));
+        });
+        diffList.appendChild(btn);
+      });
+    }
     if (carList) {
       CARS.forEach((c) => {
         const btn = document.createElement("button");
@@ -545,6 +686,7 @@ class Game {
   // ------------------------------------------------ 物理推进
   update(dt) {
     this.time += dt;
+    this._lastDt = dt;
     const rawInput = this.input.sample();
     // 氮气：点按也至少持续 0.55s（QQ 手感，按下即爆发）
     const nitroDown = !!rawInput.nitro;
@@ -594,8 +736,9 @@ class Game {
       this.car.angle = wrapAngle(this.car.angle + diffG * clamp(1.5 * dt, 0, 1));
     }
 
-    // 环境车流 + 与车流轻碰撞
-    if (this.traffic) {
+    const raceActive = this.race.state === "countdown" || this.race.state === "running";
+    // 环境车流 + 与车流轻碰撞（比赛中暂停车流）
+    if (this.traffic && !raceActive) {
       this._trafficHits = this._trafficHits || [];
       this._trafficHits.length = 0;
       this.traffic.update(dt, this.car.x, this.car.z, this._trafficHits);
@@ -614,6 +757,24 @@ class Game {
             this.cameraShakeStart = this.time;
           }
         }
+      }
+    }
+
+    // 比赛推进（M3）
+    if (raceActive) {
+      this.race.setCtxInfo({ playerProg: this._sProgress, driftScore: this.driftScore + this._driftChain, hp: this.car.hp });
+      this.race.update(dt, {
+        playerProg: this._sProgress,
+        playerLap: this.lap,
+        playerX: this.car.x,
+        playerZ: this.car.z,
+        playerVx: this.car.vx,
+        playerVz: this.car.vz,
+        playerHp: this.car.hp,
+        onCopHit: (cop, d) => this._onCopHit(cop, d),
+      });
+      if (this.race.state === "countdown" && this.hud.msg) {
+        this.hud.msg.textContent = `准备 ${Math.ceil(this.race.countdown)}…`;
       }
     }
 
@@ -788,6 +949,21 @@ class Game {
     if (h.time) h.time.textContent = fmt(this.time - this.lapStart);
     if (h.best) h.best.textContent = this.bestLap ? `最佳 ${fmt(this.bestLap)}` : "最佳 --";
     if (h.drift) h.drift.textContent = `漂移 ${this.driftScore + Math.round(this._driftChain)}`;
+    // 比赛 HUD（M3）
+    if (this.hud.racePos && (this.race.state === "countdown" || this.race.state === "running")) {
+      this.hud.racePos.textContent = this.race.state === "countdown" ? "预备" : `P${this.race.playerRank(this._sProgress)}`;
+      if (this.race.mode === "drift") {
+        this.hud.raceLap.textContent = `漂移 ${Math.round(this.driftScore + this._driftChain)}`;
+      } else {
+        this.hud.raceLap.textContent = `圈 ${Math.min(this.lap + 1, this.race.laps)}/${this.race.laps}`;
+      }
+      this.hud.raceTime.textContent = this.race.state === "countdown" ? "准备中" : fmt(this.race.time);
+      let extra = "";
+      if (this.race.mode === "drift") extra = `剩余 ${Math.ceil(this.race.timeLeft)}s`;
+      else if (this.race.mode === "elim") extra = `淘汰倒数 ${Math.ceil(this.race.elimTimer)}s`;
+      else if (this.race.mode === "cop") extra = `耐久 ${Math.max(0, Math.round(this.car.hp))}`;
+      this.hud.raceExtra.textContent = extra;
+    }
     if (h.msg && this.time > +(this.hud.msg.dataset.until || 0)) h.msg.textContent = "WASD 驾驶 / Space 漂移 / Shift 氮气";
   }
 

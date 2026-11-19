@@ -29,6 +29,24 @@
   <div id="nfs-msg">WASD 驾驶 / Space 漂移 / Shift 氮气</div>
 </div>
 
+<!-- 比赛 HUD / 结算 -->
+<div id="nfs-racehud" class="hidden">
+  <div id="nfs-race-pos">P1</div>
+  <div id="nfs-race-meta"><span id="nfs-race-lap">1/3</span> · <span id="nfs-race-time">0:00</span></div>
+  <div id="nfs-race-extra"></div>
+</div>
+<div id="nfs-results" class="hidden">
+  <div class="nfs-res-panel">
+    <h2 id="nfs-res-title">比赛结束</h2>
+    <div id="nfs-res-lines"></div>
+    <div class="nfs-res-btns">
+      <button id="nfs-res-again" type="button">再来一局</button>
+      <button id="nfs-res-roam" type="button">继续漫游</button>
+      <button id="nfs-res-menu" type="button">返回菜单</button>
+    </div>
+  </div>
+</div>
+
 <!-- 开始菜单 -->
 <div id="nfs-menu" class="nfs-menu">
   <div class="nfs-panel">
@@ -41,8 +59,13 @@
         <div class="nfs-stats" id="nfs-car-stats"></div>
       </div>
       <div class="nfs-pills" id="nfs-car-list"></div>
+      <div class="nfs-label">比赛模式</div>
+      <div class="nfs-pills" id="nfs-mode-list"></div>
+      <div class="nfs-label">对手难度</div>
+      <div class="nfs-pills" id="nfs-diff-list"></div>
       <div class="nfs-label">时间</div>
       <div class="nfs-pills" id="nfs-tod-list"></div>
+      <div class="nfs-coins"><span class="nfs-coin-ico">●</span> 金币 <b id="nfs-coins">0</b></div>
     </div>
     <button id="nfs-btn-start">点火出发</button>
     <p class="nfs-keys" id="nfs-keys-pc">W/S 油门刹车 · A/D 转向 · Space 手刹漂移 · Shift 氮气</p>
