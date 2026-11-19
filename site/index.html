@@ -623,53 +623,104 @@
               <svg viewBox="0 0 640 360" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
                 <defs>
                   <linearGradient id="nfsSky" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0" stop-color="#0b1030"/><stop offset=".42" stop-color="#29306b"/>
-                    <stop offset=".72" stop-color="#d14f8e"/><stop offset="1" stop-color="#ffb36b"/>
+                    <stop offset="0" stop-color="#040a1c"/><stop offset=".55" stop-color="#0a1c3d"/>
+                    <stop offset=".85" stop-color="#123a5e"/><stop offset="1" stop-color="#1b5a78"/>
                   </linearGradient>
-                  <linearGradient id="nfsSea" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0" stop-color="#3d2f6b"/><stop offset="1" stop-color="#101a3a"/>
+                  <linearGradient id="nfsOcean" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0" stop-color="#0d2c48"/><stop offset="1" stop-color="#061626"/>
                   </linearGradient>
                   <linearGradient id="nfsRoad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0" stop-color="#2b2f36"/><stop offset="1" stop-color="#0c0e13"/>
+                    <stop offset="0" stop-color="#232830"/><stop offset="1" stop-color="#0a0d12"/>
                   </linearGradient>
-                  <linearGradient id="nfsCar" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0" stop-color="#ff4fa3"/><stop offset="1" stop-color="#7a2bd8"/>
+                  <linearGradient id="nfsBeam" x1="0" y1="1" x2="0" y2="0">
+                    <stop offset="0" stop-color="#23d5e8" stop-opacity="0"/><stop offset="1" stop-color="#9ef4ff" stop-opacity=".85"/>
                   </linearGradient>
                 </defs>
                 <rect width="640" height="360" fill="url(#nfsSky)"/>
-                <circle cx="470" cy="150" r="46" fill="#ffd8ec"/>
-                <circle cx="470" cy="150" r="72" fill="#ff9fd2" opacity=".22"/>
-                <g fill="#1c1440">
-                  <path d="M0 210V128h24l8-13 8 13h42v82z"/>
-                  <path d="M76 210v-60h48v60z"/>
-                  <path d="M128 210v-84h14l6-10 6 10h34v84z"/>
-                  <path d="M420 210v-52h42v52z"/>
-                  <path d="M466 210v-78h32l8-12 8 12h36v78z"/>
+                <!-- 星点 -->
+                <g fill="#cfe8ff">
+                  <circle cx="60" cy="40" r="1.4"/><circle cx="140" cy="80" r="1"/><circle cx="230" cy="46" r="1.2"/>
+                  <circle cx="330" cy="60" r="1"/><circle cx="420" cy="38" r="1.5"/><circle cx="520" cy="72" r="1"/>
+                  <circle cx="590" cy="42" r="1.2"/><circle cx="200" cy="110" r="1"/><circle cx="480" cy="108" r="1"/>
                 </g>
-                <rect x="0" y="210" width="640" height="60" fill="url(#nfsSea)"/>
-                <rect x="0" y="214" width="640" height="5" fill="#7ad9ff" opacity=".35"/>
-                <rect x="0" y="228" width="640" height="2" fill="#ff9fd2" opacity=".4"/>
-                <rect x="0" y="270" width="640" height="90" fill="url(#nfsRoad)"/>
-                <g stroke="#ffd166" stroke-width="4" opacity=".55">
-                  <path d="M0 318h58M112 318h58M224 318h58M336 318h58M448 318h58M560 318h58"/>
+                <circle cx="556" cy="34" r="17" fill="#e8f4ff" opacity=".92"/>
+                <circle cx="550" cy="30" r="17" fill="#040a1c" opacity=".35"/>
+                <!-- 远处城市天际线（小而低，与 VC 的楼群剪影区分） -->
+                <g fill="#0b1a30">
+                  <path d="M0 205v-26h22v26z"/><path d="M30 205v-18h16v18z"/><path d="M54 205v-32h24v32z"/>
+                  <path d="M86 205v-14h14v14z"/><path d="M556 205v-30h26v30z"/><path d="M590 205v-18h18v18z"/>
+                  <path d="M536 205v-12h12v12z"/>
                 </g>
-                <g transform="translate(320 278)">
-                  <ellipse cx="0" cy="38" rx="88" ry="10" fill="#000" opacity=".45"/>
-                  <rect x="-52" y="4" width="104" height="28" rx="13" fill="url(#nfsCar)"/>
-                  <rect x="-30" y="-10" width="58" height="18" rx="9" fill="url(#nfsCar)"/>
-                  <rect x="-24" y="-6" width="20" height="10" rx="4" fill="#0a1428"/>
-                  <rect x="4" y="-6" width="20" height="10" rx="4" fill="#0a1428"/>
-                  <circle cx="-32" cy="32" r="11" fill="#0a1428"/>
-                  <circle cx="32" cy="32" r="11" fill="#0a1428"/>
-                  <circle cx="-32" cy="32" r="4" fill="#c9d4e8"/>
-                  <circle cx="32" cy="32" r="4" fill="#c9d4e8"/>
-                  <rect x="-54" y="12" width="8" height="5" rx="2" fill="#23d5e8"/>
-                  <rect x="46" y="12" width="8" height="5" rx="2" fill="#ffe98a"/>
-                  <path d="M52 14l26 3-26 3z" fill="#23d5e8" opacity=".9"/>
-                  <path d="M60 12l20 5-20 5z" fill="#7a6fd0" opacity=".7"/>
+                <g fill="#23d5e8" opacity=".55">
+                  <rect x="58" y="182" width="3" height="4"/><rect x="66" y="182" width="3" height="4"/>
+                  <rect x="562" y="182" width="3" height="4"/><rect x="572" y="182" width="3" height="4"/>
                 </g>
-                <text x="30" y="340" font-family="Arial Black, sans-serif" font-size="24" fill="#f2f7ff" letter-spacing="3">NEON COAST</text>
-                <text x="32" y="356" font-family="Arial, sans-serif" font-size="11" fill="#ffc7e8" letter-spacing="4" opacity=".9">霓虹海岸 · 竞速原型</text>
+                <!-- 左侧海面 -->
+                <rect x="0" y="205" width="640" height="52" fill="url(#nfsOcean)"/>
+                <g stroke="#2fa8c9" stroke-width="2" opacity=".35">
+                  <path d="M20 218h90M150 226h60M420 220h80M480 236h100M60 242h120"/>
+                </g>
+                <rect x="0" y="205" width="640" height="3" fill="#9ef4ff" opacity=".5"/>
+                <!-- 后视角道路：透视收缩（近大远小） -->
+                <path d="M240 257 L 400 257 L 580 360 L 60 360 Z" fill="url(#nfsRoad)"/>
+                <!-- 路肩红白（近端底边） -->
+                <g>
+                  <path d="M84 360 l12 -9 12 9 -12 9z" fill="#e04a4a"/><path d="M124 360 l12 -9 12 9 -12 9z" fill="#ecf0f1"/>
+                  <path d="M164 360 l12 -9 12 9 -12 9z" fill="#e04a4a"/><path d="M204 360 l12 -9 12 9 -12 9z" fill="#ecf0f1"/>
+                  <path d="M416 360 l12 -9 12 9 -12 9z" fill="#ecf0f1"/><path d="M456 360 l12 -9 12 9 -12 9z" fill="#e04a4a"/>
+                  <path d="M496 360 l12 -9 12 9 -12 9z" fill="#ecf0f1"/><path d="M536 360 l12 -9 12 9 -12 9z" fill="#e04a4a"/>
+                </g>
+                <!-- 透视车道虚线 -->
+                <g stroke="#ffd166" stroke-width="3" opacity=".7">
+                  <path d="M318 268 l6 0 -2 12 -2 -12z"/><path d="M322 288 l4 0 -1 16 -1 -16z"/>
+                  <path d="M324 312 l3 0 -1 18 -1 -18z"/>
+                </g>
+                <!-- 光轨（速度线） -->
+                <g stroke-linecap="round">
+                  <path d="M40 150 L 240 140" stroke="#23d5e8" stroke-width="4" opacity=".75"/>
+                  <path d="M80 120 L 260 112" stroke="#7a6fd0" stroke-width="3" opacity=".6"/>
+                  <path d="M400 96 L 610 88" stroke="#ff4fa3" stroke-width="4" opacity=".55"/>
+                  <path d="M380 168 L 620 160" stroke="#23d5e8" stroke-width="3" opacity=".5"/>
+                  <path d="M120 196 L 330 190" stroke="#ffe98a" stroke-width="2" opacity=".45"/>
+                </g>
+                <!-- 路灯 -->
+                <g stroke="#1c2733" stroke-width="5">
+                  <path d="M70 258 V 150"/><path d="M570 258 V 150"/>
+                </g>
+                <path d="M70 150 h22" stroke="#1c2733" stroke-width="5"/>
+                <path d="M570 150 h-22" stroke="#1c2733" stroke-width="5"/>
+                <path d="M92 152 L 150 250 L 260 250 Z" fill="url(#nfsBeam)" opacity=".5"/>
+                <path d="M548 152 L 490 250 L 380 250 Z" fill="url(#nfsBeam)" opacity=".5"/>
+                <circle cx="92" cy="150" r="6" fill="#bfeeff"/>
+                <circle cx="548" cy="150" r="6" fill="#bfeeff"/>
+                <!-- 后视角跑车：尾焰 + 尾灯 -->
+                <g transform="translate(320 300)">
+                  <ellipse cx="0" cy="46" rx="98" ry="12" fill="#000" opacity=".55"/>
+                  <path d="M-78 20 q0 -34 10 -44 q-6 -26 22 -30 l4 26 q30 6 54 6 q44 0 66 -6 l4 -26 q28 4 22 30 q10 10 10 44 l0 10 -192 0z" fill="#c22e6a"/>
+                  <path d="M-88 18 q0 -10 8 -10 l176 0 q10 0 10 10 l0 6 -194 0z" fill="#8e1f4d"/>
+                  <rect x="-62" y="-24" width="124" height="26" rx="8" fill="#ff5f9e"/>
+                  <rect x="-58" y="-20" width="116" height="18" rx="6" fill="#0a1428"/>
+                  <rect x="-72" y="8" width="26" height="7" rx="3" fill="#ff2d40"/>
+                  <rect x="46" y="8" width="26" height="7" rx="3" fill="#ff2d40"/>
+                  <rect x="-80" y="26" width="160" height="8" rx="3" fill="#10141c"/>
+                  <rect x="-96" y="30" width="192" height="6" rx="3" fill="#161b24"/>
+                  <circle cx="-60" cy="36" r="13" fill="#080a0e"/><circle cx="60" cy="36" r="13" fill="#080a0e"/>
+                  <circle cx="-60" cy="36" r="5" fill="#38414f"/><circle cx="60" cy="36" r="5" fill="#38414f"/>
+                  <rect x="-16" y="30" width="32" height="10" rx="4" fill="#0c1018"/>
+                  <!-- 氮气尾焰 -->
+                  <path d="M-20 40 l-4 26 8 0 2 -26z" fill="#23d5e8"/>
+                  <path d="M16 40 l4 26 -8 0 -2 -26z" fill="#23d5e8"/>
+                  <path d="M-18 42 l-2 14 5 0 1 -14z" fill="#d6fbff"/>
+                  <path d="M18 42 l2 14 -5 0 -1 -14z" fill="#d6fbff"/>
+                </g>
+                <!-- 速度粒子 -->
+                <g fill="#9ef4ff">
+                  <rect x="182" y="296" width="10" height="2" opacity=".8" transform="rotate(-8 187 297)"/>
+                  <rect x="452" y="288" width="12" height="2" opacity=".7" transform="rotate(6 458 289)"/>
+                  <rect x="218" y="326" width="8" height="2" opacity=".6" transform="rotate(-4 222 327)"/>
+                </g>
+                <text x="30" y="340" font-family="Arial Black, sans-serif" font-size="24" fill="#e8faff" letter-spacing="3">NEON COAST</text>
+                <text x="32" y="356" font-family="Arial, sans-serif" font-size="11" fill="#9ef4ff" letter-spacing="4" opacity=".95">霓虹海岸 · 夜驰原型</text>
               </svg>
               <span class="badge new">新 · 原型</span>
               <span class="play-fab">
