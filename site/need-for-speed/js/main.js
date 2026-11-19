@@ -4,7 +4,7 @@
  */
 import * as THREE from "../lib/three.module.min.js";
 import { GLTFLoader } from "../lib/GLTFLoader.js";
-import { CarSim, makeTrack, projectToTrack, clamp, wrapAngle, buildDef, CAR_DEFS } from "./sim.js";
+import { CarSim, makeTrack, projectToTrack, clamp, wrapAngle, buildDef } from "./sim.js";
 import { buildTrackMeshes } from "./track.js";
 import { buildScenery, buildTrackProps } from "./scenery.js";
 import { SkidMarks } from "./skidmarks.js";
@@ -887,7 +887,6 @@ class Game {
   // ------------------------------------------------ 物理推进
   update(dt) {
     this.time += dt;
-    this._lastDt = dt;
     const rawInput = this.input.sample();
     this._frameThrottle = rawInput.throttle;
     // 氮气：点按也至少持续 0.55s（QQ 手感，按下即爆发）
@@ -1148,8 +1147,9 @@ class Game {
       }
     }
     this.renderer.render(this.scene, this.camera);
-    // M5 后视镜：车尾视角渲到 RT 再叠加到顶部
-    if (this.running && this._mirrorRT) {
+    // M5 后视镜：车尾视角渲到 RT 再叠加到顶部（隔帧刷新，省一个 pass）
+    if (this.running && this._mirrorRT && (this._frameCount = (this._frameCount || 0) + 1) >= 2) {
+      this._frameCount = 0;
       const fx = Math.sin(this.car.angle), fz = Math.cos(this.car.angle);
       this._rearCam.position.set(this.car.x, 1.45, this.car.z);
       this._rearCam.lookAt(this.car.x - fx * 24, 1.1, this.car.z - fz * 24);

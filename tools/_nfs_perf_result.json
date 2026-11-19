@@ -1,0 +1,32 @@
+[
+ {
+  "preset": "low",
+  "cpu_rate": 6,
+  "frames": 289,
+  "avgFPS": 9.0,
+  "p95_ms": 233.3,
+  "jank_frames": 142,
+  "heap_mb": 22.8,
+  "errors": []
+ },
+ {
+  "preset": "mid",
+  "cpu_rate": 4,
+  "frames": 504,
+  "avgFPS": 16.2,
+  "p95_ms": 116.6,
+  "jank_frames": 40,
+  "heap_mb": 14.0,
+  "errors": []
+ },
+ {
+  "preset": "high",
+  "cpu_rate": 1,
+  "frames": 1581,
+  "avgFPS": 55.3,
+  "p95_ms": 33.3,
+  "jank_frames": 3,
+  "heap_mb": 13.6,
+  "errors": []
+ }
+]
