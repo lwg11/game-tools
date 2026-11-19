@@ -97,7 +97,8 @@ ok(p.i > 0 && p.i < track.samples.length, `index in range`);
     let diff = desired - car.angle;
     while (diff > Math.PI) diff -= Math.PI * 2;
     while (diff < -Math.PI) diff += Math.PI * 2;
-    const steer = Math.max(-1, Math.min(1, diff * 2.2));
+    // 新约定：steer=+1 为右转（angle 减小）。角度增量方向为 (desired-car.angle)，需取负
+    const steer = Math.max(-1, Math.min(1, -diff * 2.2));
     const slow = Math.abs(diff) < 0.35;
     car.update(DT, { throttle: slow ? 1 : 0.45, brake: 0, steer, handbrake: false, nitro: false });
     if (prevS !== null) {

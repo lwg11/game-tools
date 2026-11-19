@@ -83,11 +83,12 @@ export class CarSim {
     this.vz = fz * vf - fx * vl;
 
     // 转向：速度越快转角越小；漂移时传动比放大（但随滑移角自适应收敛，防止打转）
+    // 注意符号：车头前向 (sin a, cos a)，向右转（steer=+1）需让 a 减小
     const spdK = clamp(Math.abs(vf) / 8, 0, 1) * (1 - clamp(Math.abs(vf) / (maxSpd * 1.6), 0, 0.62));
     const steerIn = clamp(input.steer, -1, 1);
-    this.steerVis = lerp(this.steerVis, steerIn * 0.42, clamp(8 * dt, 0, 1));
+    this.steerVis = lerp(this.steerVis, -steerIn * 0.42, clamp(8 * dt, 0, 1));
     const driftSteerK = this.drifting ? 1.3 / (1 + Math.abs(this.slip) * 2.0) : 1;
-    this.angle = wrapAngle(this.angle + steerIn * d.steerRate * spdK * driftSteerK * dt * (vf >= 0 ? 1 : -1));
+    this.angle = wrapAngle(this.angle - steerIn * d.steerRate * spdK * driftSteerK * dt * (vf >= 0 ? 1 : -1));
 
     this.x += this.vx * dt;
     this.z += this.vz * dt;

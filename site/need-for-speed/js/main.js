@@ -6,6 +6,8 @@ import * as THREE from "../lib/three.module.min.js";
 import { GLTFLoader } from "../lib/GLTFLoader.js";
 import { CarSim, makeTrack, projectToTrack, clamp, wrapAngle } from "./sim.js";
 import { buildTrackMeshes } from "./track.js";
+import { buildScenery } from "./scenery.js";
+import { SkidMarks } from "./skidmarks.js";
 import { Input } from "./input.js";
 import { TouchControls } from "./touch.js";
 import { isTouch } from "../../assets/js/device.js";
@@ -55,7 +57,7 @@ class Game {
 
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x87b5d9); // 原型: 白天
-    this.scene.fog = new THREE.Fog(0x87b5d9, 220, 900);
+    this.scene.fog = new THREE.Fog(0x87b5d9, 260, 1300);
 
     const hemi = new THREE.HemisphereLight(0xcfe8ff, 0x3a4030, 0.9);
     this.scene.add(hemi);
@@ -73,8 +75,11 @@ class Game {
     this.scene.add(fill);
 
     this.scene.add(buildTrackMeshes(this.track));
+    this.scene.add(buildScenery(this.track));
+    this.skid = new SkidMarks(this.scene);
     this._buildCarMesh();
     this._loadCarModel();
+    this._buildNitroFlames();
     this.camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.3, 3000);
     this.camera.position.set(this.car.x - 8, 3.5, this.car.z - 8);
     this.camera.lookAt(this.car.x, 1, this.car.z);
@@ -168,6 +173,30 @@ class Game {
       undefined,
       () => { /* 加载失败：保持程序化回退 */ }
     );
+  }
+
+  /** 氮气尾焰（Sprite，无依赖，程序化车与 glb 车通用） */
+  _buildNitroFlames() {
+    const c = document.createElement("canvas");
+    c.width = 64; c.height = 64;
+    const ctx = c.getContext("2d");
+    const grad = ctx.createRadialGradient(32, 32, 2, 32, 32, 30);
+    grad.addColorStop(0, "rgba(255,255,255,1)");
+    grad.addColorStop(0.35, "rgba(160,240,255,.85)");
+    grad.addColorStop(1, "rgba(80,160,255,0)");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 64, 64);
+    const tex = new THREE.CanvasTexture(c);
+    this._nitroFlames = [];
+    for (const x of [-0.38, 0.38]) {
+      const mat = new THREE.SpriteMaterial({ map: tex, color: 0xbfefff, blending: THREE.AdditiveBlending, depthWrite: false });
+      const sp = new THREE.Sprite(mat);
+      sp.position.set(x, 0.36, -2.35);
+      sp.scale.set(0.9, 0.9, 1);
+      sp.visible = false;
+      this.carGroup.add(sp);
+      this._nitroFlames.push(sp);
+    }
   }
 
   _bindHud() {
@@ -270,6 +299,38 @@ class Game {
       this._driftChain = 0;
     }
 
+    // 漂移轮胎痕（后轮两道）
+    const fxx = Math.sin(this.car.angle), fzz = Math.cos(this.car.angle);
+    // 右向 = (-fz, 0, fx)
+    const rxx = -fzz, rzz = fxx;
+    const rearLz = -1.32;
+    const driftingNow = this.car.drifting && Math.abs(this.car.slip) > 0.1 && Math.abs(this.car.speed) > 6;
+    if (driftingNow) {
+      if (!this._lastRear) this._lastRear = [{ x: 0, z: 0 }, { x: 0, z: 0 }];
+      for (let k = 0; k < 2; k++) {
+        const lx = k === 0 ? -0.82 : 0.82;
+        const wx = this.car.x + rxx * lx + fxx * rearLz;
+        const wz = this.car.z + rzz * lx + fzz * rearLz;
+        const last = this._lastRear[k];
+        this.skid.add(last.x, last.z, wx, wz);
+        last.x = wx; last.z = wz;
+      }
+      this._shake = Math.max(this._shake, 0.05);
+    } else {
+      this._lastRear = null;
+    }
+
+    // 氮气尾焰：激活时显示并闪炼
+    for (let i = 0; i < this._nitroFlames.length; i++) {
+      const f = this._nitroFlames[i];
+      const on = this.car.nitroActive;
+      f.visible = on;
+      if (on) {
+        const s = 0.75 + Math.random() * 0.4;
+        f.scale.set(s, s, 1);
+      }
+    }
+
     // 视觉同步
     this.carGroup.position.set(this.car.x, 0, this.car.z);
     this.carGroup.rotation.y = this.car.angle + (this._modelYaw || 0);
@@ -294,7 +355,7 @@ class Game {
   _updateCamera(dt) {
     const c = this.car;
     const fx = Math.sin(c.angle), fz = Math.cos(c.angle);
-    const rx = fz, rz = -fx; // 右侧方向
+    const rx = -fz, rz = fx; // 右侧方向（facing (sin,cos) 时右 = (-fz, 0, fx)）
     const back = 6.6 + c.kmh * 0.03;
     const up = 2.0 + c.kmh * 0.008;
     const side = 1.35;
@@ -312,8 +373,8 @@ class Game {
     }
     this.camera.position.set(this._camPos.x + sx, this._camPos.y, this._camPos.z + sz);
     this.camera.lookAt(c.x + fx * 3.5, 1.0, c.z + fz * 3.5);
-    // FOV 随速度
-    const targetFov = 60 + clamp(c.kmh / 220, 0, 1) * 22;
+    // FOV 随速度；氮气时额外拉广
+    const targetFov = 60 + clamp(c.kmh / 220, 0, 1) * 22 + (c.nitroActive ? 7 : 0);
     if (Math.abs(this.camera.fov - targetFov) > 0.2) {
       this.camera.fov += (targetFov - this.camera.fov) * clamp(3 * dt, 0, 1);
       this.camera.updateProjectionMatrix();

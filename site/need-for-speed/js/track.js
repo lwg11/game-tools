@@ -169,16 +169,31 @@ export function buildTrackMeshes(track, opts = {}) {
     group.add(mesh);
   }
 
-  // ---- 地面
-  const ground = new THREE.Mesh(
-    new THREE.CircleGeometry(Math.max(1000, track.length * 1.5, 26), 48),
-    new THREE.MeshLambertMaterial({ color: 0x2c2f26 }),
-  );
-  ground.rotation.x = -Math.PI / 2;
-  ground.receiveShadow = true;
-  ground.matrixAutoUpdate = false;
-  ground.updateMatrix();
-  group.add(ground);
+  // ---- 地面（城市地坪，海在西侧）
+  {
+    const gc = document.createElement("canvas");
+    gc.width = 128; gc.height = 128;
+    const gctx = gc.getContext("2d");
+    gctx.fillStyle = "#2c2f26";
+    gctx.fillRect(0, 0, 128, 128);
+    for (let i = 0; i < 900; i++) {
+      const v = 40 + Math.floor(Math.random() * 26);
+      gctx.fillStyle = `rgb(${v - 6},${v + 2},${v - 8})`;
+      gctx.fillRect(Math.random() * 128, Math.random() * 128, 2, 2);
+    }
+    const gtex = new THREE.CanvasTexture(gc);
+    gtex.wrapS = gtex.wrapT = THREE.RepeatWrapping;
+    gtex.repeat.set(28, 28);
+    const ground = new THREE.Mesh(
+      new THREE.CircleGeometry(620, 48),
+      new THREE.MeshLambertMaterial({ map: gtex }),
+    );
+    ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
+    ground.matrixAutoUpdate = false;
+    ground.updateMatrix();
+    group.add(ground);
+  }
 
   return group;
 }
