@@ -11,6 +11,7 @@ import { SkidMarks } from "./skidmarks.js";
 import { Input } from "./input.js";
 import { TouchControls } from "./touch.js";
 import { Garage } from "./garage.js";
+import { Traffic } from "./traffic.js";
 import { isTouch } from "../../assets/js/device.js";
 
 const FIXED_DT = 1 / 60;
@@ -106,6 +107,7 @@ class Game {
     this.scene.add(this.scenery);
     this.applyTimeOfDay(this.todId);
     this.skid = new SkidMarks(this.scene);
+    this.traffic = new Traffic(this.scene, this.track, 8);
     this._buildCarMesh();
     this.garage = new Garage(document.getElementById("nfs-car-preview"));
     this.setCar(this.carId);
@@ -590,6 +592,29 @@ class Game {
       const tangentG = Math.atan2(smG.tx, smG.tz);
       const diffG = wrapAngle(tangentG - this.car.angle);
       this.car.angle = wrapAngle(this.car.angle + diffG * clamp(1.5 * dt, 0, 1));
+    }
+
+    // 环境车流 + 与车流轻碰撞
+    if (this.traffic) {
+      this._trafficHits = this._trafficHits || [];
+      this._trafficHits.length = 0;
+      this.traffic.update(dt, this.car.x, this.car.z, this._trafficHits);
+      for (const h of this._trafficHits) {
+        const d = h.d || 1;
+        const nx = h.dx / d, nz = h.dz / d;
+        const push = 2.3 - d;
+        this.car.x += nx * push * 0.55;
+        this.car.z += nz * push * 0.55;
+        const vn = this.car.vx * nx + this.car.vz * nz;
+        if (vn < 0) {
+          this.car.vx -= nx * vn * 1.35;
+          this.car.vz -= nz * vn * 1.35;
+          if (-vn > 5) {
+            this._shake = Math.max(this._shake, 0.06);
+            this.cameraShakeStart = this.time;
+          }
+        }
+      }
     }
 
     // 圈速：跟踪 s 序列单调，累计前进距离超过一圈长度 = 过线

@@ -108,6 +108,106 @@ export async function buildTrackProps(track) {
       place(clone(tent), sm0.x + sm0.nx * side * (half + 12) - sm0.tx * 6, sm0.z + sm0.nz * side * (half + 12) - sm0.tz * 6, Math.atan2(-sm0.nx * side, -sm0.nz * side));
       place(clone(tent), sm0.x + sm0.nx * side * (half + 12) + sm0.tx * 6, sm0.z + sm0.nz * side * (half + 12) + sm0.tz * 6, Math.atan2(-sm0.nx * side, -sm0.nz * side));
     }
+    // ---- 码头区（起点旁）：集装箱堆 + 吊机 + 栈桥板 ----
+    {
+      const s0 = S[0];
+      const dir = Math.atan2(s0.tx, s0.tz);
+      const baseX = s0.x - s0.nx * (half + 20) + s0.tx * 30;
+      const baseZ = s0.z - s0.nz * (half + 20) + s0.tz * 30;
+      const colors = [0xc0392b, 0x2980b9, 0x27ae60, 0xf39c12, 0x8e44ad];
+      for (let k = 0; k < 6; k++) {
+        const c = new THREE.Mesh(
+          new THREE.BoxGeometry(2.4, 2.4, 6),
+          new THREE.MeshLambertMaterial({ color: colors[k % colors.length] }),
+        );
+        const col = k % 3, row = Math.floor(k / 3) % 2, up = Math.floor(k / 6) % 2;
+        c.position.set(baseX + s0.nx * col * 3.2 + s0.tx * row * 7, 1.2 + up * 2.5, baseZ + s0.nz * col * 3.2 + s0.tz * row * 7);
+        c.rotation.y = dir;
+        c.castShadow = true;
+        g.add(c);
+      }
+      // 门式吊机
+      const crane = new THREE.Group();
+      const mate = new THREE.MeshLambertMaterial({ color: 0xe67e22 });
+      const p1 = new THREE.Mesh(new THREE.BoxGeometry(1, 10, 1), mate);
+      p1.position.set(-2.8, 5, 0);
+      const p2 = p1.clone(); p2.position.set(2.8, 5, 0);
+      const beam = new THREE.Mesh(new THREE.BoxGeometry(15, 0.9, 1.4), mate);
+      beam.position.set(0, 10, -2);
+      const jib = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.7, 9), mate);
+      jib.position.set(3.2, 9.4, -5.5);
+      crane.add(p1, p2, beam, jib);
+      crane.position.set(s0.x - s0.nx * (half + 14) + s0.tx * 48, 0, s0.z - s0.nz * (half + 14) + s0.tz * 48);
+      crane.rotation.y = dir;
+      crane.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+      // 栈桥板
+      const board = new THREE.Mesh(new THREE.BoxGeometry(9, 0.24, 22), new THREE.MeshLambertMaterial({ color: 0x8a6a45 }));
+      board.position.set(s0.x + s0.nx * (half + 15) + s0.tx * 54, 0.7, s0.z + s0.nz * (half + 15) + s0.tz * 54);
+      board.rotation.y = dir;
+      g.add(crane, board);
+    }
+
+    // ---- 隧道拱（最长直道）：门式拱架 + 顶灯 ----
+    {
+      let best = { start: 0, len: 0 };
+      let run = 0;
+      const crossAt = (i) => {
+        const a = S[(i - 3 + S.length) % S.length];
+        const b = S[(i + 3) % S.length];
+        return Math.abs(a.tx * b.tz - a.tz * b.tx);
+      };
+      for (let i = 0; i < S.length; i++) {
+        if (crossAt(i) < 0.03) {
+          run++;
+          if (run > best.len) best = { start: i - run + 1, len: run };
+        } else run = 0;
+      }
+      if (best.len > 8) {
+        const mat = new THREE.MeshLambertMaterial({ color: 0x2c2f33 });
+        const matL = new THREE.MeshBasicMaterial({ color: 0xffd166 });
+        const w = track.halfWidth + 1.2;
+        for (let k = 0; k + 2 <= best.len; k += 3) {
+          const smk = S[(best.start + k) % S.length];
+          const arch = new THREE.Group();
+          const p1 = new THREE.Mesh(new THREE.BoxGeometry(0.9, 6.5, 0.9), mat);
+          const p2 = p1.clone();
+          p1.position.set(-w, 3.25, 0); p2.position.set(w, 3.25, 0);
+          const top = new THREE.Mesh(new THREE.BoxGeometry(w * 2 + 0.9, 0.9, 1.4), mat);
+          top.position.set(0, 6.5, 0);
+          const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.15, 0.5), matL);
+          lamp.position.set(0, 6.05, 0);
+          arch.add(p1, p2, top, lamp);
+          arch.position.set(smk.x, 0, smk.z);
+          arch.rotation.y = Math.atan2(smk.tx, smk.tz);
+          g.add(arch);
+        }
+      }
+    }
+
+    // ---- 山坡针叶树（程序化圆锥，装饰山道/内侧） ----
+    {
+      const pineProto = new THREE.Group();
+      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.18, 1.2, 6), new THREE.MeshLambertMaterial({ color: 0x5a4232 }));
+      trunk.position.y = 0.6;
+      const c1 = new THREE.Mesh(new THREE.ConeGeometry(1.15, 1.7, 8), new THREE.MeshLambertMaterial({ color: 0x2c5a34 }));
+      c1.position.y = 1.75;
+      const c2 = c1.clone(); c2.scale.setScalar(0.72); c2.position.y = 2.6;
+      const c3 = c2.clone(); c3.scale.setScalar(0.48); c3.position.y = 3.3;
+      pineProto.add(trunk, c1, c2, c3);
+      let placed = 0;
+      for (let i = 0; i < S.length && placed < 14; i += 9) {
+        const sm = S[i];
+        const side = placed % 2 ? 1 : -1;
+        const off = track.halfWidth + 6 + (placed % 5) * 2.2;
+        const t2 = pineProto.clone();
+        t2.position.set(sm.x + sm.nx * side * off, 0, sm.z + sm.nz * side * off);
+        t2.scale.setScalar(1.3 + ((placed * 37) % 10) / 10);
+        t2.rotation.y = placed * 1.31;
+        g.add(t2);
+        placed++;
+      }
+    }
+
   } catch (e) {
     // 单个素材失败不阻塞
   }
