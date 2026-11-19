@@ -2538,15 +2538,10 @@ class GLTFParser {
 
 		}
 
-		if ( typeof createImageBitmap === 'undefined' || isSafari || ( isFirefox && firefoxVersion < 98 ) ) {
-
-			this.textureLoader = new TextureLoader( this.options.manager );
-
-		} else {
-
-			this.textureLoader = new ImageBitmapLoader( this.options.manager );
-
-		}
+		// 站点 CSP: connect-src 'self' + img-src 'self' data:
+		// ImageBitmapLoader 内部走 fetch()（受 connect-src 限制，blob:/data: 都被拦），
+		// 因此本游戏强制使用 TextureLoader（<img> 加载，受 img-src 白名单保护）。
+		this.textureLoader = new TextureLoader( this.options.manager );
 
 		this.textureLoader.setCrossOrigin( this.options.crossOrigin );
 		this.textureLoader.setRequestHeader( this.options.requestHeader );
