@@ -3,6 +3,117 @@
  * 风格：与车模匹配的低多边形 + 简单材质；静态合批优先（棕榈/路灯用 InstancedMesh）。
  */
 import * as THREE from "../lib/three.module.min.js";
+import { GLTFLoader } from "../lib/GLTFLoader.js";
+
+/**
+ * 赛道道具（Kenney racing kit，CC0）：看台 / 维修区 / 广告牌 / 灯塔 / 护栏。
+ * 异步加载，失败时静默跳过（不阻塞游戏）。
+ */
+export async function buildTrackProps(track) {
+  const g = new THREE.Group();
+  const S = track.samples;
+  const half = track.halfWidth;
+  const loader = new GLTFLoader();
+  const cache = {};
+  const load = (f) => {
+    if (!cache[f]) {
+      cache[f] = new Promise((ok, err) => loader.load(`./assets/kits/racing/${f}`, (g) => ok(g.scene), undefined, err)).catch(() => null);
+    }
+    return cache[f];
+  };
+  const place = (obj, x, z, yaw, scale = 1) => {
+    if (!obj) return null;
+    obj.position.set(x, 0, z);
+    obj.rotation.y = yaw;
+    obj.scale.multiplyScalar(scale);
+    obj.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+    g.add(obj);
+    return obj;
+  };
+  const clone = (obj) => (obj ? obj.clone() : null);
+
+  try {
+    // 急弯采样（与胎墙同公式）
+    const corners = [];
+    for (let i = 0; i < S.length; i++) {
+      const aPrev = S[(i - 3 + S.length) % S.length];
+      const aNext = S[(i + 3) % S.length];
+      const cross = aPrev.tx * aNext.tz - aPrev.tz * aNext.tx;
+      if (Math.abs(cross) >= 0.16) {
+        corners.push({ i, cross });
+      }
+    }
+
+    // ---- 起跑区：双侧看台 + 维修间排 + 灯塔 ----
+    const sm0 = S[0];
+    {
+      const side = 1;
+      const bx = sm0.x + sm0.nx * side * (half + 9);
+      const bz = sm0.z + sm0.nz * side * (half + 9);
+      const yawFace = Math.atan2(-sm0.nx * side, -sm0.nz * side);
+      const stand = await load("grandStand.glb");
+      place(stand, bx, bz, yawFace);
+      place(clone(stand), bx - sm0.tx * 8, bz - sm0.tz * 8, yawFace);
+      // 维修间 3 间（看台后方）
+      const garage = await load("pitsGarage.glb");
+      for (let k = 0; k < 3; k++) {
+        place(
+          clone(garage),
+          bx - sm0.tx * (14 + k * 7),
+          bz - sm0.tz * (14 + k * 7),
+          yawFace,
+        );
+      }
+      // 灯塔（起点两侧）
+      const towerR = await load("bannerTowerRed.glb");
+      const towerG = await load("bannerTowerGreen.glb");
+      const t1 = place(towerR, sm0.x + sm0.nx * (half + 3), sm0.z + sm0.nz * (half + 3), yawFace);
+      place(towerG, sm0.x - sm0.nx * (half + 3), sm0.z - sm0.nz * (half + 3), yawFace);
+      void t1;
+    }
+
+    // ---- 急弯外侧：广告牌 + 红色护栏 ----
+    const billboard = await load("billboard.glb");
+    const barrier = await load("barrierRed.glb");
+    let placed = 0;
+    const used = [];
+    for (const c of corners) {
+      if (placed >= 6) break;
+      const sm = S[c.i];
+      const last = used[used.length - 1];
+      if (last && Math.hypot(sm.x - last.x, sm.z - last.z) < 80) continue;
+      used.push(sm);
+      const side = c.cross > 0 ? 1 : -1;
+      const sideA = Math.atan2(-sm.nx * side, -sm.nz * side);
+      place(clone(billboard), sm.x + sm.nx * side * (half + 6), sm.z + sm.nz * side * (half + 6), sideA);
+      // 沿弯弧 3 段护栏
+      const idx0 = ((c.i - 6) % S.length + S.length) % S.length;
+      for (let k = 0; k < 3; k++) {
+        const idx = (idx0 + k * 6) % S.length;
+        const smk = S[idx];
+        place(
+          clone(barrier),
+          smk.x + smk.nx * side * (half + 2),
+          smk.z + smk.nz * side * (half + 2),
+          Math.atan2(smk.tx, smk.tz),
+        );
+      }
+      placed++;
+    }
+
+    // ---- 维修区旁帐篷 ×2 ----
+    const tent = await load("tent.glb");
+    if (tent) {
+      const side = -1;
+      place(clone(tent), sm0.x + sm0.nx * side * (half + 12) - sm0.tx * 6, sm0.z + sm0.nz * side * (half + 12) - sm0.tz * 6, Math.atan2(-sm0.nx * side, -sm0.nz * side));
+      place(clone(tent), sm0.x + sm0.nx * side * (half + 12) + sm0.tx * 6, sm0.z + sm0.nz * side * (half + 12) + sm0.tz * 6, Math.atan2(-sm0.nx * side, -sm0.nz * side));
+    }
+  } catch (e) {
+    // 单个素材失败不阻塞
+  }
+
+  return g;
+}
 
 function makeRng(seed) {
   let s = seed >>> 0;

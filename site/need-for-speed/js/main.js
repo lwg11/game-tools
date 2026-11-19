@@ -6,20 +6,21 @@ import * as THREE from "../lib/three.module.min.js";
 import { GLTFLoader } from "../lib/GLTFLoader.js";
 import { CarSim, makeTrack, projectToTrack, clamp, wrapAngle } from "./sim.js";
 import { buildTrackMeshes } from "./track.js";
-import { buildScenery } from "./scenery.js";
+import { buildScenery, buildTrackProps } from "./scenery.js";
 import { SkidMarks } from "./skidmarks.js";
 import { Input } from "./input.js";
 import { TouchControls } from "./touch.js";
+import { Garage } from "./garage.js";
 import { isTouch } from "../../assets/js/device.js";
 
 const FIXED_DT = 1 / 60;
 
 // ---------------------------------------------------------------- 菜单配置
 const CARS = [
-  { id: "mini", name: "Mini 精灵", desc: "灵巧轻量", length: 3.6, paint: 0xffd23e, accent: 0x1a1a1a, wheel: 0.86, wing: 0 },
-  { id: "street", name: "Street 街头者", desc: "均衡好开", length: 4.3, paint: 0xde0000, accent: 0x7a0000, wheel: 1.0, wing: 0 },
-  { id: "muscle", name: "Muscle 烈马", desc: "大马力后驱", length: 4.5, paint: 0x2050d0, accent: 0x102a6b, wheel: 0.95, wing: 1 },
-  { id: "exotic", name: "Exotic 幽灵", desc: "超跑极速", length: 4.4, paint: 0x7a2bd0, accent: 0x0098d8, wheel: 1.05, wing: 2 },
+  { id: "mini", name: "Mini 精灵", desc: "灵巧轻量", model: "hatchback-sports.glb", len: 3.5, paint: 0xffd23e, accent: 0x1a1a1a, wheel: 0.86, wing: 0 },
+  { id: "street", name: "Street 街头者", desc: "均衡好开", model: "sedan-sports.glb", len: 3.6, paint: 0xde0000, accent: 0x7a0000, wheel: 1.0, wing: 0 },
+  { id: "muscle", name: "Muscle 烈马", desc: "大马力后驱", model: "suv.glb", len: 3.9, paint: 0x2050d0, accent: 0x102a6b, wheel: 0.95, wing: 1 },
+  { id: "exotic", name: "Exotic 幽灵", desc: "超跑极速", model: "race-future.glb", len: 4.1, paint: 0x7a2bd0, accent: 0x0098d8, wheel: 1.05, wing: 2 },
 ];
 
 const TODS = [
@@ -106,10 +107,13 @@ class Game {
     this.applyTimeOfDay(this.todId);
     this.skid = new SkidMarks(this.scene);
     this._buildCarMesh();
+    this.garage = new Garage(document.getElementById("nfs-car-preview"));
     this.setCar(this.carId);
     this._buildNitroFlames();
     this._buildSmoke();
+    this._buildNitroSparks();
     this._bindMenu();
+    buildTrackProps(this.track).then((props) => { this.props = props; if (props) this.scene.add(props); }).catch(() => {});
     this.camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.3, 3000);
     this.camera.position.set(this.car.x - 8, 3.5, this.car.z - 8);
     this.camera.lookAt(this.car.x, 1, this.car.z);
@@ -172,12 +176,13 @@ class Game {
     this.scene.add(this.carGroup);
   }
 
-  /** 真实 glTF 车模；按车型应用尺寸/涂装/尾翼。setCar(id) 会御载旧车模重载（本地缓存很快）。 */
+  /** 真实车模；按车型加载 Kenney 低模车（glTF，CC0），失败回退 ferrari 车模。 */
   setCar(id) {
     const cfg = CARS.find((c) => c.id === id);
     if (!cfg) return;
     this.carId = id;
     this._carCfg = cfg;
+    this._carLen = cfg.len;
     store.set("car", id);
     this.car = new CarSim(id);
     this.updateHudCarLabel();
@@ -187,11 +192,64 @@ class Game {
     this.car.angle = Math.atan2(s0.tx, s0.tz);
     if (this._glbModel) {
       this.carGroup.remove(this._glbModel);
-      this._glbModel.traverse((o) => { if (o.isMesh) o.geometry.dispose?.(); });
       this._glbModel = null;
     }
     this._proceduralCar.visible = true;
     if (this._glbWheels) this._glbWheels.length = 0;
+    this._positionNitroFx();
+    const loader = new GLTFLoader();
+    loader.load(
+      `./assets/kits/car/${cfg.model}`,
+      (gltf) => {
+        const model = gltf.scene;
+        const box = new THREE.Box3().setFromObject(model);
+        const size = box.getSize(new THREE.Vector3());
+        const s = Math.min(cfg.len / Math.max(size.z, 0.001), 1.9 / Math.max(size.x, 0.001));
+        model.scale.setScalar(s);
+        const box2 = new THREE.Box3().setFromObject(model);
+        const c = box2.getCenter(new THREE.Vector3());
+        model.position.set(-c.x, -box2.min.y, -c.z);
+        // Kenney 车模原生朝 +Z，无需转 yaw
+        model.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+        // 尾翼（Muscle 大号 / Exotic 高扰流）
+        if (cfg.wing) {
+          const wing = new THREE.Group();
+          const matW = new THREE.MeshLambertMaterial({ color: 0x15161a });
+          const span = cfg.wing === 2 ? 2.1 : 1.9;
+          const plate = new THREE.Mesh(new THREE.BoxGeometry(span, 0.07, 0.5), matW);
+          plate.position.y = cfg.wing === 2 ? 1.06 : 0.92;
+          const legs = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.28, 0.3), matW);
+          legs.position.set(-span / 2 + 0.2, 0.78, 0);
+          const legs2 = legs.clone(); legs2.position.x = span / 2 - 0.2;
+          wing.add(plate, legs, legs2);
+          wing.position.set(0, 0, -cfg.len / 2 - 0.02);
+          model.add(wing);
+        }
+        this.carGroup.add(model);
+        this._glbModel = model;
+        this._proceduralCar.visible = false;
+        this._modelYaw = 0;
+        this._glbWheels = [];
+        this._wheelSpin = 0;
+        model.traverse((o) => {
+          if (!/wheel-(front|back)-(left|right)/.test(o.name || "")) return;
+          o.rotation.order = "YXZ";
+          o.rotation.set(0, 0, 0);
+          this._glbWheels.push({ pivot: o, front: /wheel-front/.test(o.name) });
+        });
+        this._positionNitroFx();
+        if (this.garage) this.garage.show(cfg);
+      },
+      undefined,
+      () => {
+        // 回退：ferrari 车模 + 涂装
+        this._loadFerrariFallback(cfg);
+      },
+    );
+  }
+
+  /** 加载失败回退：ferrari.glb 换色（three.js 官方示例，MIT） */
+  _loadFerrariFallback(cfg) {
     const loader = new GLTFLoader();
     loader.load(
       "./assets/models/ferrari.glb",
@@ -199,12 +257,12 @@ class Game {
         const model = gltf.scene;
         const box = new THREE.Box3().setFromObject(model);
         const size = box.getSize(new THREE.Vector3());
-        const s = cfg.length / Math.max(size.z, 0.001);
+        const s = cfg.len / Math.max(size.z, 0.001);
         model.scale.setScalar(s);
         const box2 = new THREE.Box3().setFromObject(model);
         const c = box2.getCenter(new THREE.Vector3());
         model.position.set(-c.x, -box2.min.y, -c.z);
-        model.rotation.y = Math.PI; // 车模原生朝 -Z，转到 +Z
+        model.rotation.y = Math.PI;
         model.traverse((o) => {
           if (!o.isMesh) return;
           o.castShadow = true;
@@ -217,21 +275,6 @@ class Game {
             }
           }
         });
-        // 尾翼（Muscle/Exotic）
-        if (cfg.wing) {
-          const wing = new THREE.Group();
-          const matW = new THREE.MeshLambertMaterial({ color: 0x15161a });
-          const span = cfg.wing === 2 ? 2.1 : 1.9;
-          const plate = new THREE.Mesh(new THREE.BoxGeometry(span, 0.07, 0.5), matW);
-          plate.position.y = cfg.wing === 2 ? 1.06 : 0.92;
-          const legs = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.28, 0.3), matW);
-          legs.position.set(-span / 2 + 0.2, 0.78, 0);
-          const legs2 = legs.clone(); legs2.position.x = span / 2 - 0.2;
-          wing.add(plate, legs, legs2);
-          wing.position.set(0, 0, -cfg.length / 2 - 0.05);
-          wing.rotation.y = -Math.PI; // 与车模同向（车模已入车组）
-          model.add(wing);
-        }
         this.carGroup.add(model);
         this._glbModel = model;
         this._proceduralCar.visible = false;
@@ -242,23 +285,25 @@ class Game {
           const pivot = model.getObjectByName(name);
           if (!pivot) continue;
           pivot.rotation.order = "YXZ";
-          pivot.scale.setScalar(cfg.wheel);
           this._glbWheels.push({ pivot, front: /_(fl|fr)$/.test(name) });
         }
+        this._positionNitroFx();
+        if (this.garage) this.garage.show(cfg);
       },
       undefined,
-      () => {
-        // 加载失败：程序化回退（也涂装一下）
-        if (this._proceduralCar) {
-          this._proceduralCar.traverse((o) => { if (o.isMesh && o.material && o.material.color) o.material.color.setHex(cfg.paint); });
-        }
-      },
+      () => {},
     );
   }
 
   updateHudCarLabel() {
     const el = document.getElementById("nfs-car-label");
     if (el && this._carCfg) el.textContent = `${this._carCfg.name} · ${this._carCfg.desc}`;
+  }
+
+  _positionNitroFx() {
+    if (!this._nitroFlames) return;
+    const z = -(this._carLen || 4) / 2 - 0.12;
+    for (const f of this._nitroFlames) f.position.set(f.userData.x, 0.26, z);
   }
 
   applyTimeOfDay(id) {
@@ -300,14 +345,81 @@ class Game {
     ctx.fillRect(0, 0, 64, 64);
     const tex = new THREE.CanvasTexture(c);
     this._nitroFlames = [];
-    for (const x of [-0.38, 0.38]) {
+    for (const x of [-0.32, 0.32]) {
       const mat = new THREE.SpriteMaterial({ map: tex, color: 0xbfefff, blending: THREE.AdditiveBlending, depthWrite: false });
       const sp = new THREE.Sprite(mat);
+      sp.userData.x = x;
       sp.position.set(x, 0.36, -2.35);
       sp.scale.set(0.9, 0.9, 1);
       sp.visible = false;
       this.carGroup.add(sp);
       this._nitroFlames.push(sp);
+    }
+  }
+
+  /** 氮气喷流粒子：向车尾后方喷出的蓝色火花（明确喷射方向） */
+  _buildNitroSparks() {
+    const c = document.createElement("canvas");
+    c.width = c.height = 32;
+    const ctx = c.getContext("2d");
+    const grad = ctx.createRadialGradient(16, 16, 1, 16, 16, 15);
+    grad.addColorStop(0, "rgba(255,255,255,1)");
+    grad.addColorStop(0.4, "rgba(140,220,255,.9)");
+    grad.addColorStop(1, "rgba(60,120,255,0)");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 32, 32);
+    const tex = new THREE.CanvasTexture(c);
+    this._sparks = [];
+    for (let i = 0; i < 24; i++) {
+      const m = new THREE.SpriteMaterial({ map: tex, color: 0xcfefff, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0 });
+      const s = new THREE.Sprite(m);
+      s.visible = false;
+      this.scene.add(s);
+      this._sparks.push({ s, life: 0, max: 0.32, vx: 0, vy: 0, vz: 0 });
+    }
+    this._sparkIdx = 0;
+    this._sparkTimer = 0;
+  }
+
+  _spawnSpark() {
+    const c = this.car;
+    const fx = Math.sin(c.angle), fz = Math.cos(c.angle);
+    const rx = -fz, rz = fx;
+    const len = this._carLen || 4;
+    const p = this._sparks[this._sparkIdx++ % this._sparks.length];
+    const lx = (Math.random() - 0.5) * 0.6;
+    const bx = c.x - fx * (len / 2) + rx * lx;
+    const bz = c.z - fz * (len / 2) + rz * lx;
+    p.s.position.set(bx, 0.3, bz);
+    const spd = 9 + Math.random() * 4;
+    p.vx = c.vx * 0.35 - fx * spd + (Math.random() - 0.5) * 2;
+    p.vz = c.vz * 0.35 - fz * spd + (Math.random() - 0.5) * 2;
+    p.vy = 0.5 + Math.random() * 0.8;
+    p.life = p.max;
+    p.s.visible = true;
+    p.s.scale.set(0.3, 0.3, 1);
+  }
+
+  _updateSparks(dt) {
+    if (this.car.nitroActive) {
+      this._sparkTimer -= dt;
+      if (this._sparkTimer <= 0) {
+        this._sparkTimer = 0.025;
+        this._spawnSpark();
+        this._spawnSpark();
+      }
+    }
+    for (const p of this._sparks) {
+      if (p.life <= 0) continue;
+      p.life -= dt;
+      const k = 1 - p.life / p.max;
+      p.s.position.x += p.vx * dt;
+      p.s.position.y += p.vy * dt;
+      p.s.position.z += p.vz * dt;
+      p.s.material.opacity = 0.9 * (1 - k);
+      const sc = 0.3 + k * 0.25;
+      p.s.scale.set(sc, sc, 1);
+      if (p.life <= 0) p.s.visible = false;
     }
   }
 
@@ -362,6 +474,8 @@ class Game {
     this.hud = {
       speed: document.getElementById("nfs-speed"),
       nitroFill: document.getElementById("nfs-nitro-fill"),
+      nitroPct: document.getElementById("nfs-nitro-pct"),
+      nitroWrap: document.querySelector(".nfs-nitro"),
       lap: document.getElementById("nfs-lap"),
       time: document.getElementById("nfs-time"),
       best: document.getElementById("nfs-best"),
@@ -380,6 +494,7 @@ class Game {
       const m = lights[0].material;
       if (m && m.color) m.color.setHex(0x2bff5a);
     }
+    if (this.garage) this.garage.hide();
     this.running = true;
     this._last = performance.now();
     if (this.hud.msg) this.hud.msg.textContent = "WASD 驾驶 / Space 漂移 / Shift 氮气";
@@ -508,13 +623,15 @@ class Game {
     const fxx = Math.sin(this.car.angle), fzz = Math.cos(this.car.angle);
     // 右向 = (-fz, 0, fx)
     const rxx = -fzz, rzz = fxx;
-    const rearLz = -1.32;
+    const len = this._carLen || 4;
+    const rearLz = -(len * 0.32);
+    const rearLx = len * 0.22;
     const driftingNow = this.car.drifting && Math.abs(this.car.slip) > 0.1 && Math.abs(this.car.speed) > 6;
     if (driftingNow) {
       if (!this._lastRear) this._lastRear = [{ x: 0, z: 0 }, { x: 0, z: 0 }];
       let ax = 0, az = 0;
       for (let k = 0; k < 2; k++) {
-        const lx = k === 0 ? -0.82 : 0.82;
+        const lx = k === 0 ? -rearLx : rearLx;
         const wx = this.car.x + rxx * lx + fxx * rearLz;
         const wz = this.car.z + rzz * lx + fzz * rearLz;
         const last = this._lastRear[k];
@@ -537,6 +654,7 @@ class Game {
       this._wasDrifting = false;
     }
     this._updateSmoke(dt);
+    this._updateSparks(dt);
 
     // 氮气尾焰：激活时显示并闪炼
     for (let i = 0; i < this._nitroFlames.length; i++) {
@@ -628,6 +746,14 @@ class Game {
     if (!h.speed) return;
     h.speed.textContent = String(Math.round(this.car.kmh));
     if (h.nitroFill) h.nitroFill.style.width = `${Math.round(this.car.nitro * 100)}%`;
+    if (h.nitroPct) h.nitroPct.textContent = `${Math.round(this.car.nitro * 100)}%`;
+    if (h.nitroWrap) h.nitroWrap.classList.toggle("full", this.car.nitro > 0.985);
+    // 触屏氮气按钮：环形进度（剩余量）
+    const nb = document.querySelector(".tc-nitro");
+    if (nb) {
+      const pct = this.car.nitro * 100;
+      nb.style.background = `conic-gradient(rgba(255,209,102,.85) ${pct * 3.6}deg, rgba(255,255,255,.12) 0deg)`;
+    }
     const fmt = (s) => {
       const m = Math.floor(s / 60);
       const sec = (s % 60).toFixed(2).padStart(5, "0");

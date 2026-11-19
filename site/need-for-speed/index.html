@@ -15,7 +15,7 @@
   <div class="nfs-tl">
     <div id="nfs-speed" class="nfs-speed">0</div>
     <div class="nfs-unit">km/h</div>
-    <div class="nfs-nitro"><div id="nfs-nitro-fill"></div></div>
+    <div class="nfs-nitro"><div id="nfs-nitro-fill"></div><span id="nfs-nitro-pct">100%</span></div>
   </div>
   <div class="nfs-tr">
     <div id="nfs-car-label">Street · 均衡好开</div>
@@ -36,6 +36,10 @@
     <p>竞速 · 漂移 · 氮气 · 海滨城市</p>
     <div class="nfs-select">
       <div class="nfs-label">选择赛车</div>
+      <div class="nfs-garage">
+        <canvas id="nfs-car-preview"></canvas>
+        <div class="nfs-stats" id="nfs-car-stats"></div>
+      </div>
       <div class="nfs-pills" id="nfs-car-list"></div>
       <div class="nfs-label">时间</div>
       <div class="nfs-pills" id="nfs-tod-list"></div>

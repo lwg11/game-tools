@@ -72,7 +72,12 @@ export class CarSim {
     }
     if (this.nitroActive) acc += d.nitroAccel * 0.6;
     if (input.brake > 0) {
-      acc -= input.brake * (vf > 1 ? d.brake : d.accel * 0.4); // 倒车限速由 dragK 控制
+      if (vf > 0.02) {
+        acc -= input.brake * d.brake;
+      } else {
+        vf = 0; // 停稳：不回退倒车，防止 0-2 反复 + 车身抖动
+        acc = -0.2; // 略压阻力，让车彻底停定
+      }
     }
     acc -= drag;
     vf += acc * dt;
