@@ -1,10 +1,11 @@
 /**
- * 键鼠输入（原型期）。返回归一化驾驶输入；后续扩展触屏。
+ * 键鼠 + 触屏输入。返回归一化驾驶输入。
+ * 触摸控件（TouchControls）可选注入，与键盘事件合并。
  */
 export class Input {
-  constructor() {
+  constructor(touch = null) {
     this.keys = new Set();
-    this._prev = new Set();
+    this.touch = touch;
   }
 
   attach(target = window) {
@@ -25,17 +26,17 @@ export class Input {
 
   sample() {
     const k = this.keys;
-    const throttle = (k.has("KeyW") || k.has("ArrowUp")) ? 1 : 0;
-    const brake = (k.has("KeyS") || k.has("ArrowDown")) ? 1 : 0;
-    const left = (k.has("KeyA") || k.has("ArrowLeft")) ? 1 : 0;
-    const right = (k.has("KeyD") || k.has("ArrowRight")) ? 1 : 0;
-    return {
-      throttle,
-      brake,
-      steer: right - left, // 右为正 = 车头向 +X 偏（与 sim.angle 增加方向一致）
-      handbrake: k.has("Space"),
-      nitro: k.has("ShiftLeft") || k.has("ShiftRight") || k.has("KeyN"),
-    };
+    const t = this.touch ? this.touch.state : null;
+    const throttle = ((k.has("KeyW") || k.has("ArrowUp")) ? 1 : 0) || (t && t.throttle ? 1 : 0);
+    const brake = ((k.has("KeyS") || k.has("ArrowDown")) ? 1 : 0) || (t && t.brake ? 1 : 0);
+    let steer = (k.has("KeyD") || k.has("ArrowRight") ? 1 : 0) - (k.has("KeyA") || k.has("ArrowLeft") ? 1 : 0);
+    if (t && Math.abs(t.steer) > 0.001) {
+      steer = Math.abs(steer) >= 1 ? steer + t.steer * 0.5 : t.steer;
+    }
+    steer = Math.max(-1, Math.min(1, steer));
+    const handbrake = k.has("Space") || (t ? t.handbrake : false);
+    const nitro = k.has("ShiftLeft") || k.has("ShiftRight") || k.has("KeyN") || (t ? t.nitro : false);
+    return { throttle, brake, steer, handbrake, nitro };
   }
 
   isDown(code) { return this.keys.has(code); }

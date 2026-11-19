@@ -3,9 +3,13 @@
  * 物理固定步长 1/60；渲染每帧；赛道投影约束 + 检查点/圈速。
  */
 import * as THREE from "../lib/three.module.min.js";
+import { GLTFLoader } from "../lib/GLTFLoader.js";
+import { DRACOLoader } from "../lib/DRACOLoader.js";
 import { CarSim, makeTrack, projectToTrack, clamp, wrapAngle } from "./sim.js";
 import { buildTrackMeshes } from "./track.js";
 import { Input } from "./input.js";
+import { TouchControls } from "./touch.js";
+import { isTouch } from "../../assets/js/device.js";
 
 const FIXED_DT = 1 / 60;
 
@@ -21,7 +25,8 @@ class Game {
     this.headless = false;
     this.track = makeTrack(TRACK_POINTS, { sampleStep: 4, halfWidth: 11 });
     this.car = new CarSim("street");
-    this.input = new Input();
+    this.touch = isTouch ? new TouchControls(document.body) : null;
+    this.input = new Input(this.touch);
 
     // 出生点：起跑线后 3 个采样
     const s0 = this.track.samples[2];
@@ -64,10 +69,13 @@ class Game {
     sun.shadow.camera.far = 900;
     this.sun = sun;
     this.scene.add(sun);
+    const fill = new THREE.DirectionalLight(0xbfd8ff, 0.5);
+    fill.position.set(-90, 130, -110);
+    this.scene.add(fill);
 
     this.scene.add(buildTrackMeshes(this.track));
-
     this._buildCarMesh();
+    this._loadCarModel();
     this.camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.3, 3000);
     this.camera.position.set(this.car.x - 8, 3.5, this.car.z - 8);
     this.camera.lookAt(this.car.x, 1, this.car.z);
@@ -75,6 +83,11 @@ class Game {
 
     this.input.attach();
     this._bindHud();
+    if (this.touch) {
+      document.getElementById("nfs-keys-pc").style.display = "none";
+      document.getElementById("nfs-keys-touch").style.display = "block";
+    }
+    document.addEventListener("touchmove", (e) => { if (this.running) e.preventDefault(); }, { passive: false });
     window.addEventListener("resize", () => this._resize());
 
     document.getElementById("nfs-btn-start").addEventListener("click", () => this.start());
@@ -118,8 +131,47 @@ class Game {
       g.add(pivot);
       this.wheels.push(pivot);
     }
-    this.carGroup = g;
-    this.scene.add(g);
+    // 与 glb 车模共享位姿的独立容器（隐藏程序化车壳时不能隐藏 carGroup 本身）
+    this.carGroup = new THREE.Group();
+    this.carGroup.add(g);
+    this._proceduralCar = g;
+    this.scene.add(this.carGroup);
+  }
+
+  /** 真实 glTF 车模（ferrari.glb，three.js 示例模型，MIT），失败则保留程序化回退 */
+  _loadCarModel() {
+    const draco = new DRACOLoader();
+    draco.setDecoderPath("./lib/draco/gltf/");
+    const loader = new GLTFLoader();
+    loader.setDRACOLoader(draco);
+    loader.load(
+      "./assets/models/ferrari.glb",
+      (gltf) => {
+        const model = gltf.scene;
+        const box = new THREE.Box3().setFromObject(model);
+        const size = box.getSize(new THREE.Vector3());
+        const s = 4.3 / Math.max(size.z, 0.001);
+        model.scale.setScalar(s);
+        const box2 = new THREE.Box3().setFromObject(model);
+        const c = box2.getCenter(new THREE.Vector3());
+        model.position.set(-c.x, -box2.min.y, -c.z);
+        model.rotation.y = Math.PI; // 车模原生朝 -Z，转到 +Z
+        model.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+        this.carGroup.add(model);
+        if (this._proceduralCar) this._proceduralCar.visible = false;
+        this._modelYaw = Math.PI;
+        this._glbWheels = [];
+        this._wheelSpin = 0;
+        for (const name of ["wheel_fl", "wheel_fr", "wheel_rl", "wheel_rr"]) {
+          const pivot = model.getObjectByName(name);
+          if (!pivot) continue;
+          pivot.rotation.order = "YXZ";
+          this._glbWheels.push({ pivot, front: /_(fl|fr)$/.test(name) });
+        }
+      },
+      undefined,
+      () => { /* 加载失败：保持程序化回退 */ }
+    );
   }
 
   _bindHud() {
@@ -137,6 +189,7 @@ class Game {
   start() {
     document.getElementById("nfs-menu").classList.add("hidden");
     document.getElementById("nfs-hud").classList.remove("hidden");
+    if (this.touch) this.touch.show();
     this.running = true;
     this._last = performance.now();
     if (this.hud.msg) this.hud.msg.textContent = "WASD 驾驶 / Space 漂移 / Shift 氮气";
@@ -223,11 +276,19 @@ class Game {
 
     // 视觉同步
     this.carGroup.position.set(this.car.x, 0, this.car.z);
-    this.carGroup.rotation.y = this.car.angle;
+    this.carGroup.rotation.y = this.car.angle + (this._modelYaw || 0);
     const spin = (this.car.speed / 0.36) * dt;
-    for (const w of this.wheels) {
-      w.children[0].rotation.x += spin;
-      if (w.userData.front) w.rotation.y = this.car.steerVis;
+    if (this._glbWheels && this._glbWheels.length) {
+      this._wheelSpin = (this._wheelSpin ?? 0) + spin;
+      for (const w of this._glbWheels) {
+        w.pivot.rotation.y = w.front ? this.car.steerVis : 0;
+        w.pivot.rotation.x = this._wheelSpin;
+      }
+    } else {
+      for (const w of this.wheels) {
+        w.children[0].rotation.x += spin;
+        if (w.userData.front) w.rotation.y = this.car.steerVis;
+      }
     }
 
     // 相机
@@ -237,10 +298,12 @@ class Game {
   _updateCamera(dt) {
     const c = this.car;
     const fx = Math.sin(c.angle), fz = Math.cos(c.angle);
-    const back = 7.6 + c.kmh * 0.045;
-    const up = 2.7 + c.kmh * 0.012;
-    const tx = c.x - fx * back + fx * c.slip * -3.0;
-    const tz = c.z - fz * back + fz * c.slip * -3.0;
+    const rx = fz, rz = -fx; // 右侧方向
+    const back = 6.6 + c.kmh * 0.03;
+    const up = 2.0 + c.kmh * 0.008;
+    const side = 1.35;
+    const tx = c.x - fx * back + rx * side;
+    const tz = c.z - fz * back + rz * side;
     const k = clamp(6 * dt, 0, 1);
     this._camPos.x += (tx - this._camPos.x) * k;
     this._camPos.y += (up - this._camPos.y) * k;
@@ -252,7 +315,7 @@ class Game {
       this._shake *= Math.exp(-6 * dt);
     }
     this.camera.position.set(this._camPos.x + sx, this._camPos.y, this._camPos.z + sz);
-    this.camera.lookAt(c.x + fx * 2.4, 1.15, c.z + fz * 2.4);
+    this.camera.lookAt(c.x + fx * 3.5, 1.0, c.z + fz * 3.5);
     // FOV 随速度
     const targetFov = 60 + clamp(c.kmh / 220, 0, 1) * 22;
     if (Math.abs(this.camera.fov - targetFov) > 0.2) {

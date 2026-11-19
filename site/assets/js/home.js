@@ -1,4 +1,4 @@
-import { markDeviceBadge } from "./device.js";
+import { markDeviceBadge, isMobile } from "./device.js";
 import { initAccount } from "./account.js";
 import { loadMergedProgress, GAME_IDS } from "./progress.js";
 import { toast } from "./ui.js";
@@ -156,6 +156,15 @@ async function refreshCards() {
 }
 
 async function boot() {
+  // 罪恶都市目前仅支持 PC：移动端隐藏入口（直接输入 URL 仍可访问）
+  if (isMobile) {
+    const vcCard = document.querySelector('[data-game="vice-city"]');
+    if (vcCard) vcCard.remove();
+    const cnt = document.getElementById("portalCount");
+    if (cnt) cnt.textContent = "五款都支持手机与电脑，进度自动保存。";
+    const mcnt = document.getElementById("modalCount");
+    if (mcnt) mcnt.textContent = "五款游戏的操作与进度规则";
+  }
   // 账号组件只初始化一次，避免重复绑定点击事件
   try {
     await initAccount(document.querySelector("[data-account-chip]"));
