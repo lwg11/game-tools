@@ -53,6 +53,15 @@ const PAINTS = [
   { id: "police", name: "执法者", hex: 0x2545ff, special: "cop" },
 ];
 
+// M7 疯狂模式：金手指项
+const CHEATS = [
+  { id: "nitro", name: "无限氮气", desc: "氮气永不消耗" },
+  { id: "god", name: "无敌耐久", desc: "HP 锁定满值" },
+  { id: "speed", name: "超级速度", desc: "极速与氮气上限 +60%" },
+  { id: "rich", name: "无限金币", desc: "金币 ∞，购买免费" },
+  { id: "allcars", name: "全车全涂装", desc: "直接解锁全部内容" },
+];
+
 const JSON_STORE = {
   get(k, fallback) {
     try {
@@ -116,6 +125,7 @@ class Game {
     this.modsMap = JSON_STORE.get("mods", {});
     this.paintsUnlocked = JSON_STORE.get("unlocked_paints", ["stock", "crimson", "azure", "lime", "violet", "gold"]);
     this.paintSel = JSON_STORE.get("paint_sel", {});
+    this.cheats = Object.assign({}, JSON_STORE.get("cheats", {}));
   }
 
   init() {
@@ -194,6 +204,14 @@ class Game {
       muteBtn.addEventListener("click", () => this._toggleMute());
       this._updateMuteBtn(muteBtn);
     }
+    const cheatFab = document.getElementById("nfs-cheat-fab");
+    const cheatPanel = document.getElementById("nfs-cheat-panel");
+    if (cheatFab && cheatPanel) {
+      cheatFab.addEventListener("click", () => cheatPanel.classList.toggle("hidden"));
+      this._renderCheats();
+      // 面板内点击不影响其他
+      cheatPanel.addEventListener("pointerdown", (e) => e.stopPropagation());
+    }
     if (this.touch) {
       document.getElementById("nfs-keys-pc").style.display = "none";
       document.getElementById("nfs-keys-touch").style.display = "block";
@@ -259,6 +277,7 @@ class Game {
     store.set("car", id);
     const mods = this.modsMap[id] || {};
     this.car = new CarSim(id, mods);
+    this._applyCheatSpeed();
     this.updateHudCarLabel();
     // 重置到起跑点
     const s0 = this.track.samples[2];
@@ -377,7 +396,7 @@ class Game {
 
   // ------------------------------------------------ M4 购买
   _buyCar(id) {
-    const price = CAR_PRICE[id] || 0;
+    const price = this.cheats.rich ? 0 : CAR_PRICE[id] || 0;
     if (this.owned.includes(id)) return;
     if (this.coins < price) {
       this._flashInMenu(`金币不足：${price} 币（当前 ${this.coins}）`);
@@ -395,6 +414,7 @@ class Game {
   }
 
   _buyPart(partId, cost) {
+    if (this.cheats.rich) cost = 0;
     if (this.coins < cost) {
       this._flashInMenu(`金币不足：${cost} 币（当前 ${this.coins}）`);
       return;
@@ -665,6 +685,11 @@ class Game {
     this._last = performance.now();
     this.sfx.resume();
     this._cdLast = -1;
+    // M7 疯狂模式：显示金手指入口
+    const isCrazy = this.modeId === "crazy";
+    document.getElementById("nfs-cheat-fab").classList.toggle("hidden", !isCrazy);
+    document.getElementById("nfs-cheat-panel").classList.add("hidden");
+    if (isCrazy) this._flash("疯狂模式 · 点右侧「金」开启金手指");
     if (this.hud.msg) this.hud.msg.textContent = "WASD 驾驶 / Space 漂移 / Shift 氮气";
   }
 
@@ -719,6 +744,8 @@ class Game {
     document.getElementById("nfs-hud").classList.add("hidden");
     document.getElementById("nfs-racehud").classList.add("hidden");
     document.getElementById("nfs-results").classList.add("hidden");
+    document.getElementById("nfs-cheat-fab").classList.add("hidden");
+    document.getElementById("nfs-cheat-panel").classList.add("hidden");
     document.getElementById("nfs-menu").classList.remove("hidden");
     if (this.touch) this.touch.hide();
     if (this.garage && this._carCfg) this.garage.show(this._carCfg, this.modsMap[this._carCfg.id] || {});
@@ -731,7 +758,7 @@ class Game {
     const diffList = document.getElementById("nfs-diff-list");
     const coinsEl = document.getElementById("nfs-coins");
     const updateCoins = () => {
-      if (coinsEl) coinsEl.textContent = String(this.coins);
+      if (coinsEl) coinsEl.textContent = this.cheats.rich ? "∞" : String(this.coins);
     };
     this._updateCoins = updateCoins;
     updateCoins();
@@ -750,21 +777,22 @@ class Game {
     });
     if (resMenu) resMenu.addEventListener("click", () => this.backToMenu());
     if (modeList) {
-      [{ id: "free", name: "自由漫游", desc: "无目标·全城开" }, ...RACE_MODES].forEach((m) => {
+      [{ id: "free", name: "自由漫游", desc: "无目标·全城开" }, ...RACE_MODES, { id: "crazy", name: "疯狂模式", desc: "金手指·无限氮气/无敌/极速/无限币" }].forEach((m) => {
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = "nfs-pill" + (m.id === this.modeId ? " on" : "");
         btn.textContent = m.name;
         btn.title = m.desc;
-        btn.addEventListener("click", () => {
-          modeList.querySelectorAll(".nfs-pill").forEach((b) => b.classList.remove("on"));
-          btn.classList.add("on");
-          this.modeId = m.id;
-          store.set("mode", m.id);
+          btn.addEventListener("click", () => {
+            modeList.querySelectorAll(".nfs-pill").forEach((b) => b.classList.remove("on"));
+            btn.classList.add("on");
+            this.modeId = m.id;
+            store.set("mode", m.id);
+            if (this._renderCheats) this._renderCheats();
+          });
+          modeList.appendChild(btn);
         });
-        modeList.appendChild(btn);
-      });
-    }
+      }
     if (diffList) {
       DIFFS.forEach((d) => {
         const btn = document.createElement("button");
@@ -860,6 +888,7 @@ class Game {
     };
     this._renderM4 = renderM4;
     renderM4();
+    this._renderCheats();
     if (todList) {
       TODS.forEach((t) => {
         const btn = document.createElement("button");
@@ -877,6 +906,8 @@ class Game {
   }
 
   _resize() {
+    const portrait = window.innerHeight > window.innerWidth;
+    this.camera.fov = portrait ? 74 : 62;
     this.camera.aspect = window.innerWidth / window.innerHeight;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(window.innerWidth, window.innerHeight);
@@ -896,6 +927,10 @@ class Game {
     this._nitroMin = Math.max(0, (this._nitroMin || 0) - dt);
     const input = Object.assign({}, rawInput, { nitro: nitroDown || this._nitroMin > 0 });
     this.car.update(dt, input, { nitroAvailable: true });
+
+    // M7 金手指即时生效
+    if (this.cheats.nitro) this.car.nitro = 1;
+    if (this.cheats.god) this.car.hp = this.car.hpMax || 100;
 
     // 赛道约束：投影 → 路肩推回 + 出界拖慢
     const p = projectToTrack(this.track, this.car.x, this.car.z, this.hint);
@@ -1150,6 +1185,7 @@ class Game {
     // M5 后视镜：车尾视角渲到 RT 再叠加到顶部（隔帧刷新，省一个 pass）
     if (this.running && this._mirrorRT && (this._frameCount = (this._frameCount || 0) + 1) >= 2) {
       this._frameCount = 0;
+      this._layoutMirror();
       const fx = Math.sin(this.car.angle), fz = Math.cos(this.car.angle);
       this._rearCam.position.set(this.car.x, 1.45, this.car.z);
       this._rearCam.lookAt(this.car.x - fx * 24, 1.1, this.car.z - fz * 24);
@@ -1167,11 +1203,15 @@ class Game {
   _layoutMirror() {
     if (!this._mirrorQuad) return;
     const w = window.innerWidth, h = window.innerHeight;
-    const mw = Math.min(w * 0.32, 440);
+    const portrait = h > w;
+    const mw = portrait ? Math.min(w * 0.46, 230) : Math.min(w * 0.32, 440);
     const mh = mw * (180 / 512);
-    const topMargin = 14;
     this._mirrorQuad.scale.set((mw / w) * 2, (mh / h) * 2, 1);
-    this._mirrorQuad.position.set(0, 1 - (topMargin * 2 + mh) / h, 1);
+    // 竖屏：顶部居中（P 名次下方）；横屏：底部居中（避开顶部 HUD）
+    const raceHud = !document.getElementById("nfs-racehud").classList.contains("hidden");
+    const margin = portrait ? (raceHud ? 66 : 38) : 14;
+    const y = portrait ? 1 - (margin + mh) / h : -1 + (margin + mh) / h;
+    this._mirrorQuad.position.set(0, y, 1);
   }
 
   _toggleMute() {
@@ -1184,6 +1224,81 @@ class Game {
   _updateMuteBtn(btn) {
     btn.textContent = this.sfx.muted ? "🔇" : "🔊";
     btn.title = this.sfx.muted ? "已静音（M）" : "声音开（M）";
+  }
+
+  // ------------------------------------------------ M7 疯狂模式
+  _applyCheatSpeed() {
+    if (!this.car) return;
+    const base = buildDef(this.carId, this.modsMap[this.carId] || {});
+    const k = this.cheats.speed ? 1.6 : 1;
+    this.car.def.maxSpeed = base.maxSpeed * k;
+    this.car.def.nitroMaxAdd = base.nitroMaxAdd * k;
+  }
+
+  _renderCheats() {
+    const isCrazy = this.modeId === "crazy";
+    const menuEl = document.getElementById("nfs-cheats");
+    if (menuEl) {
+      menuEl.innerHTML = "";
+      if (!isCrazy) {
+        menuEl.innerHTML = '<div class="nfs-cheat-hint">切换到「疯狂模式」后开启金手指</div>';
+      } else {
+        CHEATS.forEach((c) => {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "nfs-pill" + (this.cheats[c.id] ? " on" : "");
+          btn.textContent = `${c.name} ${this.cheats[c.id] ? "·开" : "·关"}`;
+          btn.title = c.desc;
+          btn.addEventListener("click", () => this._toggleCheat(c.id));
+          menuEl.appendChild(btn);
+        });
+      }
+    }
+    const panelEl = document.getElementById("nfs-cheat-panel");
+    if (panelEl) {
+      panelEl.innerHTML = "<h3>金手指 · 疯狂模式</h3>";
+      if (!isCrazy) {
+        panelEl.innerHTML += '<div class="nfs-cheat-hint">请先在菜单选择「疯狂模式」</div>';
+      } else {
+        CHEATS.forEach((c) => {
+          const row = document.createElement("div");
+          row.className = "nfs-cheat-row";
+          row.innerHTML = `<span>${c.name}<i style="display:block;font-style:normal;font-size:9px;opacity:.6">${c.desc}</i></span>`;
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = this.cheats[c.id] ? "on" : "";
+          btn.textContent = this.cheats[c.id] ? "开" : "关";
+          btn.addEventListener("click", () => this._toggleCheat(c.id));
+          row.appendChild(btn);
+          panelEl.appendChild(row);
+        });
+      }
+    }
+  }
+
+  _toggleCheat(id) {
+    this.cheats[id] = !this.cheats[id];
+    JSON_STORE.set("cheats", this.cheats);
+    const c = CHEATS.find((x) => x.id === id) || { name: id };
+    if (id === "rich") {
+      if (this.cheats.rich) { this._coinsBeforeRich = this.coins; this.coins = 99999; }
+      else { this.coins = this._coinsBeforeRich || 0; }
+      store.set("coins", String(this.coins));
+      if (this._updateCoins) this._updateCoins();
+    }
+    if (id === "allcars" && this.cheats.allcars) {
+      this.owned = CARS.map((x) => x.id);
+      this.paintsUnlocked = PAINTS.map((x) => x.id);
+      JSON_STORE.set("owned_cars", this.owned);
+      JSON_STORE.set("unlocked_paints", this.paintsUnlocked);
+      if (this._rebuildCarPills) this._rebuildCarPills();
+      if (this._renderM4) this._renderM4();
+    }
+    if (id === "speed") this._applyCheatSpeed();
+    this._renderCheats();
+    const msg = `${c.name}：${this.cheats[id] ? "开" : "关"}`;
+    if (this.running) this._flash(msg);
+    else this._flashInMenu(msg);
   }
 
   _updateHud() {

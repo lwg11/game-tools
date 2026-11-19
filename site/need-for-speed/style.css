@@ -26,7 +26,7 @@ body { font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; co
 .nfs-tr div { margin-bottom: 4px; }
 .nfs-br { position: absolute; right: 24px; bottom: 22px; text-align: right; }
 #nfs-drift { font-size: 20px; font-weight: 900; color: #ffd166; text-shadow: 0 2px 6px rgba(0,0,0,.7); }
-#nfs-msg { position: absolute; left: 50%; bottom: 15%; transform: translateX(-50%); font-size: 16px; opacity: .85; text-shadow: 0 2px 6px rgba(0,0,0,.8); white-space: nowrap; }
+#nfs-msg { position: absolute; left: 50%; top: 34%; bottom: auto; transform: translateX(-50%); font-size: 16px; opacity: .85; text-shadow: 0 2px 6px rgba(0,0,0,.8); white-space: nowrap; }
 
 /* ---------------- 菜单 ---------------- */
 .nfs-menu { position: absolute; inset: 0; z-index: 20; display: flex; align-items: safe center; justify-content: center; background: radial-gradient(ellipse at center, rgba(20,12,44,.85), rgba(4,6,14,.96)); overflow-y: auto; }
@@ -205,4 +205,66 @@ body { font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; co
 @media (max-height: 420px) {
   .tc-btn { width: 62px; height: 62px; font-size: 13px; }
   .tc-left, .tc-right { font-size: 22px; }
+}
+
+/* ---------------- M7 疯狂模式金手指 ---------------- */
+#nfs-cheats .nfs-cheat-hint { font-size: 11px; opacity: .6; padding: 6px 4px; }
+#nfs-cheat-panel {
+  position: fixed; right: 14px; top: 118px; z-index: 60;
+  background: rgba(12,14,26,.92); border: 1px solid rgba(255,209,102,.45);
+  border-radius: 12px; padding: 10px 12px; min-width: 240px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.5);
+}
+#nfs-cheat-panel h3 { font-size: 13px; color: #ffd166; margin-bottom: 8px; letter-spacing: 2px; }
+#nfs-cheat-panel .nfs-cheat-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 12px; }
+#nfs-cheat-panel .nfs-cheat-row span { flex: 1; opacity: .9; }
+#nfs-cheat-panel .nfs-cheat-row button {
+  pointer-events: auto; cursor: pointer; font-size: 11px; font-weight: 800;
+  padding: 4px 12px; border-radius: 999px; border: 1px solid rgba(255,255,255,.3);
+  background: rgba(255,255,255,.08); color: #fff;
+}
+#nfs-cheat-panel .nfs-cheat-row button.on {
+  background: linear-gradient(90deg, #ffd166, #ff4fa3); color: #111; border-color: transparent;
+}
+#nfs-cheat-fab {
+  position: fixed; right: 14px; top: 64px; z-index: 55;
+  width: 44px; height: 44px; border-radius: 50%; cursor: pointer;
+  font-size: 16px; font-weight: 900; color: #111;
+  background: linear-gradient(135deg, #ffd166, #ff4fa3);
+  border: 0; box-shadow: 0 6px 18px rgba(255,79,163,.4);
+}
+@media (max-width: 640px) {
+  #nfs-cheat-fab { right: 10px; top: 94px; }
+  #nfs-cheat-panel { right: 10px; top: 146px; min-width: 220px; }
+}
+
+/* ---------------- 竖屏 / 窄屏（≤640px）专项 ---------------- */
+@media (max-width: 640px) {
+  /* 开始按钮钉在底部（含胶囊安全区），内容区留出空间 */
+  .nfs-panel { padding-bottom: 88px; }
+  #nfs-btn-start {
+    position: fixed; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom));
+    transform: translateX(-50%); z-index: 35; width: min(420px, 92vw);
+    margin: 0;
+  }
+  /* 速度表移到左上（让开左下转向键） */
+  .nfs-tl { left: 14px; bottom: auto; top: calc(196px + env(safe-area-inset-top)); }
+  .nfs-speed { font-size: 42px; }
+  .nfs-nitro { width: 140px; }
+  #nfs-nitro-pct { left: 146px; }
+  /* 小地图挪到右上（让开按钮区） */
+  #nfs-map { width: 72px; height: 72px; left: auto; right: 10px; top: calc(10px + env(safe-area-inset-top)); bottom: auto; }
+  /* 圈/时间/最佳放右侧中部（原右上与 P 名次打架） */
+  .nfs-tr { top: auto; right: 12px; bottom: 182px; font-size: 12px; opacity: .92; }
+  /* 漂移分挪右侧纵向中部 */
+  .nfs-br { top: 44%; right: 12px; bottom: auto; }
+  #nfs-drift { font-size: 16px; }
+  /* 提示语中段偏上，避开速度表 */
+  #nfs-msg { top: 34%; bottom: auto; font-size: 14px; }
+  #nfs-race-pos { font-size: 34px; }
+  #nfs-race-extra { font-size: 12px; }
+  .tc-btn { width: 68px; height: 68px; font-size: 14px; }
+  .tc-left, .tc-right { font-size: 24px; }
+  .tc-row { gap: 10px; }
+  .tc-cluster { gap: 10px; }
 }
