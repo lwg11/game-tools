@@ -24,9 +24,31 @@ export const wrapAngle = (a) => {
  * - 转向速率随速度收窄（原地几乎不能打方向，高速不能乱打）
  * - 氮气：提升加速度与极速上限
  */
+/** 部件升级（M4）：5 系部件，系数作用于基础 CAR_DEFS，返回新对象 */
+export function buildDef(defId, mods = null) {
+  const base = CAR_DEFS[defId];
+  if (!base) return null;
+  const m = mods || {};
+  const g = (k) => typeof m[k] === "number" ? m[k] : 0;
+  const def = { ...base };
+  // 引擎：极速 +4%/级；涡轮：氮气推力/额外极速 +5~6%/级
+  def.maxSpeed = base.maxSpeed * (1 + 0.04 * g("engine"));
+  def.nitroAccel = base.nitroAccel * (1 + 0.06 * g("turbo"));
+  def.nitroMaxAdd = base.nitroMaxAdd * (1 + 0.05 * g("turbo"));
+  // 轮胎：抓地 +3%/级
+  def.gripNormal = base.gripNormal * (1 + 0.03 * g("tires"));
+  def.gripDrift = base.gripDrift * (1 + 0.03 * g("tires"));
+  // 装甲/氮气罐：不直接改 def，由 CarSim 处理（hpMax / 氮气容量）
+  return def;
+}
+
 export class CarSim {
-  constructor(defId = "street") {
-    this.def = CAR_DEFS[defId];
+  constructor(defId = "street", mods = null) {
+    this.def = buildDef(defId, mods) || { ...CAR_DEFS[defId] };
+    const m = mods || {};
+    this.hpMax = 100 + 20 * (typeof m.armor === "number" ? m.armor : 0);
+    const nitroLvl = typeof m.nitro === "number" ? m.nitro : 0;
+    this._nitroDrainK = 1 / (1 + 0.15 * nitroLvl); // 容量升级 = 降低消耗速率
     this.x = 0; this.z = 0; this.y = 0;
     this.angle = 0;          // 朝向（0 = +Z）
     this.vx = 0; this.vz = 0;
@@ -36,7 +58,7 @@ export class CarSim {
     this.drifting = false;
     this.nitro = 1;          // 0..1 氮气余量
     this.nitroActive = false;
-    this.hp = 100;
+    this.hp = this.hpMax;
     this._airT = 0;
   }
 
@@ -46,7 +68,7 @@ export class CarSim {
     const d = this.def;
     const nitroAvail = env.nitroAvailable === false ? false : true;
     this.nitroActive = !!input.nitro && this.nitro > 0.02 && this.speed > 4 && nitroAvail;
-    if (this.nitroActive) this.nitro = Math.max(0, this.nitro - dt * 0.35);
+    if (this.nitroActive) this.nitro = Math.max(0, this.nitro - dt * 0.35 * this._nitroDrainK);
 
     // 视角：先分解旧朝向
     const fx = Math.sin(this.angle);

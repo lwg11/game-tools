@@ -4,7 +4,7 @@
  */
 import * as THREE from "../lib/three.module.min.js";
 import { GLTFLoader } from "../lib/GLTFLoader.js";
-import { CAR_DEFS } from "./sim.js";
+import { CAR_DEFS, buildDef } from "./sim.js";
 
 const STAT_KEYS = [
   ["速度", (d) => d.maxSpeed / 72],
@@ -13,6 +13,22 @@ const STAT_KEYS = [
   ["抓地", (d) => d.gripNormal / 8.6],
   ["氮气", (d) => (d.nitroAccel + d.nitroMaxAdd) / 56],
 ];
+/** 涂装（非轮子网格）到 colormap 贴图的材质色 */
+export function tintModel(model, paintHex) {
+  if (!paintHex) return;
+  const paint = new THREE.Color(paintHex);
+  model.traverse((o) => {
+    if (!o.isMesh) return;
+    if (/^wheel-/.test(o.name || "")) return;
+    const mats = Array.isArray(o.material) ? o.material : [o.material];
+    const cloned = mats.map((m) => {
+      const c = m.clone();
+      if (c.color) c.color.lerp(paint, 0.42);
+      return c;
+    });
+    o.material = Array.isArray(o.material) ? cloned : cloned[0];
+  });
+}
 
 export class Garage {
   constructor(canvas) {
@@ -74,9 +90,10 @@ export class Garage {
     this.camera.updateProjectionMatrix();
   }
 
-  /** 加载/复用某车型模型（已归一化） */
-  async _getModel(carId, modelFile, len) {
-    if (this._models[carId]) return this._models[carId];
+  /** 加载/复用某车型模型（已归一化 + 涂装） */
+  async _getModel(carId, modelFile, len, paintHex) {
+    const key = `${carId}_${paintHex || ""}`;
+    if (this._models[key]) return this._models[key];
     const gltf = await new Promise((ok, err) => this._loader.load(`./assets/kits/car/${modelFile}`, ok, undefined, err));
     const model = gltf.scene;
     const box = new THREE.Box3().setFromObject(model);
@@ -86,21 +103,28 @@ export class Garage {
     const box2 = new THREE.Box3().setFromObject(model);
     const c = box2.getCenter(new THREE.Vector3());
     model.position.set(-c.x, -box2.min.y, -c.z);
+    this._applyPaint(model, paintHex);
     model.traverse((o) => { if (o.isMesh) o.castShadow = true; });
-    this._models[carId] = model;
+    this._models[key] = model;
     return model;
   }
 
+  /** 涂装：非轮子网格的材质向目标色 lerp（colormap 上车漆区会被染色） */
+  _applyPaint(model, paintHex) {
+    tintModel(model, paintHex);
+  }
+
   /** 展示某车型 */
-  show(carCfg) {
+  show(carCfg, mods) {
     this._active = true;
-    this._getModel(carCfg.id, carCfg.model, carCfg.len).then((model) => {
+    const paintHex = this._paintFor ? this._paintFor(carCfg.id) : null;
+    this._getModel(carCfg.id, carCfg.model, carCfg.len, paintHex).then((model) => {
       this.modelHolder.clear();
       this.modelHolder.add(model);
     }).catch(() => {
       // 加载失败：至少把统计条亮出来
     });
-    this._renderStats(carCfg);
+    this._renderStats(carCfg, mods);
     window.addEventListener("resize", () => this._resize());
     if (!this._raf) {
       this._last = performance.now();
@@ -116,13 +140,21 @@ export class Garage {
     }
   }
 
-  _renderStats(carCfg) {
+  _renderStats(carCfg, mods) {
     const statsEl = document.getElementById("nfs-car-stats");
     if (!statsEl) return;
     statsEl.innerHTML = "";
-    const def = CAR_DEFS[carCfg.id] || {};
-    for (const [label, fn] of STAT_KEYS) {
-      const v = Math.max(0.05, Math.min(1, fn(def)));
+    const def = buildDef(carCfg.id, mods) || CAR_DEFS[carCfg.id] || {};
+    const m = mods || {};
+    // 升级补正：装甲→耐久以竖条反应 hpMax；氮气罐→容量以竖条反应
+    const rows = STAT_KEYS.map(([label, fn]) => {
+      let v = fn(def);
+      if (label === "氮气") v = ((def.nitroAccel + def.nitroMaxAdd) / 56) * (1 + 0.1 * (m.nitro || 0));
+      return [label, v];
+    });
+    rows.push(["耐久", (100 + 20 * (m.armor || 0)) / 180]);
+    for (const [label, v0] of rows) {
+      const v = Math.max(0.05, Math.min(1, v0));
       const row = document.createElement("div");
       row.className = "nfs-stat";
       row.innerHTML = `<span class="nfs-stat-label">${label}</span><div class="nfs-stat-bar"><div class="nfs-stat-fill" style="width:${Math.round(v * 100)}%"></div></div>`;

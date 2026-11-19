@@ -4,13 +4,13 @@
  */
 import * as THREE from "../lib/three.module.min.js";
 import { GLTFLoader } from "../lib/GLTFLoader.js";
-import { CarSim, makeTrack, projectToTrack, clamp, wrapAngle } from "./sim.js";
+import { CarSim, makeTrack, projectToTrack, clamp, wrapAngle, buildDef, CAR_DEFS } from "./sim.js";
 import { buildTrackMeshes } from "./track.js";
 import { buildScenery, buildTrackProps } from "./scenery.js";
 import { SkidMarks } from "./skidmarks.js";
 import { Input } from "./input.js";
 import { TouchControls } from "./touch.js";
-import { Garage } from "./garage.js";
+import { Garage, tintModel } from "./garage.js";
 import { Traffic } from "./traffic.js";
 import { RaceManager, RACE_MODES, DIFFS } from "./race.js";
 import { isTouch } from "../../assets/js/device.js";
@@ -28,8 +28,38 @@ const CARS = [
 const TODS = [
   { id: "day", name: "白天", sky: 0x87b5d9, fog: [260, 1300], hemiSky: 0xcfe8ff, hemiGnd: 0x3a4030, hemiInt: 0.9, sunCol: 0xfff2dd, sunInt: 1.6, sunPos: [120, 200, 80], fillCol: 0xbfd8ff, fillInt: 0.5, winGlow: 0.0 },
   { id: "dusk", name: "黄昏", sky: 0xeb8c5a, fog: [200, 1000], hemiSky: 0xffc490, hemiGnd: 0x4a3040, hemiInt: 0.6, sunCol: 0xff8a3d, sunInt: 1.2, sunPos: [-170, 70, -40], fillCol: 0x8a6fb0, fillInt: 0.35, winGlow: 0.35 },
-  { id: "night", name: "夜晚", sky: 0x0a1226, fog: [160, 900], hemiSky: 0x33507a, hemiGnd: 0x0a0d12, hemiInt: 0.38, sunCol: 0x9fb8ff, sunInt: 0.4, sunPos: [60, 150, -90], fillCol: 0x445588, fillInt: 0.18, winGlow: 0.8 },
 ];
+
+// ---------------------------------------------------------------- M4 成长：部件/解锁/涂装
+const PARTS = [
+  { id: "engine", name: "引擎", desc: "极速 +4%/级" },
+  { id: "turbo", name: "涡轮", desc: "氮气推力 +6%/级" },
+  { id: "tires", name: "轮胎", desc: "抓地 +3%/级" },
+  { id: "armor", name: "装甲", desc: "耐久上限 +20/级" },
+  { id: "nitro", name: "氮气罐", desc: "氮气容量 +15%/级" },
+];
+const PART_COST = [100, 180, 300, 450, 650]; // 各级价格
+const CAR_PRICE = { mini: 0, street: 0, muscle: 500, exotic: 1200 };
+const PAINTS = [
+  { id: "stock", name: "原厂", hex: null, special: null },
+  { id: "crimson", name: "赤红", hex: 0xd62828 },
+  { id: "azure", name: "碧空", hex: 0x2a9df4 },
+  { id: "lime", name: "青柠", hex: 0x80b918 },
+  { id: "violet", name: "紫电", hex: 0x7b2cbf },
+  { id: "gold", name: "鎏金", hex: 0xf1a208 },
+  { id: "drift", name: "漂移者", hex: 0xff4fa3, special: "drift" },
+  { id: "police", name: "执法者", hex: 0x2545ff, special: "cop" },
+];
+
+const JSON_STORE = {
+  get(k, fallback) {
+    try {
+      const v = store.get(k, null);
+      return v === null ? fallback : JSON.parse(v);
+    } catch (e) { return fallback; }
+  },
+  set(k, v) { store.set(k, JSON.stringify(v)); },
+};
 
 const store = {
   get(k, d) { try { return localStorage.getItem("nfs_" + k) ?? d; } catch (e) { return d; } },
@@ -74,11 +104,12 @@ class Game {
     this._shake = 0;
 
     // 比赛管理（M3）
-    this.race = new RaceManager();
-    this.modeId = store.get("mode", "race");
-    this.diffId = parseInt(store.get("diff", "1"), 10);
-    if (![0, 1, 2].includes(this.diffId)) this.diffId = 1;
-    this.coins = parseInt(store.get("coins", "0"), 10) || 0;
+    this.race = new RaceManager(); this.modeId = store.get("mode", "race"); this.diffId = parseInt(store.get("diff", "1"), 10); if (![0, 1, 2].includes(this.diffId)) this.diffId = 1; this.coins = parseInt(store.get("coins", "0"), 10) || 0;
+    // M4 成长：解锁/部件/涂装
+    this.owned = JSON_STORE.get("owned_cars", ["mini", "street"]);
+    this.modsMap = JSON_STORE.get("mods", {});
+    this.paintsUnlocked = JSON_STORE.get("unlocked_paints", ["stock", "crimson", "azure", "lime", "violet", "gold"]);
+    this.paintSel = JSON_STORE.get("paint_sel", {});
   }
 
   init() {
@@ -118,6 +149,10 @@ class Game {
     this.traffic = new Traffic(this.scene, this.track, 8);
     this._buildCarMesh();
     this.garage = new Garage(document.getElementById("nfs-car-preview"));
+    this.garage._paintFor = (carId) => {
+      const p = PAINTS.find((x) => x.id === (this.paintSel[carId] || "stock"));
+      return p ? p.hex : null;
+    };
     this.setCar(this.carId);
     this._buildNitroFlames();
     this._buildSmoke();
@@ -194,7 +229,8 @@ class Game {
     this._carCfg = cfg;
     this._carLen = cfg.len;
     store.set("car", id);
-    this.car = new CarSim(id);
+    const mods = this.modsMap[id] || {};
+    this.car = new CarSim(id, mods);
     this.updateHudCarLabel();
     // 重置到起跑点
     const s0 = this.track.samples[2];
@@ -220,6 +256,7 @@ class Game {
         const c = box2.getCenter(new THREE.Vector3());
         model.position.set(-c.x, -box2.min.y, -c.z);
         // Kenney 车模原生朝 +Z，无需转 yaw
+        tintModel(model, this.garage._paintFor(id));
         model.traverse((o) => { if (o.isMesh) o.castShadow = true; });
         // 尾翼（Muscle 大号 / Exotic 高扰流）
         if (cfg.wing) {
@@ -248,7 +285,7 @@ class Game {
           this._glbWheels.push({ pivot: o, front: /wheel-front/.test(o.name) });
         });
         this._positionNitroFx();
-        if (this.garage) this.garage.show(cfg);
+        if (this.garage) this.garage.show(cfg, this.modsMap[id] || {});
       },
       undefined,
       () => {
@@ -298,7 +335,7 @@ class Game {
           this._glbWheels.push({ pivot, front: /_(fl|fr)$/.test(name) });
         }
         this._positionNitroFx();
-        if (this.garage) this.garage.show(cfg);
+        if (this.garage) this.garage.show(cfg, this.modsMap[this.carId] || {});
       },
       undefined,
       () => {},
@@ -308,6 +345,58 @@ class Game {
   updateHudCarLabel() {
     const el = document.getElementById("nfs-car-label");
     if (el && this._carCfg) el.textContent = `${this._carCfg.name} · ${this._carCfg.desc}`;
+  }
+
+  // ------------------------------------------------ M4 购买
+  _buyCar(id) {
+    const price = CAR_PRICE[id] || 0;
+    if (this.owned.includes(id)) return;
+    if (this.coins < price) {
+      this._flashInMenu(`金币不足：${price} 币（当前 ${this.coins}）`);
+      return;
+    }
+    this.coins -= price;
+    this.owned.push(id);
+    JSON_STORE.set("owned_cars", this.owned);
+    if (this._updateCoins) this._updateCoins();
+    if (this._rebuildCarPills) this._rebuildCarPills();
+    this.setCar(id);
+    if (this._renderM4) this._renderM4();
+    this._flashInMenu(`解锁 ${(this._carCfg || {}).name || id}！`);
+  }
+
+  _buyPart(partId, cost) {
+    if (this.coins < cost) {
+      this._flashInMenu(`金币不足：${cost} 币（当前 ${this.coins}）`);
+      return;
+    }
+    const mods = this.modsMap[this.carId] || {};
+    const lvl = mods[partId] || 0;
+    if (lvl >= 5) return;
+    this.coins -= cost;
+    mods[partId] = lvl + 1;
+    this.modsMap[this.carId] = mods;
+    JSON_STORE.set("mods", this.modsMap);
+    if (this._updateCoins) this._updateCoins();
+    this.setCar(this.carId);
+    if (this._renderM4) this._renderM4();
+    this._flashInMenu("升级完成");
+  }
+
+  /** 菜单内 toast（HUD msg 在菜单里不可见） */
+  _flashInMenu(text) {
+    const menu = document.getElementById("nfs-menu");
+    if (!menu) return;
+    let el = document.getElementById("nfs-toast");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "nfs-toast";
+      menu.appendChild(el);
+    }
+    el.textContent = text;
+    el.classList.add("show");
+    clearTimeout(this._toastT);
+    this._toastT = setTimeout(() => el.classList.remove("show"), 1600);
   }
 
   _positionNitroFx() {
@@ -525,7 +614,7 @@ class Game {
     this.car.x = s0.x; this.car.z = s0.z;
     this.car.angle = Math.atan2(s0.tx, s0.tz);
     this.car.vx = 0; this.car.vz = 0; this.car.speed = 0;
-    this.car.hp = 100; this.car.nitro = 1; this.car.slip = 0;
+    this.car.hp = this.car.hpMax || 100; this.car.nitro = 1; this.car.slip = 0;
     this._nitroPrev = false; this._nitroMin = 0;
 
     if (this.modeId !== "free" && RACE_MODES.some((m) => m.id === this.modeId)) {
@@ -547,11 +636,22 @@ class Game {
     if (this.hud.msg) this.hud.msg.textContent = "WASD 驾驶 / Space 漂移 / Shift 氮气";
   }
 
-  /** 比赛结束回调 */
+  /** 比赛结束回调（M3 + M4：涂装解锁） */
   _onRaceFinish(res) {
     this.coins += res.coins;
     store.set("coins", String(this.coins));
     if (this._updateCoins) this._updateCoins();
+    // 特殊涂装：首次获胜解锁
+    if (res.win && res.mode === "drift" && !this.paintsUnlocked.includes("drift")) {
+      this.paintsUnlocked.push("drift");
+      JSON_STORE.set("unlocked_paints", this.paintsUnlocked);
+      res.lines = (res.lines || []).concat(["🎨 解锁涂装「漂移者」"]);
+    }
+    if (res.win && res.mode === "cop" && !this.paintsUnlocked.includes("police")) {
+      this.paintsUnlocked.push("police");
+      JSON_STORE.set("unlocked_paints", this.paintsUnlocked);
+      res.lines = (res.lines || []).concat(["🎨 解锁涂装「执法者」"]);
+    }
     document.getElementById("nfs-res-title").textContent = res.title;
     const lines = (res.lines || []).concat([`获得金币 +${res.coins}`]);
     document.getElementById("nfs-res-lines").innerHTML = lines.map((l) => `<div>${l}</div>`).join("");
@@ -587,7 +687,7 @@ class Game {
     document.getElementById("nfs-results").classList.add("hidden");
     document.getElementById("nfs-menu").classList.remove("hidden");
     if (this.touch) this.touch.hide();
-    if (this.garage && this._carCfg) this.garage.show(this._carCfg);
+    if (this.garage && this._carCfg) this.garage.show(this._carCfg, this.modsMap[this._carCfg.id] || {});
   }
 
   _bindMenu() {
@@ -647,20 +747,85 @@ class Game {
       });
     }
     if (carList) {
-      CARS.forEach((c) => {
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = "nfs-pill" + (c.id === this.carId ? " on" : "");
-        btn.textContent = c.name;
-        btn.title = c.desc;
-        btn.addEventListener("click", () => {
-          carList.querySelectorAll(".nfs-pill").forEach((b) => b.classList.remove("on"));
-          btn.classList.add("on");
-          this.setCar(c.id);
+      const rebuild = () => {
+        carList.innerHTML = "";
+        CARS.forEach((c) => {
+          const owned = this.owned.includes(c.id);
+          const price = CAR_PRICE[c.id] || 0;
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "nfs-pill" + (c.id === this.carId ? " on" : "") + (owned ? "" : " locked");
+          btn.textContent = owned ? c.name : `🔒 ${c.name} · ${price}币`;
+          btn.title = c.desc;
+          btn.addEventListener("click", () => {
+            if (!this.owned.includes(c.id)) {
+              this._buyCar(c.id);
+              return;
+            }
+            carList.querySelectorAll(".nfs-pill").forEach((b) => b.classList.remove("on"));
+            btn.classList.add("on");
+            this.setCar(c.id);
+            if (this._renderM4) this._renderM4();
+          });
+          carList.appendChild(btn);
         });
-        carList.appendChild(btn);
-      });
+      };
+      rebuild();
+      this._rebuildCarPills = rebuild;
     }
+    const paintList = document.getElementById("nfs-paint-list");
+    const upgradesEl = document.getElementById("nfs-upgrades");
+    const renderM4 = () => {
+      // 涂装
+      if (paintList) {
+        paintList.innerHTML = "";
+        PAINTS.forEach((p) => {
+          const unlocked = !p.special || this.paintsUnlocked.includes(p.id);
+          const cur = (this.paintSel[this.carId] || "stock") === p.id;
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "nfs-pill nfs-swatch" + (cur ? " on" : "") + (unlocked ? "" : " locked");
+          const hexCss = p.hex ? `#${p.hex.toString(16).padStart(6, "0")}` : "#666";
+          btn.innerHTML = `<span class="nfs-swatch-dot" style="background:${hexCss}"></span>${unlocked ? p.name : `🔒 ${p.name}`}`;
+          btn.title = p.special ? "特殊比赛解锁" : (p.hex ? "" : "原厂漆");
+          btn.addEventListener("click", () => {
+            if (unlocked) {
+              this.paintSel[this.carId] = p.id;
+              JSON_STORE.set("paint_sel", this.paintSel);
+              this.setCar(this.carId);
+              renderM4();
+            } else {
+              this._flashInMenu("涂装未解锁：赢得对应比赛");
+            }
+          });
+          paintList.appendChild(btn);
+        });
+      }
+      // 升级
+      if (upgradesEl) {
+        upgradesEl.innerHTML = "";
+        const mods = this.modsMap[this.carId] || {};
+        PARTS.forEach((part) => {
+          const lvl = mods[part.id] || 0;
+          const cost = lvl < 5 ? PART_COST[lvl] : null;
+          const row = document.createElement("div");
+          row.className = "nfs-up-row";
+          const pips = Array.from({ length: 5 }, (_, i) => `<span class="nfs-up-pip ${i < lvl ? "on" : ""}"></span>`).join("");
+          row.innerHTML = `
+            <span class="nfs-up-name">${part.name}<i>${part.desc}</i></span>
+            <span class="nfs-up-pips">${pips}</span>
+            <button type="button" class="nfs-up-btn" ${cost === null ? "disabled" : ""}>${cost === null ? "MAX" : `+ ${cost}币`}</button>`;
+          const btn = row.querySelector(".nfs-up-btn");
+          if (cost !== null) {
+            btn.addEventListener("click", () => this._buyPart(part.id, cost));
+          }
+          upgradesEl.appendChild(row);
+        });
+      }
+      if (this._updateCoins) this._updateCoins();
+    };
+    this._renderM4 = renderM4;
+    renderM4();
     if (todList) {
       TODS.forEach((t) => {
         const btn = document.createElement("button");
@@ -771,6 +936,7 @@ class Game {
         playerVx: this.car.vx,
         playerVz: this.car.vz,
         playerHp: this.car.hp,
+        driftScore: this.driftScore + this._driftChain,
         onCopHit: (cop, d) => this._onCopHit(cop, d),
       });
       if (this.race.state === "countdown" && this.hud.msg) {

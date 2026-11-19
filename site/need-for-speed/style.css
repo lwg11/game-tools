@@ -86,6 +86,38 @@ body { font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; co
 .nfs-coins b { color: #ffd166; font-size: 15px; }
 .nfs-coin-ico { color: #ffd166; font-size: 11px; }
 
+/* ---------------- M4 涂装 / 升级 / toast ---------------- */
+.nfs-swatch { display: inline-flex; align-items: center; gap: 5px; }
+.nfs-swatch-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; border: 1px solid rgba(255,255,255,.5); }
+.nfs-pill.locked { opacity: .55; filter: grayscale(.6); }
+
+#nfs-upgrades { display: flex; flex-direction: column; gap: 5px; margin: 2px auto 6px; max-width: 420px; }
+.nfs-up-row {
+  display: flex; align-items: center; gap: 8px;
+  background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.1);
+  border-radius: 8px; padding: 5px 10px; text-align: left;
+}
+.nfs-up-name { flex: 0 0 92px; font-size: 12px; font-weight: 700; }
+.nfs-up-name i { display: block; font-style: normal; font-weight: 400; font-size: 9px; opacity: .6; }
+.nfs-up-pips { display: flex; gap: 3px; flex: 1; }
+.nfs-up-pip { width: 16px; height: 6px; border-radius: 3px; background: rgba(255,255,255,.14); }
+.nfs-up-pip.on { background: linear-gradient(90deg, #ffd166, #ff4fa3); }
+.nfs-up-btn {
+  pointer-events: auto; cursor: pointer; font-size: 11px; font-weight: 800;
+  padding: 5px 10px; border-radius: 6px; border: 0;
+  background: linear-gradient(90deg, #ffd166, #ff9f43); color: #111;
+}
+.nfs-up-btn:disabled { background: rgba(255,255,255,.12); color: rgba(255,255,255,.4); cursor: default; }
+
+#nfs-toast {
+  position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%) translateY(12px);
+  background: rgba(10,12,22,.92); border: 1px solid rgba(255,209,102,.5); color: #ffd166;
+  font-size: 13px; font-weight: 700; padding: 8px 18px; border-radius: 999px;
+  opacity: 0; pointer-events: none; transition: opacity .18s, transform .18s; z-index: 40;
+  white-space: nowrap;
+}
+#nfs-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
 .nfs-stat { display: flex; align-items: center; gap: 6px; font-size: 10px; }
 .nfs-stat-label { width: 26px; opacity: .75; letter-spacing: 1px; }
 .nfs-stat-bar { flex: 1; height: 6px; border-radius: 999px; background: rgba(255,255,255,.1); overflow: hidden; }
