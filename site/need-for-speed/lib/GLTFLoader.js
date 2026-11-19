@@ -3209,12 +3209,17 @@ class GLTFParser {
 		if ( sourceDef.bufferView !== undefined ) {
 
 			// Load binary image data from bufferView, if provided.
-
+			// 本游戏站点 CSP: connect-src 'self'（拦截 blob:），因此用 data URI 而不是 objectURL。
 			sourceURI = parser.getDependency( 'bufferView', sourceDef.bufferView ).then( function ( bufferView ) {
 
 				isObjectURL = true;
-				const blob = new Blob( [ bufferView ], { type: sourceDef.mimeType } );
-				sourceURI = URL.createObjectURL( blob );
+				const bytes = new Uint8Array( bufferView );
+				let binary = '';
+				const chunk = 0x8000;
+				for ( let i = 0; i < bytes.length; i += chunk ) {
+					binary += String.fromCharCode.apply( null, bytes.subarray( i, i + chunk ) );
+				}
+				sourceURI = 'data:' + ( sourceDef.mimeType || 'image/png' ) + ';base64,' + btoa( binary );
 				return sourceURI;
 
 			} );
