@@ -5,6 +5,7 @@
 
 // ---------------------------------------------------------------- 车辆定义
 export const CAR_DEFS = {
+  mini: { name: "Mini", accel: 16, maxSpeed: 48, brake: 30, dragK: 0.32, steerRate: 2.6, gripNormal: 8.2, gripDrift: 2.4, nitroAccel: 22, nitroMaxAdd: 16, mass: 0.8 },
   street: { name: "Street", accel: 20, maxSpeed: 55, brake: 34, dragK: 0.35, steerRate: 2.1, gripNormal: 7.5, gripDrift: 1.9, nitroAccel: 26, nitroMaxAdd: 18, mass: 1.0 },
   muscle: { name: "Muscle", accel: 26, maxSpeed: 60, brake: 30, dragK: 0.42, steerRate: 1.7, gripNormal: 6.2, gripDrift: 1.7, nitroAccel: 32, nitroMaxAdd: 20, mass: 1.2 },
   exotic: { name: "Exotic", accel: 32, maxSpeed: 72, brake: 40, dragK: 0.30, steerRate: 2.5, gripNormal: 8.6, gripDrift: 2.2, nitroAccel: 34, nitroMaxAdd: 22, mass: 0.9 },

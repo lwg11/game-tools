@@ -14,6 +14,25 @@ import { isTouch } from "../../assets/js/device.js";
 
 const FIXED_DT = 1 / 60;
 
+// ---------------------------------------------------------------- 菜单配置
+const CARS = [
+  { id: "mini", name: "Mini 精灵", desc: "灵巧轻量", length: 3.6, paint: 0xffd23e, accent: 0x1a1a1a, wheel: 0.86, wing: 0 },
+  { id: "street", name: "Street 街头者", desc: "均衡好开", length: 4.3, paint: 0xde0000, accent: 0x7a0000, wheel: 1.0, wing: 0 },
+  { id: "muscle", name: "Muscle 烈马", desc: "大马力后驱", length: 4.5, paint: 0x2050d0, accent: 0x102a6b, wheel: 0.95, wing: 1 },
+  { id: "exotic", name: "Exotic 幽灵", desc: "超跑极速", length: 4.4, paint: 0x7a2bd0, accent: 0x0098d8, wheel: 1.05, wing: 2 },
+];
+
+const TODS = [
+  { id: "day", name: "白天", sky: 0x87b5d9, fog: [260, 1300], hemiSky: 0xcfe8ff, hemiGnd: 0x3a4030, hemiInt: 0.9, sunCol: 0xfff2dd, sunInt: 1.6, sunPos: [120, 200, 80], fillCol: 0xbfd8ff, fillInt: 0.5, winGlow: 0.0 },
+  { id: "dusk", name: "黄昏", sky: 0xeb8c5a, fog: [200, 1000], hemiSky: 0xffc490, hemiGnd: 0x4a3040, hemiInt: 0.6, sunCol: 0xff8a3d, sunInt: 1.2, sunPos: [-170, 70, -40], fillCol: 0x8a6fb0, fillInt: 0.35, winGlow: 0.35 },
+  { id: "night", name: "夜晚", sky: 0x0a1226, fog: [160, 900], hemiSky: 0x33507a, hemiGnd: 0x0a0d12, hemiInt: 0.38, sunCol: 0x9fb8ff, sunInt: 0.4, sunPos: [60, 150, -90], fillCol: 0x445588, fillInt: 0.18, winGlow: 0.8 },
+];
+
+const store = {
+  get(k, d) { try { return localStorage.getItem("nfs_" + k) ?? d; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem("nfs_" + k, v); } catch (e) {} },
+};
+
 // ---------------------------------------------------------------- 世界尺寸
 const TRACK_POINTS = [
   [0, 0], [300, -10], [450, 90], [430, 300], [260, 420], [20, 400],
@@ -25,7 +44,12 @@ class Game {
     this.running = false;
     this.headless = false;
     this.track = makeTrack(TRACK_POINTS, { sampleStep: 4, halfWidth: 11 });
-    this.car = new CarSim("street");
+    this.carId = store.get("car", "street");
+    if (!CARS.some((c) => c.id === this.carId)) this.carId = "street";
+    this.todId = store.get("tod", "day");
+    if (!TODS.some((t) => t.id === this.todId)) this.todId = "day";
+    this.car = new CarSim(this.carId);
+    this._carCfg = CARS.find((c) => c.id === this.carId);
     this.touch = isTouch ? new TouchControls(document.body) : null;
     this.input = new Input(this.touch);
 
@@ -60,6 +84,7 @@ class Game {
     this.scene.fog = new THREE.Fog(0x87b5d9, 260, 1300);
 
     const hemi = new THREE.HemisphereLight(0xcfe8ff, 0x3a4030, 0.9);
+    this.hemi = hemi;
     this.scene.add(hemi);
     const sun = new THREE.DirectionalLight(0xfff2dd, 1.6);
     sun.position.set(120, 200, 80);
@@ -72,14 +97,19 @@ class Game {
     this.scene.add(sun);
     const fill = new THREE.DirectionalLight(0xbfd8ff, 0.5);
     fill.position.set(-90, 130, -110);
+    this.fill = fill;
     this.scene.add(fill);
 
     this.scene.add(buildTrackMeshes(this.track));
-    this.scene.add(buildScenery(this.track));
+    this.scenery = buildScenery(this.track);
+    this.scene.add(this.scenery);
+    this.applyTimeOfDay(this.todId);
     this.skid = new SkidMarks(this.scene);
     this._buildCarMesh();
-    this._loadCarModel();
+    this.setCar(this.carId);
     this._buildNitroFlames();
+    this._buildSmoke();
+    this._bindMenu();
     this.camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.3, 3000);
     this.camera.position.set(this.car.x - 8, 3.5, this.car.z - 8);
     this.camera.lookAt(this.car.x, 1, this.car.z);
@@ -142,24 +172,69 @@ class Game {
     this.scene.add(this.carGroup);
   }
 
-  /** 真实 glTF 车模（ferrari.glb，three.js 示例模型，MIT），失败则保留程序化回退 */
-  _loadCarModel() {
-    const loader = new GLTFLoader(); // 无压缩 glb：无需 Draco/worker，兼容严格 CSP
+  /** 真实 glTF 车模；按车型应用尺寸/涂装/尾翼。setCar(id) 会御载旧车模重载（本地缓存很快）。 */
+  setCar(id) {
+    const cfg = CARS.find((c) => c.id === id);
+    if (!cfg) return;
+    this.carId = id;
+    this._carCfg = cfg;
+    store.set("car", id);
+    this.car = new CarSim(id);
+    this.updateHudCarLabel();
+    // 重置到起跑点
+    const s0 = this.track.samples[2];
+    this.car.x = s0.x; this.car.z = s0.z;
+    this.car.angle = Math.atan2(s0.tx, s0.tz);
+    if (this._glbModel) {
+      this.carGroup.remove(this._glbModel);
+      this._glbModel.traverse((o) => { if (o.isMesh) o.geometry.dispose?.(); });
+      this._glbModel = null;
+    }
+    this._proceduralCar.visible = true;
+    if (this._glbWheels) this._glbWheels.length = 0;
+    const loader = new GLTFLoader();
     loader.load(
       "./assets/models/ferrari.glb",
       (gltf) => {
         const model = gltf.scene;
         const box = new THREE.Box3().setFromObject(model);
         const size = box.getSize(new THREE.Vector3());
-        const s = 4.3 / Math.max(size.z, 0.001);
+        const s = cfg.length / Math.max(size.z, 0.001);
         model.scale.setScalar(s);
         const box2 = new THREE.Box3().setFromObject(model);
         const c = box2.getCenter(new THREE.Vector3());
         model.position.set(-c.x, -box2.min.y, -c.z);
         model.rotation.y = Math.PI; // 车模原生朝 -Z，转到 +Z
-        model.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+        model.traverse((o) => {
+          if (!o.isMesh) return;
+          o.castShadow = true;
+          const mats = Array.isArray(o.material) ? o.material : [o.material];
+          for (const mt of mats) {
+            if (!mt || !mt.color) continue;
+            const nm = mt.name || "";
+            if (nm === "Body_Color" || nm === "Leather_red" || /DodgerBlue|Ferrari_Yellow/.test(nm)) {
+              mt.color.setHex(nm === "Body_Color" ? cfg.paint : cfg.accent);
+            }
+          }
+        });
+        // 尾翼（Muscle/Exotic）
+        if (cfg.wing) {
+          const wing = new THREE.Group();
+          const matW = new THREE.MeshLambertMaterial({ color: 0x15161a });
+          const span = cfg.wing === 2 ? 2.1 : 1.9;
+          const plate = new THREE.Mesh(new THREE.BoxGeometry(span, 0.07, 0.5), matW);
+          plate.position.y = cfg.wing === 2 ? 1.06 : 0.92;
+          const legs = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.28, 0.3), matW);
+          legs.position.set(-span / 2 + 0.2, 0.78, 0);
+          const legs2 = legs.clone(); legs2.position.x = span / 2 - 0.2;
+          wing.add(plate, legs, legs2);
+          wing.position.set(0, 0, -cfg.length / 2 - 0.05);
+          wing.rotation.y = -Math.PI; // 与车模同向（车模已入车组）
+          model.add(wing);
+        }
         this.carGroup.add(model);
-        if (this._proceduralCar) this._proceduralCar.visible = false;
+        this._glbModel = model;
+        this._proceduralCar.visible = false;
         this._modelYaw = Math.PI;
         this._glbWheels = [];
         this._wheelSpin = 0;
@@ -167,12 +242,49 @@ class Game {
           const pivot = model.getObjectByName(name);
           if (!pivot) continue;
           pivot.rotation.order = "YXZ";
+          pivot.scale.setScalar(cfg.wheel);
           this._glbWheels.push({ pivot, front: /_(fl|fr)$/.test(name) });
         }
       },
       undefined,
-      () => { /* 加载失败：保持程序化回退 */ }
+      () => {
+        // 加载失败：程序化回退（也涂装一下）
+        if (this._proceduralCar) {
+          this._proceduralCar.traverse((o) => { if (o.isMesh && o.material && o.material.color) o.material.color.setHex(cfg.paint); });
+        }
+      },
     );
+  }
+
+  updateHudCarLabel() {
+    const el = document.getElementById("nfs-car-label");
+    if (el && this._carCfg) el.textContent = `${this._carCfg.name} · ${this._carCfg.desc}`;
+  }
+
+  applyTimeOfDay(id) {
+    const t = TODS.find((x) => x.id === id) || TODS[0];
+    this.todId = t.id;
+    store.set("tod", t.id);
+    this.scene.background.setHex(t.sky);
+    this.scene.fog.color.setHex(t.sky);
+    this.scene.fog.near = t.fog[0];
+    this.scene.fog.far = t.fog[1];
+    this.hemi.color.setHex(t.hemiSky);
+    this.hemi.groundColor.setHex(t.hemiGnd);
+    this.hemi.intensity = t.hemiInt;
+    this.sun.color.setHex(t.sunCol);
+    this.sun.intensity = t.sunInt;
+    this.sun.position.set(t.sunPos[0], t.sunPos[1], t.sunPos[2]);
+    this.fill.color.setHex(t.fillCol);
+    this.fill.intensity = t.fillInt;
+    const glow = t.winGlow;
+    if (this.scenery) {
+      for (const mt of this.scenery.userData.winMats || []) {
+        mt.emissive && mt.emissive.setRGB(glow, glow * 0.92, glow * 0.78);
+        if (glow > 0) { mt.emissiveMap = mt.map; } else if (mt.emissiveMap) { mt.emissiveMap = null; }
+        mt.needsUpdate = true;
+      }
+    }
   }
 
   /** 氮气尾焰（Sprite，无依赖，程序化车与 glb 车通用） */
@@ -199,6 +311,53 @@ class Game {
     }
   }
 
+  /** 漂移烟雾粒子池 （Sprite × 36） */
+  _buildSmoke() {
+    const c = document.createElement("canvas");
+    c.width = c.height = 64;
+    const ctx = c.getContext("2d");
+    const grad = ctx.createRadialGradient(32, 32, 4, 32, 32, 30);
+    grad.addColorStop(0, "rgba(225,225,232,.55)");
+    grad.addColorStop(0.6, "rgba(205,205,215,.25)");
+    grad.addColorStop(1, "rgba(205,205,215,0)");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 64, 64);
+    const tex = new THREE.CanvasTexture(c);
+    this._smokes = [];
+    for (let i = 0; i < 36; i++) {
+      const m = new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 0, depthWrite: false });
+      const s = new THREE.Sprite(m);
+      s.visible = false;
+      s.position.set(0, -10, 0);
+      this.scene.add(s);
+      this._smokes.push({ s, life: 0, max: 0.7 });
+    }
+    this._smokeIdx = 0;
+    this._smokeTimer = 0;
+  }
+
+  _spawnSmoke(x, z) {
+    const p = this._smokes[this._smokeIdx++ % this._smokes.length];
+    p.s.visible = true;
+    p.life = p.max;
+    p.s.position.set(x + (Math.random() - 0.5) * 0.6, 0.5, z + (Math.random() - 0.5) * 0.6);
+    p.s.material.opacity = 0.5;
+    p.s.scale.set(0.8, 0.8, 1);
+  }
+
+  _updateSmoke(dt) {
+    for (const p of this._smokes) {
+      if (p.life <= 0) continue;
+      p.life -= dt;
+      const k = 1 - p.life / p.max;
+      p.s.position.y += dt * 1.3;
+      p.s.material.opacity = 0.5 * (1 - k);
+      const sc = 0.8 + k * 1.8;
+      p.s.scale.set(sc, sc, 1);
+      if (p.life <= 0) p.s.visible = false;
+    }
+  }
+
   _bindHud() {
     this.hud = {
       speed: document.getElementById("nfs-speed"),
@@ -215,9 +374,49 @@ class Game {
     document.getElementById("nfs-menu").classList.add("hidden");
     document.getElementById("nfs-hud").classList.remove("hidden");
     if (this.touch) this.touch.show();
+    // 起跑信号灯变绿
+    const lights = this.scenery ? this.scenery.userData.startLights : null;
+    if (lights && lights.length) {
+      const m = lights[0].material;
+      if (m && m.color) m.color.setHex(0x2bff5a);
+    }
     this.running = true;
     this._last = performance.now();
     if (this.hud.msg) this.hud.msg.textContent = "WASD 驾驶 / Space 漂移 / Shift 氮气";
+  }
+
+  _bindMenu() {
+    const carList = document.getElementById("nfs-car-list");
+    const todList = document.getElementById("nfs-tod-list");
+    if (carList) {
+      CARS.forEach((c) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "nfs-pill" + (c.id === this.carId ? " on" : "");
+        btn.textContent = c.name;
+        btn.title = c.desc;
+        btn.addEventListener("click", () => {
+          carList.querySelectorAll(".nfs-pill").forEach((b) => b.classList.remove("on"));
+          btn.classList.add("on");
+          this.setCar(c.id);
+        });
+        carList.appendChild(btn);
+      });
+    }
+    if (todList) {
+      TODS.forEach((t) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "nfs-pill" + (t.id === this.todId ? " on" : "");
+        btn.textContent = t.name;
+        btn.addEventListener("click", () => {
+          todList.querySelectorAll(".nfs-pill").forEach((b) => b.classList.remove("on"));
+          btn.classList.add("on");
+          this.applyTimeOfDay(t.id);
+        });
+        todList.appendChild(btn);
+      });
+    }
   }
 
   _resize() {
@@ -229,7 +428,13 @@ class Game {
   // ------------------------------------------------ 物理推进
   update(dt) {
     this.time += dt;
-    const input = this.input.sample();
+    const rawInput = this.input.sample();
+    // 氮气：点按也至少持续 0.55s（QQ 手感，按下即爆发）
+    const nitroDown = !!rawInput.nitro;
+    if (nitroDown && !this._nitroPrev) this._nitroMin = 0.55;
+    this._nitroPrev = nitroDown;
+    this._nitroMin = Math.max(0, (this._nitroMin || 0) - dt);
+    const input = Object.assign({}, rawInput, { nitro: nitroDown || this._nitroMin > 0 });
     this.car.update(dt, input, { nitroAvailable: true });
 
     // 赛道约束：投影 → 路肩推回 + 出界拖慢
@@ -307,6 +512,7 @@ class Game {
     const driftingNow = this.car.drifting && Math.abs(this.car.slip) > 0.1 && Math.abs(this.car.speed) > 6;
     if (driftingNow) {
       if (!this._lastRear) this._lastRear = [{ x: 0, z: 0 }, { x: 0, z: 0 }];
+      let ax = 0, az = 0;
       for (let k = 0; k < 2; k++) {
         const lx = k === 0 ? -0.82 : 0.82;
         const wx = this.car.x + rxx * lx + fxx * rearLz;
@@ -314,11 +520,23 @@ class Game {
         const last = this._lastRear[k];
         this.skid.add(last.x, last.z, wx, wz);
         last.x = wx; last.z = wz;
+        ax += wx; az += wz;
       }
-      this._shake = Math.max(this._shake, 0.05);
+      ax /= 2; az /= 2;
+      this._smokeTimer -= dt;
+      if (this._smokeTimer <= 0) {
+        this._smokeTimer = 0.05;
+        this._spawnSmoke(ax, az);
+      }
+      // 漂移镜头反馈：起漂冲击 + 持续轻微震动（不再狂抖）
+      if (!this._wasDrifting) this._shake = Math.max(this._shake, 0.12);
+      else if (Math.abs(this.car.slip) > 0.22) this._shake = Math.max(this._shake, 0.022);
+      this._wasDrifting = true;
     } else {
       this._lastRear = null;
+      this._wasDrifting = false;
     }
+    this._updateSmoke(dt);
 
     // 氮气尾焰：激活时显示并闪炼
     for (let i = 0; i < this._nitroFlames.length; i++) {

@@ -59,6 +59,9 @@ export function buildScenery(track, opts = {}) {
   const rng = makeRng(opts.seed || 7);
   const half = track.halfWidth;
   const S = track.samples;
+  const winMats = [];   // 立面材质（供昼夜调整自发光）
+  const startLights = []; // 起跑信号灯
+  const buildings = [];   // 已放置楼（供屋顶道具/霓虹）
 
   // 点到赛道的最小距离（每 4 采样扫描）
   function distToTrack(x, z) {
@@ -153,6 +156,8 @@ export function buildScenery(track, opts = {}) {
       const h = 14 + rng() * rng() * 72; // 少数高塔
       const variant = Math.floor(rng() * textures.length);
       const faceMat = new THREE.MeshLambertMaterial({ map: textures[variant] });
+      faceMat.userData.isWindow = true;
+      winMats.push(faceMat);
       const geo = scaledBoxGeo(w, h, d, 2.4, 2.4);
       const mesh = new THREE.Mesh(geo, [faceMat, faceMat, roofMat, roofMat, faceMat, faceMat]);
       if (rng() < 0.5) mesh.rotation.y = Math.PI / 2;
@@ -161,7 +166,70 @@ export function buildScenery(track, opts = {}) {
       mesh.matrixAutoUpdate = false;
       mesh.updateMatrix();
       g.add(mesh);
+      buildings.push({ x, z, w, d, h, top: h - 0.05 });
       placed++;
+    }
+
+    // ---- 屋顶道具：空调箱/水箱（InstancedMesh）
+    if (buildings.length) {
+      const acGeo = new THREE.BoxGeometry(1.4, 0.9, 1.4);
+      const acMat = new THREE.MeshLambertMaterial({ color: 0x8b9299 });
+      const tankGeo = new THREE.CylinderGeometry(0.7, 0.7, 1.8, 8);
+      const tankMat = new THREE.MeshLambertMaterial({ color: 0x7a5230 });
+      const acCount = Math.min(28, buildings.length);
+      const tankCount = Math.min(14, buildings.length);
+      const acs = new THREE.InstancedMesh(acGeo, acMat, acCount);
+      const tanks = new THREE.InstancedMesh(tankGeo, tankMat, tankCount);
+      const m = new THREE.Matrix4();
+      const q = new THREE.Quaternion();
+      const v = new THREE.Vector3();
+      const sc = new THREE.Vector3(1, 1, 1);
+      for (let i = 0; i < acCount; i++) {
+        const b = buildings[Math.floor(rng() * buildings.length)];
+        m.compose(v.set(b.x + (rng() - 0.5) * b.w * 0.5, b.top + 0.45, b.z + (rng() - 0.5) * b.d * 0.5), q, sc);
+        acs.setMatrixAt(i, m);
+      }
+      for (let i = 0; i < tankCount; i++) {
+        const b = buildings[Math.floor(rng() * buildings.length)];
+        m.compose(v.set(b.x + (rng() - 0.5) * b.w * 0.4, b.top + 0.9, b.z + (rng() - 0.5) * b.d * 0.4), q, sc);
+        tanks.setMatrixAt(i, m);
+      }
+      acs.instanceMatrix.needsUpdate = true;
+      tanks.instanceMatrix.needsUpdate = true;
+      g.add(acs, tanks);
+    }
+
+    // ---- 沿街霓虹灯牌（InstancedMesh 亮色 Basic）
+    {
+      const signMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+      const signGeo = new THREE.BoxGeometry(0.35, 2.6, 0.12);
+      const nNear = buildings.filter((b) => b.top > 20).slice(0, 22);
+      const signs = new THREE.InstancedMesh(signGeo, signMat, nNear.length);
+      const m = new THREE.Matrix4();
+      const q = new THREE.Quaternion();
+      const v = new THREE.Vector3();
+      const sc = new THREE.Vector3(1, 1, 1);
+      const col = new THREE.Color();
+      const palette = [0xff2d95, 0x23d5e8, 0xff9f43, 0x7a6fd0, 0x2bffa8];
+      for (let i = 0; i < nNear.length; i++) {
+        const b = nNear[i];
+        const yaw = rng() * Math.PI * 2;
+        q.setFromEuler(new THREE.Euler(0, yaw, 0));
+        m.compose(
+          v.set(
+            b.x + Math.sin(yaw) * (Math.max(b.w, b.d) / 2 + 0.3),
+            b.top - 1.2,
+            b.z + Math.cos(yaw) * (Math.max(b.w, b.d) / 2 + 0.3),
+          ),
+          q, sc,
+        );
+        signs.setMatrixAt(i, m);
+        col.setHex(palette[Math.floor(rng() * palette.length)]);
+        signs.setColorAt(i, col);
+      }
+      signs.instanceMatrix.needsUpdate = true;
+      if (signs.instanceColor) signs.instanceColor.needsUpdate = true;
+      g.add(signs);
     }
   }
 
@@ -260,6 +328,68 @@ export function buildScenery(track, opts = {}) {
     heads.instanceMatrix.needsUpdate = true;
     g.add(poles, arms, heads);
   }
+
+  // ---------------- 弯道胎墙（急弯外侧，缓冲视觉+参照物）
+  {
+    const stacks = [];
+    for (let i = 0; i < S.length; i++) {
+      const aPrev = S[(i - 3 + S.length) % S.length];
+      const aNext = S[(i + 3) % S.length];
+      const cross = aPrev.tx * aNext.tz - aPrev.tz * aNext.tx;
+      if (Math.abs(cross) < 0.16) continue;
+      const sm = S[i];
+      const side = cross > 0 ? 1 : -1; // 弯外侧：左转→右侧，右转→左侧
+      stacks.push({ x: sm.x + sm.nx * side * (half + 1.6), z: sm.z + sm.nz * side * (half + 1.6), cross });
+    }
+    // 去重（相邻弯只留一段）
+    const picked = [];
+    for (const st of stacks) {
+      const last = picked[picked.length - 1];
+      if (!last || Math.hypot(st.x - last.x, st.z - last.z) > 24) picked.push(st);
+    }
+    const n = Math.min(picked.length, 24);
+    const tireGeo = new THREE.CylinderGeometry(0.5, 0.5, 0.24, 10);
+    const tireMat = new THREE.MeshLambertMaterial({ color: 0x17181c });
+    const tires = new THREE.InstancedMesh(tireGeo, tireMat, n * 3);
+    const m = new THREE.Matrix4();
+    const v = new THREE.Vector3();
+    const q = new THREE.Quaternion();
+    const sc = new THREE.Vector3(1, 1, 1);
+    let idx = 0;
+    for (let i = 0; i < n; i++) {
+      const st = picked[i];
+      const jitter = ((i * 37) % 10) / 10;
+      const yaw = jitter * Math.PI;
+      for (let k = 0; k < 3; k++) {
+        q.setFromEuler(new THREE.Euler(0, yaw + k * 0.2, 0));
+        const rr = k * 0.04;
+        m.compose(v.set(st.x + rr * Math.sin(yaw), 0.12 + k * 0.24, st.z + rr * Math.cos(yaw)), q, sc);
+        tires.setMatrixAt(idx++, m);
+      }
+    }
+    tires.count = idx;
+    tires.instanceMatrix.needsUpdate = true;
+    g.add(tires);
+  }
+
+  // ---------------- 起跑信号灯（起跑门横幅上，红色→起跑变绿）
+  {
+    const mat = new THREE.MeshBasicMaterial({ color: 0xff2222 });
+    const sm = S[0];
+    for (let k = -1; k <= 1; k++) {
+      const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8), mat);
+      bulb.position.set(
+        sm.x + sm.tx * k * 3,
+        5.9,
+        sm.z + sm.tz * k * 3,
+      );
+      g.add(bulb);
+      startLights.push(bulb);
+    }
+  }
+
+  g.userData.winMats = winMats;
+  g.userData.startLights = startLights;
 
   return g;
 }
