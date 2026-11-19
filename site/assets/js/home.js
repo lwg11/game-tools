@@ -60,6 +60,12 @@ const els = {
     sync: document.getElementById("vcSync"),
     enter: document.getElementById("vcEnter"),
   },
+  "need-for-speed": {
+    bar: document.getElementById("nfsBar"),
+    text: document.getElementById("nfsProgress"),
+    sync: document.getElementById("nfsSync"),
+    enter: document.getElementById("nfsEnter"),
+  },
 };
 
 function starCount(stars) {
@@ -86,6 +92,16 @@ function paint(gameId, progress, isGuest) {
     el.text.textContent = `图鉴 ${caught}/31 · 已完成委托 ${questsDone}`;
     el.sync.textContent = isGuest ? "游客进度 · 登录可同步" : "已登录 · 云端存档";
     el.enter.textContent = caught > 0 || questsDone > 0 ? "继续冒险" : "开始冒险";
+    return;
+  }
+  if (gameId === "need-for-speed") {
+    const wins = Number(progress.wins) || 0;
+    const races = Number(progress.racesDone) || 0;
+    const best = Number(progress.bestLap) || 0;
+    el.bar.style.width = Math.min(100, races * 20) + "%";
+    el.text.textContent = `原型开发中 · 场次 ${races} · 胜场 ${wins}` + (best > 0 ? ` · 最佳圈速 ${best.toFixed(1)}s` : "");
+    el.sync.textContent = isGuest ? "游客进度 · 登录可同步" : "已登录 · 云端存档";
+    el.enter.textContent = "进入原型";
     return;
   }
   const total = TOTAL[gameId];

@@ -195,6 +195,7 @@ body.crazy-mode .hero .hl { color: #ff9a3a; text-shadow: 0 0 26px rgba(255, 110,
   backdrop-filter: blur(8px);
 }
 .badge.hot { color: #d6ff9a; border-color: rgba(155, 230, 100, 0.4); background: rgba(14, 30, 12, 0.7); }
+.badge.new { color: #7ad9ff; border-color: rgba(122, 217, 255, 0.45); background: rgba(10, 24, 40, 0.72); }
 .play-fab {
   position: absolute; right: 16px; bottom: 16px; z-index: 2;
   width: 46px; height: 46px; border-radius: 50%;

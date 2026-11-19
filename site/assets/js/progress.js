@@ -9,7 +9,7 @@ import { api } from "./api.js";
 
 const KEY_PREFIX = "gt.progress.v1.";
 
-export const GAME_IDS = ["stone-wars", "pvz", "carrot", "pokemon", "vice-city"];
+export const GAME_IDS = ["stone-wars", "pvz", "carrot", "pokemon", "vice-city", "need-for-speed"];
 
 export const DEFAULT_PROGRESS = {
   "stone-wars": {
@@ -76,6 +76,14 @@ export const DEFAULT_PROGRESS = {
     tutorialSeen: false,
     sound: true,
   },
+  "need-for-speed": {
+    unlocked: 1,
+    wins: 0,
+    racesDone: 0,
+    bestLap: 0,
+    credits: 0,
+    sound: true,
+  },
 };
 
 export const GAME_NAMES = {
@@ -84,6 +92,7 @@ export const GAME_NAMES = {
   carrot: "保卫萝卜",
   pokemon: "精灵宝可梦",
   "vice-city": "罪恶都市",
+  "need-for-speed": "霓虹海岸竞速",
 };
 
 function clone(obj) {
