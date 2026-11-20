@@ -16,6 +16,9 @@ import { H, TAU, W, clamp, rand } from "./common.js";
 import { Sfx } from "./sfx.js";
 import { Projectile, Unit } from "./entities.js";
 import { Terrain, mulberry32 } from "./terrain.js";
+import { preventBrowserGestures } from "../../assets/js/gestures.js";
+
+preventBrowserGestures();
 
 // ---------------------------------------------------------------- 游戏主体
 class StoneWars {

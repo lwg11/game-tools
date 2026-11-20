@@ -27,6 +27,9 @@ import { SfxSystem } from "./sfx.js";
 import { MissionSystem } from "./missions.js";
 import { TaxiSystem } from "./taxi.js";
 import { WeaponSystem, WEAPONS, PLAYER_WEAPON_ORDER, UNLOCKED_AT_START } from "./weapons.js";
+import { preventBrowserGestures } from "../../assets/js/gestures.js";
+
+preventBrowserGestures();
 
 // 固定步长
 const STEP = 1 / 60;

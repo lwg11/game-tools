@@ -324,3 +324,24 @@ html[data-device="desktop"] .only-mobile { display: none !important; }
   .modal { padding: 20px; border-radius: 20px; }
   .modal-title { font-size: 19px; }
 }
+
+/* ------------------------------------------------------------ 手势与浏览
+   器默认行为 / 双击缩放 / 长按菜单 / 文本选中
+* 说明：body 禁止选择与长按弹层，输入框单独恢复；
+* 页面滚动保留竖向 pan-y，游戏画布/舞台全部 touch-action: none。 */
+html, body {
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+body {
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: pan-y; /* 页面可竖滚，但双击缩放/双指缩放不再触发 */
+}
+input, textarea, select, [contenteditable="true"], [data-allow-select] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+.stage, .stage-wrap, .game-root, canvas {
+  touch-action: none;
+}

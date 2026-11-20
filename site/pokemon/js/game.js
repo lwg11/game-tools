@@ -25,6 +25,9 @@ import {
 import { clamp, roundRect, typeBadges } from "./common.js";
 import { Sfx } from "./sfx.js";
 import { BattleMixin } from "./battle.js";
+import { preventBrowserGestures } from "../../assets/js/gestures.js";
+
+preventBrowserGestures();
 // ---------------------------------------------------------------- 游戏主体
 class PokemonGame {
   constructor() {

@@ -14,6 +14,9 @@ import { H, LEVELS, TOTAL_LEVELS, TOWERS, TOWER_ORDER, W, getLevel } from "./lev
 import { TAU, THEMES, buildPath, clamp, distToPath, makeSpots, rand, roundRect } from "./common.js";
 import { Sfx } from "./sfx.js";
 import { Enemy, Tower } from "./entities.js";
+import { preventBrowserGestures } from "../../assets/js/gestures.js";
+
+preventBrowserGestures();
 
 // ---------------------------------------------------------------- 游戏主体
 class CarrotGame {

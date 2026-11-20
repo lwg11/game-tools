@@ -14,6 +14,9 @@ import { LEVELS, PLANTS, PLANT_ORDER, TOTAL_LEVELS, ZOMBIES, getLevel } from "./
 import { CARD, GRID, GRID_H, GRID_W, H, TAU, TOP_H, W, clamp, colX, groundY, rand, roundRect } from "./common.js";
 import { PvzSfx } from "./sfx.js";
 import { Mower, Plant, Sun, Zombie } from "./entities.js";
+import { preventBrowserGestures } from "../../assets/js/gestures.js";
+
+preventBrowserGestures();
 
 // ---------------------------------------------------------------- 游戏主体
 class PvZGame {

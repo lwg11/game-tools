@@ -297,3 +297,27 @@ body[data-device="desktop"] .vc-touch { display: none !important; }
   .vc-tb { width: 42px; height: 42px; font-size: 13px; }
   .vc-touch-buttons .vc-tb:last-child { grid-column: span 1; border-radius: 21px; }
 }
+
+/* 窄屏：左下任务板与右下武器/车速面板不相撞 */
+@media (max-width: 640px) {
+  .vc-hud-bl { max-width: min(380px, 60vw); }
+  .vc-mission { font-size: 12px; padding: 8px 10px; }
+  .vc-hud-br { max-width: 38vw; }
+  .vc-vehicle-panel { min-width: 0; padding: 8px 10px; }
+  .vc-weapon { padding: 6px 9px; font-size: 13px; }
+}
+
+/* 矮屏（手机横屏 390/480）：主菜单整体可滚动并压缩，不再顶出视口 */
+@media (max-height: 560px) {
+  .vc-menu-inner {
+    max-height: calc(100vh - 20px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 12px 20px;
+  }
+  .vc-logo-big { font-size: 44px; }
+  .vc-menu-sub { margin: 4px 0 10px; }
+  .vc-menu-buttons { width: 240px; gap: 8px; }
+  .vc-menu-stats { margin-top: 8px; }
+  .vc-menu-help { margin-top: 8px; font-size: 11px; }
+}
