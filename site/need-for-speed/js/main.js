@@ -16,6 +16,9 @@ import { RaceManager, RACE_MODES, DIFFS } from "./race.js";
 import { Sfx } from "./sfx.js";
 import { TrackMap } from "./map.js";
 import { isTouch } from "../../assets/js/device.js";
+import { preventBrowserGestures } from "../../assets/js/gestures.js";
+
+preventBrowserGestures();
 
 const FIXED_DT = 1 / 60;
 
@@ -86,6 +89,7 @@ const TRACK_POINTS = [
 class Game {
   constructor() {
     this.running = false;
+    this.paused = false;   // 暂停：冻结主循环与物理，画面保留
     this.headless = false;
     this.track = makeTrack(TRACK_POINTS, { sampleStep: 4, halfWidth: 11 });
     this.carId = store.get("car", "street");
@@ -119,6 +123,13 @@ class Game {
     this.sfx = new Sfx(store.get("mute", "0") === "1");
     this._cdLast = -1;
     this._mapTick = 0;
+
+    // M8 碰撞损伤 + 武器
+    this._colCd = new Map();
+    this.weapons = { cdCannon: 0, cdRocket: 0 };
+    this._rockets = [];
+    this._dmgSmokeT = 0;
+    this._blown = false;
 
     // M4 成长：解锁/部件/涂装
     this.owned = JSON_STORE.get("owned_cars", ["mini", "street"]);
@@ -173,6 +184,8 @@ class Game {
     this._buildNitroFlames();
     this._buildSmoke();
     this._buildNitroSparks();
+    this._buildExplosionFx();
+    this._buildTracers();
     this._bindMenu();
     buildTrackProps(this.track).then((props) => { this.props = props; if (props) this.scene.add(props); }).catch(() => {});
     this.camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.3, 3000);
@@ -184,6 +197,8 @@ class Game {
     this._bindHud();
     // M5：小地图 + 后视镜 + 静音键
     this.map = new TrackMap(document.getElementById("nfs-map"), this.track);
+    this._dmgEl = document.getElementById("nfs-dmg");
+    this._colCd.clear();
     const rt = new THREE.WebGLRenderTarget(512, 180);
     rt.texture.wrapS = THREE.RepeatWrapping;
     rt.texture.repeat.x = -1; // 镜面左右翻转
@@ -198,6 +213,8 @@ class Game {
     this._layoutMirror();
     window.addEventListener("keydown", (e) => {
       if ((e.key === "m" || e.key === "M") && !e.repeat) this._toggleMute();
+      // M8+ 暂停/继续：Esc 或 P
+      if ((e.key === "Escape" || e.key === "p" || e.key === "P") && !e.repeat) this._togglePause();
     });
     const muteBtn = document.getElementById("nfs-mute");
     if (muteBtn) {
@@ -206,6 +223,15 @@ class Game {
     }
     const cheatFab = document.getElementById("nfs-cheat-fab");
     const cheatPanel = document.getElementById("nfs-cheat-panel");
+    // M8+ 暂停按钮 + 暂停菜单
+    const pauseBtn = document.getElementById("nfs-pause-btn");
+    if (pauseBtn) pauseBtn.addEventListener("click", () => this._togglePause());
+    const pauseResume = document.getElementById("nfs-pause-resume");
+    if (pauseResume) pauseResume.addEventListener("click", () => this._setPause(false));
+    const pauseRestart = document.getElementById("nfs-pause-restart");
+    if (pauseRestart) pauseRestart.addEventListener("click", () => this.start());
+    const pauseMenu = document.getElementById("nfs-pause-menu");
+    if (pauseMenu) pauseMenu.addEventListener("click", () => { this._setPause(false); this.backToMenu(); });
     if (cheatFab && cheatPanel) {
       cheatFab.addEventListener("click", () => cheatPanel.classList.toggle("hidden"));
       this._renderCheats();
@@ -288,6 +314,8 @@ class Game {
       this._glbModel = null;
     }
     this._proceduralCar.visible = true;
+    this._baseColors = null;
+    this._updateDamageVisual();
     if (this._glbWheels) this._glbWheels.length = 0;
     this._positionNitroFx();
     const loader = new GLTFLoader();
@@ -332,6 +360,7 @@ class Game {
           this._glbWheels.push({ pivot: o, front: /wheel-front/.test(o.name) });
         });
         this._positionNitroFx();
+        this._updateDamageVisual();
         if (this.garage) this.garage.show(cfg, this.modsMap[id] || {});
       },
       undefined,
@@ -382,6 +411,7 @@ class Game {
           this._glbWheels.push({ pivot, front: /_(fl|fr)$/.test(name) });
         }
         this._positionNitroFx();
+        this._updateDamageVisual();
         if (this.garage) this.garage.show(cfg, this.modsMap[this.carId] || {});
       },
       undefined,
@@ -597,13 +627,14 @@ class Game {
     this._smokeTimer = 0;
   }
 
-  _spawnSmoke(x, z) {
+  _spawnSmoke(x, z, colorHex = 0xdcdce0, scale = 0.8) {
     const p = this._smokes[this._smokeIdx++ % this._smokes.length];
     p.s.visible = true;
     p.life = p.max;
     p.s.position.set(x + (Math.random() - 0.5) * 0.6, 0.5, z + (Math.random() - 0.5) * 0.6);
     p.s.material.opacity = 0.5;
-    p.s.scale.set(0.8, 0.8, 1);
+    p.s.material.color.setHex(colorHex);
+    p.s.scale.set(scale, scale, 1);
   }
 
   _updateSmoke(dt) {
@@ -619,6 +650,420 @@ class Game {
     }
   }
 
+  // ================= M8 碰撞损伤 + 爆炸粒子 + 武器 + 冒烟 =================
+
+  _buildExplosionFx() {
+    const mkTex = (inner, outer, midStop = 0.45) => {
+      const c = document.createElement("canvas");
+      c.width = c.height = 64;
+      const ctx = c.getContext("2d");
+      const g = ctx.createRadialGradient(32, 32, 1, 32, 32, 30);
+      g.addColorStop(0, inner);
+      g.addColorStop(midStop, outer);
+      g.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, 64, 64);
+      return new THREE.CanvasTexture(c);
+    };
+    const ringC = document.createElement("canvas");
+    ringC.width = ringC.height = 64;
+    const rctx = ringC.getContext("2d");
+    rctx.strokeStyle = "rgba(255,220,160,.95)";
+    rctx.lineWidth = 5;
+    rctx.beginPath();
+    rctx.arc(32, 32, 25, 0, Math.PI * 2);
+    rctx.stroke();
+    const ringTex = new THREE.CanvasTexture(ringC);
+    const flashTex = mkTex("rgba(255,255,255,1)", "rgba(255,150,60,.75)", 0.45);
+    const sparkTex = mkTex("rgba(255,255,255,1)", "rgba(255,120,40,.85)", 0.5);
+
+    const flashes = [];
+    for (let i = 0; i < 4; i++) {
+      const m = new THREE.SpriteMaterial({ map: flashTex, color: 0xffffff, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0 });
+      const s = new THREE.Sprite(m);
+      s.visible = false;
+      this.scene.add(s);
+      flashes.push({ s, life: 0, max: 0.22, ms: 4 });
+    }
+    const sparks = [];
+    for (let i = 0; i < 96; i++) {
+      const m = new THREE.SpriteMaterial({ map: sparkTex, color: 0xffc060, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0 });
+      const s = new THREE.Sprite(m);
+      s.visible = false;
+      this.scene.add(s);
+      sparks.push({ s, life: 0, max: 0.6, vx: 0, vy: 0, vz: 0, size: 0.25 });
+    }
+    const rings = [];
+    for (let i = 0; i < 3; i++) {
+      const m = new THREE.SpriteMaterial({ map: ringTex, color: 0xffd9a0, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0 });
+      const s = new THREE.Sprite(m);
+      s.visible = false;
+      this.scene.add(s);
+      rings.push({ s, life: 0, max: 0.45, ms: 5 });
+    }
+    const lights = [];
+    for (let i = 0; i < 2; i++) {
+      const l = new THREE.PointLight(0xffa050, 0, 28, 2);
+      this.scene.add(l);
+      lights.push({ l, life: 0, max: 0.35, mi: 80 });
+    }
+    this._explFx = { flashes, sparks, rings, lights, si: 0 };
+  }
+
+  _buildTracers() {
+    this._tracers = [];
+    for (let i = 0; i < 4; i++) {
+      const g = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
+      const m = new THREE.LineBasicMaterial({ color: 0xffe9a8, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
+      const line = new THREE.Line(g, m);
+      line.visible = false;
+      line.frustumCulled = false;
+      this.scene.add(line);
+      this._tracers.push({ line, life: 0, max: 0.09 });
+    }
+    this._trIdx = 0;
+  }
+
+  _fireTracer(x0, y0, z0, x1, y1, z1) {
+    const t = this._tracers[this._trIdx++ % this._tracers.length];
+    const pos = t.line.geometry.attributes.position;
+    pos.setXYZ(0, x0, y0, z0);
+    pos.setXYZ(1, x1, y1, z1);
+    pos.needsUpdate = true;
+    t.life = t.max;
+    t.line.visible = true;
+  }
+
+  /** 通用爆炸：闪光 + 火花 + 冲击环 + 点光 + 黑烟 */
+  _explode(x, y, z, power = 1) {
+    const F = this._explFx;
+    if (!F) return;
+    const fl = F.flashes.find((f) => f.life <= 0) || F.flashes[0];
+    fl.life = fl.max;
+    fl.ms = 4 + power * 3;
+    fl.s.position.set(x, y + 0.4, z);
+    fl.s.visible = true;
+    const rg = F.rings.find((r) => r.life <= 0) || F.rings[0];
+    rg.life = rg.max;
+    rg.ms = 4 + power * 5;
+    rg.s.position.set(x, y + 0.3, z);
+    rg.s.visible = true;
+    const lt = F.lights.find((l) => l.life <= 0) || F.lights[0];
+    lt.life = lt.max;
+    lt.mi = 90 * power;
+    lt.l.position.set(x, y + 1, z);
+    const nS = Math.floor(30 * power);
+    for (let i = 0; i < nS; i++) {
+      const sp = F.sparks[F.si++ % F.sparks.length];
+      const a = Math.random() * Math.PI * 2;
+      const spd = 5 + Math.random() * 11;
+      sp.life = sp.max = 0.5 + Math.random() * 0.45;
+      sp.vx = Math.cos(a) * spd;
+      sp.vz = Math.sin(a) * spd;
+      sp.vy = 2 + Math.random() * 8;
+      sp.size = 0.2 + Math.random() * 0.3;
+      sp.s.material.color.setHex(Math.random() < 0.4 ? 0xfff3c4 : Math.random() < 0.6 ? 0xffd166 : 0xff7a2a);
+      sp.s.position.set(x, y + 0.3, z);
+      sp.s.visible = true;
+    }
+    for (let i = 0; i < Math.floor(6 * power); i++) {
+      this._spawnSmoke(x + (Math.random() - 0.5) * 2, z + (Math.random() - 0.5) * 2, 0x232327, 1.6 + Math.random());
+    }
+    const dP = Math.hypot(this.car.x - x, this.car.z - z);
+    this._shake = Math.max(this._shake, (0.05 + power * 0.03) * clamp(18 / (dP + 4), 0.3, 1));
+    this.sfx.explosion(clamp(power, 0.7, 1.5));
+  }
+
+  _burstSparks(x, y, z, n, colorHex = 0xffc060, power = 0.5) {
+    const F = this._explFx;
+    if (!F) return;
+    for (let i = 0; i < n; i++) {
+      const sp = F.sparks[F.si++ % F.sparks.length];
+      const a = Math.random() * Math.PI * 2;
+      const spd = (3 + Math.random() * 6) * (0.6 + power);
+      sp.life = sp.max = 0.25 + Math.random() * 0.3;
+      sp.vx = Math.cos(a) * spd;
+      sp.vz = Math.sin(a) * spd;
+      sp.vy = 1 + Math.random() * 4;
+      sp.size = 0.12 + Math.random() * 0.2;
+      sp.s.material.color.setHex(colorHex);
+      sp.s.position.set(x, y, z);
+      sp.s.visible = true;
+    }
+  }
+
+  _updateFx(dt) {
+    const F = this._explFx;
+    if (!F) return;
+    for (const f of F.flashes) {
+      if (f.life <= 0) continue;
+      f.life -= dt;
+      const k = 1 - Math.max(0, f.life) / f.max;
+      const s = f.ms * (0.4 + k * 0.9);
+      f.s.scale.set(s, s, 1);
+      f.s.material.opacity = (1 - k) * 0.95;
+      if (f.life <= 0) f.s.visible = false;
+    }
+    for (const sp of F.sparks) {
+      if (sp.life <= 0) continue;
+      sp.life -= dt;
+      sp.vy -= 14 * dt;
+      sp.vx *= 0.985; sp.vz *= 0.985;
+      sp.s.position.x += sp.vx * dt;
+      sp.s.position.y += sp.vy * dt;
+      sp.s.position.z += sp.vz * dt;
+      if (sp.s.position.y < 0.05) { sp.s.position.y = 0.05; sp.vy *= -0.35; }
+      const k = Math.max(0, sp.life) / sp.max;
+      sp.s.material.opacity = k;
+      const sc = sp.size * (0.6 + (1 - k) * 0.8);
+      sp.s.scale.set(sc, sc, 1);
+      if (sp.life <= 0) sp.s.visible = false;
+    }
+    for (const r of F.rings) {
+      if (r.life <= 0) continue;
+      r.life -= dt;
+      const k = 1 - Math.max(0, r.life) / r.max;
+      const s = r.ms * (0.3 + k);
+      r.s.scale.set(s, s, 1);
+      r.s.material.opacity = (1 - k) * 0.8;
+      if (r.life <= 0) r.s.visible = false;
+    }
+    for (const l of F.lights) {
+      if (l.life <= 0) { l.l.intensity = 0; continue; }
+      l.life -= dt;
+      l.l.intensity = Math.max(0, l.life / l.max) * l.mi;
+    }
+    for (const t of this._tracers) {
+      if (t.life <= 0) continue;
+      t.life -= dt;
+      t.line.material.opacity = Math.max(0, t.life / t.max);
+      if (t.life <= 0) t.line.visible = false;
+    }
+  }
+
+  // ---------------- 损伤 ----------------
+
+  _updateDamageVisual() {
+    const m = this._glbModel || this._proceduralCar;
+    if (!m) return;
+    if (!this._baseColors) {
+      this._baseColors = [];
+      m.traverse((o) => {
+        if (!o.isMesh) return;
+        const mats = Array.isArray(o.material) ? o.material : [o.material];
+        for (const mt of mats) {
+          if (mt && mt.color) this._baseColors.push({ mat: mt, hex: mt.color.getHex() });
+        }
+      });
+    }
+    const ratio = clamp(this.car.hp / (this.car.hpMax || 100), 0, 1);
+    const k = 0.38 + 0.62 * ratio;
+    for (const bc of this._baseColors) {
+      if (!bc.mat.color) continue;
+      bc.mat.color.setHex(bc.hex).multiplyScalar(k);
+    }
+  }
+
+  _applyDamage(amount, x, z) {
+    if (this.cheats.god || amount <= 0) return;
+    const c = this.car;
+    c.hp = Math.max(0, c.hp - amount);
+    this._updateDamageVisual();
+    this._dmgFlash();
+    this.sfx.hit(clamp(amount / 30, 0.3, 1));
+    this._burstSparks(x, z, 1.1, Math.min(20, Math.floor(4 + amount * 0.3)), 0xffb15a, 0.6);
+    this._shake = Math.max(this._shake, clamp(amount / 70, 0.03, 0.14));
+    if (c.hp <= 0 && !this._blown) {
+      this._blown = true;
+      this._flash("⚠️ 车辆报废！动力下降");
+      this._explode(c.x, 0.9, c.z, 1.1);
+    }
+  }
+
+  _dmgFlash() {
+    if (!this._dmgEl) return;
+    this._dmgEl.style.opacity = "0.55";
+    clearTimeout(this._dmgT);
+    this._dmgT = setTimeout(() => { this._dmgEl.style.opacity = "0"; }, 130);
+  }
+
+  // ---------------- 碰撞解算 ----------------
+
+  /** 玩家与运动学车辆（AI/警车）的碰撞：分离 + 法线反弹 + 按接近速度扣血 */
+  _collideVehicle(other, minD = 2.5) {
+    if (!other || !Number.isFinite(other.x) || !Number.isFinite(other.z)) return;
+    const c = this.car;
+    const dx = c.x - other.x, dz = c.z - other.z;
+    const d = Math.hypot(dx, dz);
+    if (d >= minD || d < 0.001) return;
+    const nx = dx / d, nz = dz / d;
+    const push = minD - d;
+    c.x += nx * push * 0.4;
+    c.z += nz * push * 0.4;
+    if (other.push) other.push(-nx * push * 0.9, -nz * push * 0.9);
+    const pN = (c.vx - (other.vx || 0)) * nx + (c.vz - (other.vz || 0)) * nz;
+    if (pN < 0) {
+      const close = -pN;
+      c.vx -= nx * pN * 1.3;
+      c.vz -= nz * pN * 1.3;
+      if (close > 4) {
+        const last = this._colCd.get(other) || -1;
+        if (this.time - last > 0.3) {
+          this._colCd.set(other, this.time);
+          this._applyDamage(Math.min(40, (close - 4) * 5), c.x - nx * 1.4, c.z - nz * 1.4);
+          if (other.hurt) other.hurt(Math.min(30, (close - 4) * 5));
+        }
+      } else {
+        this.sfx.hit(0.25);
+        this._shake = Math.max(this._shake, 0.03);
+      }
+    }
+  }
+
+  // ---------------- 武器 ----------------
+
+  _targets() {
+    const list = [];
+    if (this.race) {
+      if (this.race.cars) {
+        for (const ai of this.race.cars) {
+          if (!ai.model || ai.wrecked || ai.finished || ai.eliminated) continue;
+          if (!Number.isFinite(ai.x) || !Number.isFinite(ai.z)) continue;
+          list.push({ x: ai.x, z: ai.z, radius: 2.1, hurt: (d) => ai.hurt(d) });
+        }
+      }
+      if (this.race.cops) {
+        for (const cop of this.race.cops) {
+          if (!cop.model || cop.wrecked || !Number.isFinite(cop.x) || !Number.isFinite(cop.z)) continue;
+          list.push({
+            x: cop.x, z: cop.z, radius: 2.2,
+            hurt: (d) => { cop.hurt(d); if (cop.wrecked) this._onCopWrecked(cop); },
+          });
+        }
+      }
+    }
+    if (this.traffic) {
+      for (const t of this.traffic.cars) {
+        if (!t.model || t.wrecked || !Number.isFinite(t.x) || !Number.isFinite(t.z)) continue;
+        list.push({ x: t.x, z: t.z, radius: 2.0, hurt: (d) => this.traffic.damageCar(t, d) });
+      }
+    }
+    return list;
+  }
+
+  _onCopWrecked(cop) {
+    if (cop._rewarded) return;
+    cop._rewarded = true;
+    this.coins += 20;
+    store.set("coins", String(this.coins));
+    if (this._updateCoins) this._updateCoins();
+    this._flash("🚔 击毁警车 +20 币");
+    this._explode(cop.x, 0.9, cop.z, 1.2);
+  }
+
+  _fireCannon() {
+    const c = this.car;
+    const fx = Math.sin(c.angle), fz = Math.cos(c.angle);
+    const ox = c.x + fx * 2.2, oz = c.z + fz * 2.2;
+    let bestT = 48, best = null;
+    for (const t of this._targets()) {
+      const rx = t.x - ox, rz = t.z - oz;
+      const tProj = rx * fx + rz * fz;
+      if (tProj < 1 || tProj > bestT) continue;
+      const perp = Math.abs(rx * fz - rz * fx);
+      if (perp < t.radius + 0.6) { bestT = tProj; best = t; }
+    }
+    const hx = ox + fx * (best ? bestT : 42);
+    const hz = oz + fz * (best ? bestT : 42);
+    this._fireTracer(ox, 1.05, oz, hx, 1.0, hz);
+    this._burstSparks(ox, 1.0, oz, 2, 0xfff2c0, 0.25);
+    if (best) {
+      this._burstSparks(hx, 1.0, hz, 7, 0xffc060, 0.5);
+      best.hurt(6);
+      this._shake = Math.max(this._shake, 0.02);
+    } else {
+      this._burstSparks(hx, 0.3, hz, 3, 0xffc060, 0.3);
+    }
+    this.sfx.shot();
+  }
+
+  _spawnRocket() {
+    const c = this.car;
+    const fx = Math.sin(c.angle), fz = Math.cos(c.angle);
+    const g = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.ConeGeometry(0.13, 0.55, 6), new THREE.MeshBasicMaterial({ color: 0xffa540 }));
+    body.rotation.x = Math.PI / 2;
+    g.add(body);
+    const flame = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: this._nitroFlames[0] ? this._nitroFlames[0].material.map : null,
+      color: 0xffb060, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true,
+    }));
+    flame.scale.set(0.45, 0.45, 1);
+    flame.position.z = -0.38;
+    g.add(flame);
+    g.position.set(c.x + fx * 2.4, 1.0, c.z + fz * 2.4);
+    g.rotation.y = c.angle;
+    this.scene.add(g);
+    this._rockets.push({ g, x: g.position.x, y: 1.0, z: g.position.z, dx: fx, dz: fz, life: 4, t: 0 });
+    this.sfx.rocketLaunch();
+    this._shake = Math.max(this._shake, 0.03);
+  }
+
+  _updateRockets(dt) {
+    for (let i = this._rockets.length - 1; i >= 0; i--) {
+      const r = this._rockets[i];
+      r.life -= dt;
+      r.x += r.dx * 62 * dt;
+      r.z += r.dz * 62 * dt;
+      r.g.position.set(r.x, r.y, r.z);
+      r.t -= dt;
+      if (r.t <= 0) {
+        r.t = 0.03;
+        this._burstSparks(r.x, r.y, r.z, 1, 0xffcf90, 0.2);
+      }
+      let boom = r.life <= 0;
+      if (!boom) {
+        for (const t of this._targets()) {
+          if (Math.hypot(t.x - r.x, t.z - r.z) < t.radius + 0.4) { boom = true; break; }
+        }
+      }
+      if (boom) {
+        for (const t of this._targets()) {
+          const d = Math.hypot(t.x - r.x, t.z - r.z);
+          if (d < 7.5) t.hurt(Math.max(15, 48 * (1 - d / 7.5)));
+        }
+        this._explode(r.x, 0.8, r.z, 1.15);
+        this.scene.remove(r.g);
+        this._rockets.splice(i, 1);
+      }
+    }
+  }
+
+  // ---------------- 冒烟 ----------------
+
+  _updateDamageSmoke(dt) {
+    const c = this.car;
+    const ratio = c.hp / (c.hpMax || 100);
+    if (ratio >= 0.45 || this.cheats.god) return;
+    this._dmgSmokeT -= dt;
+    if (this._dmgSmokeT > 0) return;
+    this._dmgSmokeT = 0.06 + ratio * 0.18;
+    const fx = Math.sin(c.angle), fz = Math.cos(c.angle);
+    this._spawnSmoke(c.x + fx * ((this._carLen || 4) / 2 - 0.4), c.z + fz * ((this._carLen || 4) / 2 - 0.4), 0x1f1f24, 0.9);
+  }
+
+  _updateWreckSmoke(dt) {
+    this._wreckSmokeT = (this._wreckSmokeT || 0) - dt;
+    if (this._wreckSmokeT > 0) return;
+    this._wreckSmokeT = 0.12;
+    const spots = [];
+    const collect = (arr) => { if (arr) for (const a of arr) if (a.wrecked && a.model && Number.isFinite(a.x)) spots.push(a.x, a.z); };
+    collect(this.race ? this.race.cars : null);
+    collect(this.race ? this.race.cops : null);
+    collect(this.traffic ? this.traffic.cars : null);
+    for (let i = 0; i < spots.length; i += 2) this._spawnSmoke(spots[i], spots[i + 1], 0x26262c, 1.2);
+  }
+
   _bindHud() {
     this.hud = {
       speed: document.getElementById("nfs-speed"),
@@ -630,6 +1075,8 @@ class Game {
       best: document.getElementById("nfs-best"),
       drift: document.getElementById("nfs-drift"),
       msg: document.getElementById("nfs-msg"),
+      hpWrap: document.getElementById("nfs-hp-wrap"),
+      hpFill: document.getElementById("nfs-hp-fill"),
       racehud: document.getElementById("nfs-racehud"),
       racePos: document.getElementById("nfs-race-pos"),
       raceLap: document.getElementById("nfs-race-lap"),
@@ -665,6 +1112,12 @@ class Game {
     this.car.angle = Math.atan2(s0.tx, s0.tz);
     this.car.vx = 0; this.car.vz = 0; this.car.speed = 0;
     this.car.hp = this.car.hpMax || 100; this.car.nitro = 1; this.car.slip = 0;
+    // M8 整局重置：损伤/爆炸锁定/火箭
+    this._blown = false;
+    this._colCd.clear();
+    for (const r of this._rockets) this.scene.remove(r.g);
+    this._rockets.length = 0;
+    this._updateDamageVisual();
     this._nitroPrev = false; this._nitroMin = 0;
 
     if (this.modeId !== "free" && RACE_MODES.some((m) => m.id === this.modeId)) {
@@ -686,6 +1139,7 @@ class Game {
     this.sfx.resume();
     this._cdLast = -1;
     // M7 疯狂模式：显示金手指入口
+    this._setPause(false);
     const isCrazy = this.modeId === "crazy";
     document.getElementById("nfs-cheat-fab").classList.toggle("hidden", !isCrazy);
     document.getElementById("nfs-cheat-panel").classList.add("hidden");
@@ -693,8 +1147,28 @@ class Game {
     if (this.hud.msg) this.hud.msg.textContent = "WASD 驾驶 / Space 漂移 / Shift 氮气";
   }
 
+  /** 暂停 / 继续（M8+）：仅在比赛进行中、且结算面板未打开时可用 */
+  _togglePause() {
+    if (!this.running) return;
+    if (!document.getElementById("nfs-results").classList.contains("hidden")) return;
+    this._setPause(!this.paused);
+  }
+
+  _setPause(on) {
+    this.paused = !!on;
+    const overlay = document.getElementById("nfs-pause");
+    if (overlay) overlay.classList.toggle("hidden", !this.paused);
+    const btn = document.getElementById("nfs-pause-btn");
+    if (btn) btn.classList.toggle("on", this.paused);
+    if (this.paused) {
+      this.sfx.update(0, 0, 0, false);
+      this._last = performance.now();
+    }
+  }
+
   /** 比赛结束回调（M3 + M4：涂装解锁） */
   _onRaceFinish(res) {
+    this._setPause(false);
     this.coins += res.coins;
     store.set("coins", String(this.coins));
     if (this._updateCoins) this._updateCoins();
@@ -732,6 +1206,13 @@ class Game {
     if (this._copHitCd && this._copHitCd > this.time) return;
     this._copHitCd = this.time + 0.4;
     this.car.hp = Math.max(0, this.car.hp - 14);
+    this._updateDamageVisual();
+    this._dmgFlash();
+    if (this.car.hp <= 0 && !this._blown) {
+      this._blown = true;
+      this._flash("⚠️ 车辆报废！动力下降");
+      this._explode(this.car.x, 0.9, this.car.z, 1.1);
+    }
     this.sfx.hit(0.9);
     this._shake = Math.max(this._shake, 0.09);
     this._flash("🚔 警车撞击！");
@@ -741,6 +1222,7 @@ class Game {
   backToMenu() {
     this.race.stop();
     this.running = false;
+    this._setPause(false);
     document.getElementById("nfs-hud").classList.add("hidden");
     document.getElementById("nfs-racehud").classList.add("hidden");
     document.getElementById("nfs-results").classList.add("hidden");
@@ -932,6 +1414,12 @@ class Game {
     if (this.cheats.nitro) this.car.nitro = 1;
     if (this.cheats.god) this.car.hp = this.car.hpMax || 100;
 
+    // M8 武器：机炮（F）连发 / 火箭（R）单发冷却
+    if (this.weapons.cdCannon > 0) this.weapons.cdCannon -= dt;
+    if (this.weapons.cdRocket > 0) this.weapons.cdRocket -= dt;
+    if (rawInput.cannon && this.weapons.cdCannon <= 0) { this.weapons.cdCannon = 0.12; this._fireCannon(); }
+    if (rawInput.rocket && this.weapons.cdRocket <= 0) { this.weapons.cdRocket = 1.15; this._spawnRocket(); }
+
     // 赛道约束：投影 → 路肩推回 + 出界拖慢
     const p = projectToTrack(this.track, this.car.x, this.car.z, this.hint);
     this.hint = p.i;
@@ -979,20 +1467,30 @@ class Game {
       this._trafficHits.length = 0;
       this.traffic.update(dt, this.car.x, this.car.z, this._trafficHits);
       for (const h of this._trafficHits) {
+        const t = h.car || h;
         this.sfx.hit(0.5);
         const d = h.d || 1;
         const nx = h.dx / d, nz = h.dz / d;
         const push = 2.3 - d;
         this.car.x += nx * push * 0.55;
         this.car.z += nz * push * 0.55;
-        const vn = this.car.vx * nx + this.car.vz * nz;
-        if (vn < 0) {
-          this.car.vx -= nx * vn * 1.35;
-          this.car.vz -= nz * vn * 1.35;
-          if (-vn > 5) {
-            this._shake = Math.max(this._shake, 0.06);
-            this.cameraShakeStart = this.time;
+        const relN = (this.car.vx - (t.vx || 0)) * nx + (this.car.vz - (t.vz || 0)) * nz;
+        if (relN < 0) {
+          const close = -relN;
+          this.car.vx -= nx * relN * 1.35;
+          this.car.vz -= nz * relN * 1.35;
+          // 推挤市民车（偏移随时间衰减）
+          t.pushX = (t.pushX || 0) - nx * close * 0.22;
+          t.pushZ = (t.pushZ || 0) - nz * close * 0.22;
+          if (close > 4) {
+            const last = this._colCd.get(t) || -1;
+            if (this.time - last > 0.3) {
+              this._colCd.set(t, this.time);
+              this._applyDamage(Math.min(40, (close - 4) * 5), h.x - nx * 1.2, h.z - nz * 1.2);
+              if (this.traffic) this.traffic.damageCar(t, Math.min(30, (close - 3) * 5));
+            }
           }
+          this._shake = Math.max(this._shake, Math.min(0.1, close / 80));
         }
       }
     }
@@ -1088,6 +1586,10 @@ class Game {
     }
     this._updateSmoke(dt);
     this._updateSparks(dt);
+    this._updateFx(dt);
+    this._updateRockets(dt);
+    this._updateDamageSmoke(dt);
+    this._updateWreckSmoke(dt);
 
     // 氮气尾焰：激活时显示并闪炼
     for (let i = 0; i < this._nitroFlames.length; i++) {
@@ -1160,7 +1662,7 @@ class Game {
   _frame(t) {
     const dt = Math.min(0.1, (t - this._last) / 1000);
     this._last = t;
-    if (this.running) {
+    if (this.running && !this.paused) {
       this._accum += dt;
       let steps = 0;
       while (this._accum >= FIXED_DT && steps < 4) {
@@ -1305,8 +1807,13 @@ class Game {
     const h = this.hud;
     if (!h.speed) return;
     h.speed.textContent = String(Math.round(this.car.kmh));
-    if (h.nitroFill) h.nitroFill.style.width = `${Math.round(this.car.nitro * 100)}%`;
-    if (h.nitroPct) h.nitroPct.textContent = `${Math.round(this.car.nitro * 100)}%`;
+      if (h.nitroFill) h.nitroFill.style.width = `${Math.round(this.car.nitro * 100)}%`;
+      if (h.nitroPct) h.nitroPct.textContent = `${Math.round(this.car.nitro * 100)}%`;
+      if (h.hpWrap) {
+        const ratio = clamp(this.car.hp / (this.car.hpMax || 100), 0, 1);
+        h.hpWrap.style.display = ratio < 0.999 ? "flex" : "none";
+        if (h.hpFill) h.hpFill.style.width = `${Math.round(ratio * 100)}%`;
+      }
     if (h.nitroWrap) h.nitroWrap.classList.toggle("full", this.car.nitro > 0.985);
     // 触屏氮气按钮：环形进度（剩余量）
     const nb = document.querySelector(".tc-nitro");

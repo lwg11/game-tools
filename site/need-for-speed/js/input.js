@@ -13,7 +13,7 @@ export class Input {
       const k = e.code;
       const used = [
         "KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
-        "Space", "ShiftLeft", "ShiftRight", "KeyN", "Escape",
+        "Space", "ShiftLeft", "ShiftRight", "KeyN", "KeyF", "KeyR", "KeyJ", "Escape",
       ];
       if (used.includes(k)) {
         if (down) this.keys.add(k); else this.keys.delete(k);
@@ -36,7 +36,9 @@ export class Input {
     steer = Math.max(-1, Math.min(1, steer));
     const handbrake = k.has("Space") || (t ? t.handbrake : false);
     const nitro = k.has("ShiftLeft") || k.has("ShiftRight") || k.has("KeyN") || (t ? t.nitro : false);
-    return { throttle, brake, steer, handbrake, nitro };
+    const cannon = k.has("KeyF") || k.has("KeyJ") || (t ? t.cannon : false);
+    const rocket = k.has("KeyR") || (t ? t.rocket : false);
+    return { throttle, brake, steer, handbrake, nitro, cannon, rocket };
   }
 
   isDown(code) { return this.keys.has(code); }

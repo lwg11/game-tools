@@ -38,6 +38,11 @@ export class Traffic {
         model: null,
         tint: TINTS[i % TINTS.length],
         tintApplied: false,
+        // M8 碰撞/损伤
+        hp: 60,
+        wrecked: false,
+        vx: 0, vz: 0,
+        pushX: 0, pushZ: 0,
       });
     }
     scene.add(this.group);
@@ -86,20 +91,37 @@ export class Traffic {
     const S = this.track.samples;
     const n = S.length;
     for (const c of this.cars) {
+      if (c.wrecked) { c.vx = 0; c.vz = 0; continue; }
       c.idx = (c.idx + (c.speed * dt) / this._spacing) % n;
       const i0 = Math.floor(c.idx) % n;
       const i1 = (i0 + 1) % n;
       const k = c.idx - Math.floor(c.idx);
       const a = S[i0], b = S[i1];
-      const x = a.x + (b.x - a.x) * k + (a.nx + (b.nx - a.nx) * k) * c.lane;
-      const z = a.z + (b.z - a.z) * k + (a.nz + (b.nz - a.nz) * k) * c.lane;
+      c.pushX *= 0.94; c.pushZ *= 0.94;
+      const x = a.x + (b.x - a.x) * k + (a.nx + (b.nx - a.nx) * k) * c.lane + c.pushX;
+      const z = a.z + (b.z - a.z) * k + (a.nz + (b.nz - a.nz) * k) * c.lane + c.pushZ;
       const yaw = Math.atan2(a.tx + (b.tx - a.tx) * k, a.tz + (b.tz - a.tz) * k);
+      c.vx = Math.sin(yaw) * c.speed;
+      c.vz = Math.cos(yaw) * c.speed;
       c.model.position.set(x, 0, z);
       c.model.rotation.y = yaw;
       c.x = x; c.z = z;
       const dx = playerX - x, dz = playerZ - z;
       const d2 = dx * dx + dz * dz;
-      if (d2 < 2.4 * 2.4) hits.push({ x, z, dx, dz, d: Math.sqrt(d2) });
+      if (d2 < 2.4 * 2.4) hits.push({ car: c, x, z, dx, dz, d: Math.sqrt(d2) });
+    }
+  }
+
+  /** 受击（机炮/火箭/撞车） */
+  damageCar(c, d) {
+    if (!c || c.wrecked) return;
+    c.hp = Math.max(0, c.hp - d);
+    if (c.hp <= 0) {
+      c.wrecked = true;
+      if (c.model) {
+        c.model.rotation.z = (Math.random() - 0.5) * 0.4;
+        c.model.rotation.y += 0.5 + Math.random() * 0.5;
+      }
     }
   }
 

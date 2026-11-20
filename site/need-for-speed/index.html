@@ -10,14 +10,16 @@
 <body>
 <div id="app"></div>
 
-<!-- HUD：速度 / 氮气 / 圈速 / 漂移分 -->
+<!-- HUD：速度 / 氮气 / 耐久 / 圈速 / 漂移分 -->
 <div id="nfs-hud" class="nfs-hud hidden">
   <div class="nfs-tl">
     <div id="nfs-speed" class="nfs-speed">0</div>
     <div class="nfs-unit">km/h</div>
     <div class="nfs-nitro"><div id="nfs-nitro-fill"></div><span id="nfs-nitro-pct">100%</span></div>
+    <div class="nfs-hp hidden" id="nfs-hp-wrap"><span>耐久</span><div class="nfs-hp-bar"><div id="nfs-hp-fill"></div></div></div>
   </div>
   <div class="nfs-tr">
+    <button id="nfs-pause-btn" class="nfs-pause-btn" type="button" title="暂停（Esc / P）" aria-label="暂停">⏸</button>
     <div id="nfs-car-label">Street · 均衡好开</div>
     <div id="nfs-lap">圈 1</div>
     <div id="nfs-time">0:00.00</div>
@@ -26,9 +28,12 @@
   <div class="nfs-br">
     <div id="nfs-drift">漂移 0</div>
   </div>
-  <div id="nfs-msg">WASD 驾驶 / Space 漂移 / Shift 氮气</div>
+  <div id="nfs-msg">WASD 驾驶 / Space 漂移 / Shift 氮气 / F 机炮 / R 火箭</div>
 <canvas id="nfs-map" width="150" height="150"></canvas>
 </div>
+
+<!-- 受击红闪 -->
+<div id="nfs-dmg"></div>
 
 <!-- 比赛 HUD / 结算 -->
 <div id="nfs-racehud" class="hidden">
@@ -47,6 +52,19 @@
     </div>
   </div>
 </div>
+<!-- 暂停菜单 -->
+<div id="nfs-pause" class="nfs-pause hidden">
+  <div class="nfs-pause-card">
+    <h2>已暂停</h2>
+    <p>稍作休息，赛道还在原地等你</p>
+    <div class="nfs-pause-actions">
+      <button id="nfs-pause-resume" type="button">继续驾驶</button>
+      <button id="nfs-pause-restart" type="button">重新开始</button>
+      <button id="nfs-pause-menu" type="button">返回主菜单</button>
+    </div>
+    <p class="nfs-pause-tip">快捷键：Esc / P 暂停或继续</p>
+  </div>
+</div>
 <button id="nfs-cheat-fab" type="button" class="hidden">金</button>
 <div id="nfs-cheat-panel" class="hidden"></div>
 
@@ -55,8 +73,8 @@
   <button id="nfs-mute" type="button" title="声音开（M）">🔊</button>
   <div class="nfs-panel">
     <h1>霓虹海岸</h1>
-    <p>竞速 · 漂移 · 氮气 · 海滨城市</p>
-    <div class="nfs-select">
+    <p>竞速 · 漂移 · 氮气 · 机炮 · 火箭</p>
+    <div class="nfs-card">
       <div class="nfs-label">选择赛车</div>
       <div class="nfs-garage">
         <canvas id="nfs-car-preview"></canvas>
@@ -65,10 +83,14 @@
       <div class="nfs-pills" id="nfs-car-list"></div>
       <div class="nfs-label">外观涂装</div>
       <div class="nfs-pills" id="nfs-paint-list"></div>
+    </div>
+    <div class="nfs-card">
       <div class="nfs-label">性能升级</div>
       <div id="nfs-upgrades"></div>
       <div class="nfs-label">金手指 · 疯狂模式</div>
       <div id="nfs-cheats"></div>
+    </div>
+    <div class="nfs-card">
       <div class="nfs-label">比赛模式</div>
       <div class="nfs-pills" id="nfs-mode-list"></div>
       <div class="nfs-label">对手难度</div>
@@ -78,8 +100,8 @@
       <div class="nfs-coins"><span class="nfs-coin-ico">●</span> 金币 <b id="nfs-coins">0</b></div>
     </div>
     <button id="nfs-btn-start">点火出发</button>
-    <p class="nfs-keys" id="nfs-keys-pc">W/S 油门刹车 · A/D 转向 · Space 手刹漂移 · Shift 氮气</p>
-    <p class="nfs-keys" id="nfs-keys-touch" style="display:none">← → 转向 · 右侧油门 / 刹车 / 漂移 / 氮气</p>
+    <p class="nfs-keys" id="nfs-keys-pc">W/S 油门刹车 · A/D 转向 · Space 漂移 · Shift 氮气 · F 机炮 · R 火箭</p>
+    <p class="nfs-keys" id="nfs-keys-touch" style="display:none">← → 转向 · 右侧油门/刹车/漂移/氮气 · 机炮/火箭</p>
   </div>
 </div>
 

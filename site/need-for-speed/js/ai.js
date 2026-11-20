@@ -53,6 +53,11 @@ export class AICar {
     this.active = true;
     this.weave = Math.random() * Math.PI * 2;
     this._tmp = new THREE.Vector3();
+    // M8 碰撞/损伤
+    this.hp = 100;
+    this.wrecked = false;
+    this.vx = 0; this.vz = 0;         // 估算速度（碰撞相对速度用）
+    this.pushX = 0; this.pushZ = 0;   // 碰撞位移偏移（逐帧衰减）
     loadAIModels().then((models) => {
       if (!models.length || !this.active) return;
       const template = this.modelTemplate || models[Math.floor(Math.random() * models.length)];
@@ -69,6 +74,25 @@ export class AICar {
       this.scene.add(model);
       this._sync(0);
     });
+  }
+
+  /** 受击（机炮/火箭/撞车共用）→ 击毁停机冒烟 */
+  hurt(d) {
+    if (this.wrecked || !this.active) return;
+    this.hp = Math.max(0, this.hp - d);
+    if (this.hp <= 0) {
+      this.wrecked = true;
+      if (this.model) {
+        this.model.rotation.z = (Math.random() - 0.5) * 0.35;
+        this.model.rotation.x = -0.06;
+      }
+    }
+  }
+
+  /** 碰撞推挤位移（偏移随时间衰减回轨道） */
+  push(nx, nz) {
+    this.pushX += nx;
+    this.pushZ += nz;
   }
 
   setGrid(startS, lane) {
@@ -98,8 +122,10 @@ export class AICar {
     const a = this.track.samples[i0], b = this.track.samples[i1];
     this.weave = (this.weave || 0) + 0.016;
     const lane = this.laneBase + (this.eliminated ? 0 : Math.sin(this.weave) * 0.8);
-    const x = a.x + (b.x - a.x) * k + (a.nx + (b.nx - a.nx) * k) * lane;
-    const z = a.z + (b.z - a.z) * k + (a.nz + (b.nz - a.nz) * k) * lane;
+    // 碰撞位移衰减
+    this.pushX *= 0.9; this.pushZ *= 0.9;
+    const x = a.x + (b.x - a.x) * k + (a.nx + (b.nx - a.nx) * k) * lane + this.pushX;
+    const z = a.z + (b.z - a.z) * k + (a.nz + (b.nz - a.nz) * k) * lane + this.pushZ;
     this.x = x; this.z = z;
     return { x, z, a, b, k };
   }
@@ -124,7 +150,7 @@ export class AICar {
    * @param {number} raceLength 比赛总长度（到达即完赛）
    */
   update(dt, playerProgress, raceLength) {
-    if (!this.model || this.finished) return;
+    if (!this.model || this.finished || this.wrecked) return;
     // 橡皮筋：落后玩家加速 / 领先放水
     const diff = playerProgress - this.progress;
     const k = Math.max(-0.12, Math.min(0.18, diff / 90));
@@ -133,20 +159,26 @@ export class AICar {
     if (raceLength && this.progress >= raceLength) {
       this.finished = true;
     }
-    this._computeXZ();
+    const xz = this._computeXZ();
+    const yaw = Math.atan2(xz.a.tx + (xz.b.tx - xz.a.tx) * xz.k, xz.a.tz + (xz.b.tz - xz.a.tz) * xz.k);
+    this.vx = Math.sin(yaw) * speed;
+    this.vz = Math.cos(yaw) * speed;
     this._sync(dt);
   }
 
   /** 警匪模式：朝目标点（玩家附近）行驶，速度更快带拦截偏移 */
   updateCop(dt, targetX, targetZ, enabled) {
-    if (!this.model || !enabled) return;
+    if (!this.model || !enabled || this.wrecked) return;
     const dx = targetX - this.x;
     const dz = targetZ - this.z;
     const d = Math.hypot(dx, dz) || 1;
     const speed = this.baseSpeed;
-    this.model.position.x += (dx / d) * speed * dt;
-    this.model.position.z += (dz / d) * speed * dt;
+    this.pushX *= 0.9; this.pushZ *= 0.9;
+    this.model.position.x += (dx / d) * speed * dt + this.pushX;
+    this.model.position.z += (dz / d) * speed * dt + this.pushZ;
     this.model.rotation.y = Math.atan2(dx, dz);
+    this.vx = (dx / d) * speed + this.pushX * 4;
+    this.vz = (dz / d) * speed + this.pushZ * 4;
     this.x = this.model.position.x; this.z = this.model.position.z;
   }
 

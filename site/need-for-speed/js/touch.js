@@ -8,7 +8,7 @@ export class TouchControls {
    * @param {HTMLElement} parent 挂载容器
    */
   constructor(parent) {
-    this.state = { throttle: 0, brake: 0, steer: 0, handbrake: false, nitro: false };
+    this.state = { throttle: 0, brake: 0, steer: 0, handbrake: false, nitro: false, cannon: false, rocket: false };
     this.root = document.createElement("div");
     this.root.className = "tc-layer";
     this.root.innerHTML = `
@@ -24,6 +24,10 @@ export class TouchControls {
         <div class="tc-row">
           <button class="tc-btn tc-brake" type="button">刹车</button>
           <button class="tc-btn tc-gas" type="button">油门</button>
+        </div>
+        <div class="tc-row">
+          <button class="tc-btn tc-cannon" type="button">机炮</button>
+          <button class="tc-btn tc-rocket" type="button">火箭</button>
         </div>
       </div>`;
     parent.appendChild(this.root);
@@ -75,6 +79,8 @@ export class TouchControls {
     bindBtn(".tc-brake", "brake");
     bindBtn(".tc-drift", "handbrake");
     bindBtn(".tc-nitro", "nitro");
+    bindBtn(".tc-cannon", "cannon");
+    bindBtn(".tc-rocket", "rocket");
   }
 
   show() { this.root.classList.add("tc-show"); }

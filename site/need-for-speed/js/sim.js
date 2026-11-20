@@ -86,13 +86,15 @@ export class CarSim {
     vl *= Math.exp(-grip * dt);
 
     // 纵向：油门/刹车/阻力
+    // 耐久损伤 → 性能衰减（hp 0 时 55% 动力，仍可行驶）
+    const hpK = 0.55 + 0.45 * clamp(this.hp / (this.hpMax || 100), 0, 1);
     const drag = d.dragK * vf * Math.abs(vf) * 0.02 + 0.6 * Math.sign(vf);
     let acc = 0;
-    const maxSpd = d.maxSpeed + (this.nitroActive ? d.nitroMaxAdd : 0);
+    const maxSpd = (d.maxSpeed + (this.nitroActive ? d.nitroMaxAdd : 0)) * hpK;
     if (input.throttle > 0 && vf < maxSpd) {
-      acc += input.throttle * d.accel * (this.nitroActive ? 1 : 0.82);
+      acc += input.throttle * d.accel * hpK * (this.nitroActive ? 1 : 0.82);
     }
-    if (this.nitroActive) acc += d.nitroAccel * 0.6;
+    if (this.nitroActive) acc += d.nitroAccel * hpK * 0.6;
     if (input.brake > 0) {
       if (vf > 0.02) {
         acc -= input.brake * d.brake;

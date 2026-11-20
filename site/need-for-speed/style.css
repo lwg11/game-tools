@@ -24,17 +24,29 @@ body { font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; co
 .nfs-nitro.full div { animation: nfsNitroPulse 1.2s infinite; }
 .nfs-tr { position: absolute; right: 24px; top: 20px; text-align: right; font-size: 18px; font-weight: 700; text-shadow: 0 2px 6px rgba(0,0,0,.7); }
 .nfs-tr div { margin-bottom: 4px; }
+/* 耐久条（M8 碰撞损伤）：位于氮气条下 */
+.nfs-hp { display: flex; align-items: center; gap: 6px; margin-top: 8px; width: 180px; }
+.nfs-hp span { font-size: 10px; opacity: .8; letter-spacing: 2px; }
+.nfs-hp-bar { flex: 1; height: 6px; border-radius: 3px; background: rgba(255,255,255,.15); overflow: hidden; }
+.nfs-hp-bar div { height: 100%; width: 100%; background: linear-gradient(90deg, #ff3b3b, #ff9040); }
 .nfs-br { position: absolute; right: 24px; bottom: 22px; text-align: right; }
 #nfs-drift { font-size: 20px; font-weight: 900; color: #ffd166; text-shadow: 0 2px 6px rgba(0,0,0,.7); }
 #nfs-msg { position: absolute; left: 50%; top: 34%; bottom: auto; transform: translateX(-50%); font-size: 16px; opacity: .85; text-shadow: 0 2px 6px rgba(0,0,0,.8); white-space: nowrap; }
 
 /* ---------------- 菜单 ---------------- */
 .nfs-menu { position: absolute; inset: 0; z-index: 20; display: flex; align-items: safe center; justify-content: center; background: radial-gradient(ellipse at center, rgba(20,12,44,.85), rgba(4,6,14,.96)); overflow-y: auto; }
-.nfs-panel { text-align: center; width: min(520px, 92vw); max-height: 100vh; overflow-y: auto; padding: 14px 0 18px; }
+.nfs-panel { text-align: center; width: min(560px, 92vw); max-height: 100vh; overflow-y: auto; padding: 14px 0 18px; }
 .nfs-panel h1 { font-size: 54px; font-weight: 900; font-style: italic; letter-spacing: 4px; margin-bottom: 4px; background: linear-gradient(90deg, #ff4fa3, #ffd166); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .nfs-panel p { opacity: .8; margin-bottom: 8px; }
 .nfs-panel button { pointer-events: auto; font-size: 22px; font-weight: 900; padding: 14px 48px; border: 0; border-radius: 8px; cursor: pointer; color: #111; background: linear-gradient(90deg, #ffd166, #ff9f43); }
 .nfs-keys { margin-top: 16px; font-size: 12px; opacity: .6; }
+
+/* M8 菜单卡片分区：赛车 / 改装+金手指 / 比赛 */
+.nfs-card {
+  background: rgba(255,255,255,.045); border: 1px solid rgba(255,255,255,.1);
+  border-radius: 14px; padding: 8px 12px 10px; margin: 10px auto; text-align: center;
+}
+.nfs-card .nfs-label { margin-top: 4px; }
 
 /* ---------------- 车库预览 ---------------- */
 .nfs-garage { margin: 2px 0 6px; }
@@ -43,7 +55,7 @@ body { font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; co
   background: radial-gradient(ellipse at 50% 70%, rgba(255,209,102,.07), rgba(10,12,20,.45) 70%);
   border: 1px solid rgba(255,255,255,.08);
 }
-.nfs-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 14px; margin-top: 6px; }
+.nfs-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px 14px; margin-top: 6px; }
 /* ---------------- 比赛 HUD / 结算 ---------------- */
 #nfs-racehud {
   position: fixed; top: 14px; left: 50%; transform: translateX(-50%);
@@ -80,6 +92,44 @@ body { font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; co
   background: rgba(255,255,255,.08); color: #fff;
 }
 .nfs-res-btns button:hover { background: rgba(255,255,255,.18); }
+
+/* M8+ 暂停按钮与暂停菜单 */
+.nfs-pause-btn {
+  display: block; margin: 0 0 8px auto; width: 44px; height: 44px;
+  border-radius: 12px; border: 1px solid rgba(255,255,255,.2);
+  background: rgba(8,10,16,.55); color: #fff; font-size: 18px;
+  cursor: pointer; backdrop-filter: blur(4px);
+}
+.nfs-pause-btn:hover { background: rgba(255,255,255,.14); }
+.nfs-pause-btn.on { background: rgba(255,212,122,.35); border-color: rgba(255,212,122,.7); }
+.nfs-pause {
+  position: fixed; inset: 0; z-index: 70; display: flex;
+  align-items: center; justify-content: center; padding: 20px;
+  background: rgba(5,7,12,.66); backdrop-filter: blur(8px);
+}
+.nfs-pause.hidden { display: none; }
+.nfs-pause-card {
+  width: min(400px, 100%); background: rgba(15,18,25,.97);
+  border: 1px solid rgba(255,212,122,.25); border-radius: 18px;
+  padding: 26px 22px; text-align: center;
+  box-shadow: 0 24px 60px rgba(0,0,0,.55);
+}
+.nfs-pause-card h2 { margin: 0 0 6px; font-size: 26px; letter-spacing: 2px; color: #ffd47a; }
+.nfs-pause-card > p { margin: 0 0 18px; color: #b8b3a3; font-size: 13px; }
+.nfs-pause-actions { display: flex; flex-direction: column; gap: 10px; }
+.nfs-pause-actions button {
+  padding: 13px 18px; border-radius: 11px; border: 1px solid rgba(255,255,255,.16);
+  background: #202634; color: #f2f0e8; font-size: 15px; font-weight: 700; cursor: pointer;
+}
+.nfs-pause-actions button:hover { background: #2b3342; }
+.nfs-pause-actions #nfs-pause-resume {
+  background: rgba(255,212,122,.85); border-color: rgba(255,212,122,.9); color: #17130a;
+}
+.nfs-pause-tip { margin: 14px 0 0 !important; font-size: 12px !important; color: #8d8878 !important; }
+@media (hover:none) and (pointer:coarse) {
+  .nfs-pause-btn { width: 48px; height: 48px; font-size: 20px; }
+  .nfs-tr { touch-action: manipulation; }
+}
 #nfs-res-again { background: linear-gradient(90deg, #ffd166, #ff9f43) !important; color: #111 !important; border: 0 !important; }
 
 .nfs-coins { margin-top: 6px; font-size: 13px; opacity: .9; }
@@ -120,13 +170,19 @@ body { font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; co
 
 /* ---------------- M5 小地图 / 静音按钮 ---------------- */
 #nfs-map {
-  position: fixed; left: 14px; bottom: 14px; z-index: 24;
+  position: fixed; left: 12px; top: 12px; bottom: auto; z-index: 24;
   border-radius: 10px; border: 1px solid rgba(255,255,255,.22);
   box-shadow: 0 6px 20px rgba(0,0,0,.45); pointer-events: none;
   width: 120px; height: 120px;
 }
 @media (max-width: 640px) {
-  #nfs-map { width: 84px; height: 84px; left: 8px; bottom: 8px; }
+  #nfs-map { width: 72px; height: 72px; left: 10px; top: 10px; bottom: auto; }
+}
+/* 受击红闪（M8） */
+#nfs-dmg {
+  position: fixed; inset: 0; z-index: 40; pointer-events: none; opacity: 0;
+  background: radial-gradient(ellipse at center, transparent 42%, rgba(255,30,20,.5) 100%);
+  transition: opacity .22s ease-out;
 }
 #nfs-mute {
   position: absolute; top: 12px; right: 14px; z-index: 30;
@@ -202,9 +258,18 @@ body { font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; co
 .tc-drift.on { background: rgba(122,111,208,.6); }
 .tc-nitro { background: rgba(255,209,102,.18); border-color: rgba(255,209,102,.55); }
 .tc-nitro.on { background: rgba(255,209,102,.65); }
+.tc-cannon { background: rgba(90,60,60,.35); border-color: rgba(255,150,120,.5); }
+.tc-cannon.on { background: rgba(220,90,60,.6); }
+.tc-rocket { background: rgba(90,50,70,.35); border-color: rgba(255,100,120,.5); }
+.tc-rocket.on { background: rgba(220,60,90,.6); }
 @media (max-height: 420px) {
   .tc-btn { width: 62px; height: 62px; font-size: 13px; }
   .tc-left, .tc-right { font-size: 22px; }
+  /* 横屏触屏：速度表/漂移分挪到转向与按钮之间的空档 */
+  .nfs-tl { left: 200px; bottom: 14px; top: auto; }
+  .nfs-br { right: auto; left: 140px; top: 12px; bottom: auto; text-align: center; }
+  #nfs-drift { font-size: 14px; }
+  #nfs-msg { bottom: 8px; }
 }
 
 /* ---------------- M7 疯狂模式金手指 ---------------- */
@@ -252,19 +317,20 @@ body { font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; co
   .nfs-speed { font-size: 42px; }
   .nfs-nitro { width: 140px; }
   #nfs-nitro-pct { left: 146px; }
-  /* 小地图挪到右上（让开按钮区） */
-  #nfs-map { width: 72px; height: 72px; left: auto; right: 10px; top: calc(10px + env(safe-area-inset-top)); bottom: auto; }
-  /* 圈/时间/最佳放右侧中部（原右上与 P 名次打架） */
-  .nfs-tr { top: auto; right: 12px; bottom: 182px; font-size: 12px; opacity: .92; }
-  /* 漂移分挪右侧纵向中部 */
+  .nfs-hp { width: 132px; }
+  /* 小地图挪到左上（M8 需求：地图放左上） */
+  #nfs-map { width: 72px; height: 72px; left: 10px; top: calc(10px + env(safe-area-inset-top)); bottom: auto; }
+  /* 圈/时间/最佳：挪到左下转向键上方（右侧让位 3 行武器按钮） */
+  .nfs-tr { top: auto; right: auto; left: 12px; bottom: 96px; text-align: left; font-size: 12px; opacity: .92; }
+  /* 漂移分保持右侧纵向中部 */
   .nfs-br { top: 44%; right: 12px; bottom: auto; }
   #nfs-drift { font-size: 16px; }
   /* 提示语中段偏上，避开速度表 */
   #nfs-msg { top: 34%; bottom: auto; font-size: 14px; }
   #nfs-race-pos { font-size: 34px; }
   #nfs-race-extra { font-size: 12px; }
-  .tc-btn { width: 68px; height: 68px; font-size: 14px; }
-  .tc-left, .tc-right { font-size: 24px; }
   .tc-row { gap: 10px; }
   .tc-cluster { gap: 10px; }
+  /* 竖屏时 6 个触控按钮共 214px 高，需留出更多标题/速度空间 */
+  .nfs-tl { top: calc(168px + env(safe-area-inset-top)); }
 }
