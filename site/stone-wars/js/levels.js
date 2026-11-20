@@ -6,7 +6,9 @@
  *   铁骑时代（6-10 关） 铁弩、加农炮、火油弹，重甲与骑兵登场
  *   火器时代（11-15 关）火枪、迫击炮、火箭弹，射程与爆炸范围升级
  *   机械时代（16-20 关）激光炮、电磁炮，穿透与高伤害
+ *   进阶关卡（21-28 关）每个时代再加两关：玄铁岩炸不坏，难度与敌人同步提升
  * 每关目标均为「消灭全部敌人」，par 为三星回合数。
+ * 21+ 关引入玄铁岩（炸不坏）与玄铁地基，防止后期战场被炸穿后失去可玩性。
  */
 
 export const WORLD = { w: 1280, h: 720, tile: 16, cols: 80, rows: 45 };
@@ -239,11 +241,12 @@ export const THEMES = {
   },
 };
 
-function makeLevel(id, era, name, goal, theme, style, seed, players, enemies, ai, par, turnLimit, windMax) {
+function makeLevel(id, era, name, goal, theme, style, seed, players, enemies, ai, par, turnLimit, windMax, hard) {
   return {
     id, era, name, goal, theme, style, seed,
     player: players.map((x) => ({ x })),
     enemies, ai, par, turnLimit, windMax,
+    hard: !!hard,
   };
 }
 
@@ -301,6 +304,24 @@ export const LEVELS = [
       { x: 1120, type: "mech", hp: 240 },
       { x: 1180, type: "gunner", hp: 180 },
     ], 0.84, 8, 18, 7),
+
+  // ------------------------------------------------------------ 进阶关卡 21-28（玄铁岩：炸不动）
+  makeLevel(21, "stone", "石林迷阵", "玄铁巨柱挡路，绕过柱子炸掉对手", "dawn", "hills", 211,
+    [150, 235, 315], [{ x: 950, type: "brute" }, { x: 1035, type: "thrower" }, { x: 1120, type: "chief" }], 0.58, 5, 13, 4.5, true),
+  makeLevel(22, "stone", "岩原伏击", "先清两侧投手，再轰酋长", "dusk", "canyon", 221,
+    [145, 225, 310], [{ x: 940, type: "thrower" }, { x: 1030, type: "brute" }, { x: 1115, type: "chief", hp: 200 }], 0.6, 6, 13, 5, true),
+  makeLevel(23, "iron", "铁石要塞", "玄铁城垛炸不动，用火油弹灌进去", "day", "fortress", 231,
+    [150, 235], [{ x: 975, type: "shield" }, { x: 1060, type: "raider" }, { x: 1140, type: "raider" }, { x: 1020, type: "shield", hp: 230 }], 0.66, 6, 14, 4, true),
+  makeLevel(24, "iron", "断崖铁门", "玄铁桥墩炸不坏，隔崖互轰", "dusk", "bridge", 241,
+    [150, 235, 310], [{ x: 995, type: "raider" }, { x: 1075, type: "shield", hp: 240 }, { x: 1150, type: "raider" }], 0.68, 6, 14, 5, true),
+  makeLevel(25, "gun", "钢柱战壕", "玄铁立柱封路，火枪齐射别的缝", "night", "trench", 251,
+    [150, 235], [{ x: 960, type: "gunner" }, { x: 1040, type: "grenadier" }, { x: 1120, type: "shield", hp: 260 }, { x: 1175, type: "gunner" }], 0.72, 7, 15, 4.5, true),
+  makeLevel(26, "gun", "硝石峡谷", "风大坑深，火箭弹别打偏", "dusk", "canyon", 261,
+    [145, 225, 305], [{ x: 930, type: "grenadier" }, { x: 1020, type: "gunner" }, { x: 1100, type: "gunner" }, { x: 1170, type: "grenadier" }], 0.74, 7, 15, 7, true),
+  makeLevel(27, "mech", "电磁要塞", "重装机甲守城，贯穿角度是关键", "night", "fortress", 271,
+    [150, 235, 310], [{ x: 940, type: "mech", hp: 260 }, { x: 1030, type: "mech", hp: 260 }, { x: 1120, type: "warlord", hp: 320 }, { x: 990, type: "gunner" }], 0.82, 8, 16, 5, true),
+  makeLevel(28, "mech", "终局裂谷", "双领主与电磁卫队，最后决战", "volcano", "volcano", 281,
+    [145, 225, 305], [{ x: 900, type: "warlord", hp: 340 }, { x: 985, type: "mech", hp: 260 }, { x: 1070, type: "mech", hp: 260 }, { x: 1155, type: "grenadier" }], 0.88, 9, 18, 8, true),
 ];
 
 /** 根据关卡与武器栏生成弹药：首个武器无限，其余按关卡递增 */

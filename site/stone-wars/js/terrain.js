@@ -3,6 +3,7 @@
  * 采用 80×45 的瓦片网格（每格 16px）：
  * - 支持坑洞、悬崖、桥、洞顶等结构
  * - 爆炸会真实挖掉瓦片，地表也会随之塌陷
+ * - 瓦片值 2＝无尽模式基岩、4＝玄铁岩（炸不坏）、3＝普通障碍石（可炸）
  * - 地形离屏缓存，只有爆炸时才重绘
  */
 import { WORLD, THEMES } from "./levels.js";
@@ -32,6 +33,7 @@ export class Terrain {
     this.tile = WORLD.tile;
     this.grid = new Uint8Array(this.cols * this.rows);
     this.rng = mulberry32(level.seed || 1);
+    this.hard = !!(level.hard || level.endless);
     this.decor = [];
     this.canvas = document.createElement("canvas");
     this.canvas.width = WORLD.w;
@@ -40,6 +42,10 @@ export class Terrain {
     this._build();
     // 无尽模式铺一层不可破坏的基岩，防止玩家把敌人脚下整片地面挖空后自动刷波
     if (level.endless) this.fillRect(0, this.rows - 2, this.cols - 1, this.rows - 1, 2);
+    // 高难关卡（21+）铺一层玄铁地基：炸不坏，杜绝「把石头全炸完」后的无解局
+    if (level.hardFloor) {
+      for (let c = 0; c < this.cols; c++) this.grid[this.idx(c, this.rows - 1)] = 4;
+    }
     this._addObstacles(level);
     this._makeDecor();
     this.redraw(THEMES[level.theme] || THEMES.day);
@@ -115,7 +121,7 @@ export class Terrain {
         const dx = px - cx;
         const dy = py - cy;
         const edge = 0.82 + hash2(c, r, this.level.seed || 1) * 0.36;
-        if (dx * dx + dy * dy <= r2 * edge && this.grid[this.idx(c, r)] !== 2) {
+        if (dx * dx + dy * dy <= r2 * edge && this.grid[this.idx(c, r)] !== 2 && this.grid[this.idx(c, r)] !== 4) {
           this.grid[this.idx(c, r)] = 0;
         }
       }
@@ -305,10 +311,12 @@ export class Terrain {
       for (let i = 0; i < 4; i++) this._placeObstacle(rng, ["pillar", "platform", "bunker", "arch"][i]);
       return;
     }
-    const target = Math.min(10, Math.floor(id / 2));
+    const target = Math.min(12, Math.floor(id / 2));
     if (target <= 0) return;
     const rng = mulberry32((level.seed || 1) * 13 + 77);
     const types = ["pillar", "platform", "bunker", "arch", "bunker", "pillar", "platform", "arch"];
+    // 高难关卡：玄铁巨柱 + 不可破坏石柱，保证后期地形不会被一次性炸穿
+    if (this.hard) types.push("monolith", "pillar", "arch", "monolith");
     for (let i = 0; i < target; i++) {
       this._placeObstacle(rng, types[Math.floor(rng() * types.length)]);
     }
@@ -317,33 +325,40 @@ export class Terrain {
   _placeObstacle(rng, type) {
     const c0 = 22 + Math.floor(rng() * 28);
     const c1 = Math.min(54, c0 + 2 + Math.floor(rng() * 4));
+    // 高难关卡的所有人工石构都是玄铁岩（炸不坏），只留普通地形可以挖
+    const v = this.hard ? 4 : 3;
     if (type === "pillar") {
       const h = 6 + Math.floor(rng() * 7);
       const top = this.rows - 3 - h;
-      this.fillRect(c0, top, c1, this.rows - 3, 3);
+      this.fillRect(c0, top, c1, this.rows - 3, v);
       // 中间留一个可穿越的缺口，避免把战场完全封死
       if (rng() > 0.3) {
         const gap = top + 2 + Math.floor(rng() * Math.max(1, h - 4));
         this.clearRect(c0, gap, c1, gap + 1);
       }
+    } else if (type === "monolith") {
+      // 玄铁巨柱：从地底直通上层，彻底免疫爆炸
+      const h = 9 + Math.floor(rng() * 8);
+      const top = this.rows - 2 - h;
+      this.fillRect(c0, top, c1 + 1, this.rows - 2, 4);
     } else if (type === "platform") {
       const top = this.rows - 9 - Math.floor(rng() * 7);
-      this.fillRect(c0, top, c1, top, 3);
+      this.fillRect(c0, top, c1, top, v);
       if (rng() > 0.35) {
         const leg = rng() > 0.5 ? c0 : c1;
-        this.fillRect(leg, top + 1, leg, top + 2 + Math.floor(rng() * 3), 3);
+        this.fillRect(leg, top + 1, leg, top + 2 + Math.floor(rng() * 3), v);
       }
     } else if (type === "arch") {
       const h = 5 + Math.floor(rng() * 6);
       const top = this.rows - 3 - h;
-      this.fillRect(c0, top, c0 + 1, this.rows - 3, 3);
-      this.fillRect(c1 - 1, top, c1, this.rows - 3, 3);
-      this.fillRect(c0, top, c1, top + 1, 3);
+      this.fillRect(c0, top, c0 + 1, this.rows - 3, v);
+      this.fillRect(c1 - 1, top, c1, this.rows - 3, v);
+      this.fillRect(c0, top, c1, top + 1, v);
     } else {
       // 地面掩体：只在地表以上堆 2~4 层石头
       const ground = this.surfaceTop(c0 * this.tile + this.tile) ?? (this.rows - 6) * this.tile;
       const top = Math.max(12, Math.floor(ground / this.tile) - 4);
-      this.fillRect(c0, top, c1, Math.floor(ground / this.tile) - 1, 3);
+      this.fillRect(c0, top, c1, Math.floor(ground / this.tile) - 1, v);
     }
   }
 
@@ -383,6 +398,7 @@ export class Terrain {
         const tileValue = this.grid[this.idx(c, r)];
         let color;
         if (tileValue === 2) color = "#2b3038"; // 无尽模式基岩
+        else if (tileValue === 4) color = "#3c475e"; // 玄铁岩（不可破坏）
         else if (tileValue === 3) color = "#6d665c"; // 关卡障碍石
         else if (depth === 0) color = t.grass;
         else if (depth < 3) color = dirt[0];
@@ -398,6 +414,14 @@ export class Terrain {
           if (tileValue === 2) {
             ctx.fillStyle = "rgba(150,210,255,.35)";
             ctx.fillRect(x, y, tile, 3);
+          } else if (tileValue === 4) {
+            // 玄铁岩：冷色金属高光 + 菱形结晶，猛一看就知道炸不动
+            ctx.fillStyle = "rgba(140,180,235,.5)";
+            ctx.fillRect(x, y, tile, 3);
+            ctx.fillStyle = "rgba(8,10,16,.55)";
+            ctx.fillRect(x, y + tile - 3, tile, 3);
+            ctx.fillStyle = "rgba(170,210,255,.5)";
+            ctx.fillRect(x + 2 + (n * 6) % 8, y + 6 + (n * 9) % 8, 3, 3);
           } else if (tileValue === 3) {
             ctx.fillStyle = "rgba(232,220,200,.42)";
             ctx.fillRect(x, y, tile, 3);
