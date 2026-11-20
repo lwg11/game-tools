@@ -7,6 +7,7 @@
 1. 静态站点托管（/games/ 前缀）
 2. 账号注册 / 登录 / 登出（PBKDF2 密码哈希 + 服务端会话）
 3. 每个账号、每款游戏的关卡进度云端存档
+4. 游玩场次/活跃追踪 + 后台管理（固定管理员 15755782911）
 
 运行：
     python3 app.py
@@ -32,16 +33,35 @@ import time
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import urlparse, unquote
+import urllib.request
 
 APP_NAME = "石器游戏厅"
 PREFIX = "/games"
-GAME_IDS = {"stone-wars", "pvz", "carrot", "pokemon", "vice-city"}
+GAME_IDS = {"stone-wars", "pvz", "carrot", "pokemon", "vice-city", "need-for-speed"}
 SESSION_COOKIE = "gt_session"
 SESSION_TTL = 30 * 24 * 3600          # 30 天
 PBKDF2_ROUNDS = 150000
 MAX_BODY = 128 * 1024                 # 请求体上限 128KB（进度数据足够）
 USERNAME_RE = re.compile(r"^[\w\u4e00-\u9fa5-]{2,20}$", re.UNICODE)
 PHONE_RE = re.compile(r"^1[3-9]\d{9}$")
+
+# 固定管理员：此手机号绑定的账号永远拥有管理权限，且不可被解除
+FIXED_ADMIN_PHONE = "15755782911"
+
+# 首页可配置展示的游戏（顺序即默认顺序）
+HOME_GAMES = [
+    {"id": "stone-wars", "title": "石器大战"},
+    {"id": "pvz", "title": "植物大战僵尸加强版"},
+    {"id": "carrot", "title": "保卫萝卜"},
+    {"id": "pokemon", "title": "精灵宝可梦"},
+    {"id": "vice-city", "title": "罪恶都市"},
+    {"id": "need-for-speed", "title": "霓虹海岸竞速"},
+]
+
+# IP 归属地缓存（免费接口，超时/失败一律「未知」，不影响主流程）
+_ip_region_cache = {}
+_ip_region_lock = threading.Lock()
+
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.environ.get("GT_ROOT") or os.path.abspath(os.path.join(BASE_DIR, "..", "site"))
@@ -99,12 +119,36 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
             """
         )
-        # 兼容旧数据库：补充 phone 字段并建立唯一索引（手机号可为空，但非空时必须唯一）
+        # 兼容旧数据库：逐步补齐新字段/新表（脚本可重复执行）
         columns = [row[1] for row in conn.execute("PRAGMA table_info(users)").fetchall()]
         if "phone" not in columns:
             conn.execute("ALTER TABLE users ADD COLUMN phone TEXT")
+        if "is_admin" not in columns:
+            conn.execute("ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0")
+        if "register_ip" not in columns:
+            conn.execute("ALTER TABLE users ADD COLUMN register_ip TEXT")
+        if "last_login_ip" not in columns:
+            conn.execute("ALTER TABLE users ADD COLUMN last_login_ip TEXT")
+        if "last_active_at" not in columns:
+            conn.execute("ALTER TABLE users ADD COLUMN last_active_at INTEGER NOT NULL DEFAULT 0")
         conn.execute(
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_phone ON users(phone) WHERE phone IS NOT NULL"
+        )
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS user_plays (
+                user_id INTEGER NOT NULL,
+                game_id TEXT NOT NULL,
+                plays INTEGER NOT NULL DEFAULT 0,
+                last_play INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (user_id, game_id)
+            )"""
+        )
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS config (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                updated_at INTEGER NOT NULL DEFAULT 0
+            )"""
         )
         conn.commit()
     finally:
@@ -119,6 +163,82 @@ def hash_password(password, salt_hex):
 
 def token_hash(token):
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def ip_region(ip):
+    """根据 IP 显示归属地：局域网直接标注，公网走免费接口（带缓存，失败返回「未知」）。"""
+    if not ip:
+        return "未知"
+    ip = ip.strip()
+    if ip in ("127.0.0.1", "::1", "::", "0.0.0.0") or ip.startswith("127."):
+        return "本地网络"
+    if ":" in ip:
+        return "未知（IPv6）"
+    parts = ip.split(".")
+    if len(parts) != 4:
+        return "未知"
+    try:
+        nums = tuple(int(p) for p in parts)
+    except ValueError:
+        return "未知"
+    if not all(0 <= n <= 255 for n in nums):
+        return "未知"
+    if nums[0] == 10 or (nums[0] == 172 and 16 <= nums[1] <= 31) or (nums[0] == 192 and nums[1] == 168) or (nums[0] == 169 and nums[1] == 254):
+        return "本地网络"
+    with _ip_region_lock:
+        hit = _ip_region_cache.get(ip)
+    if hit is not None:
+        return hit
+    region = "未知"
+    try:
+        from urllib.parse import quote
+        url = "http://whois.pconline.com.cn/ipJson.jsp?ip=%s&json=true" % quote(ip)
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0)"})
+        with urllib.request.urlopen(req, timeout=2) as resp:
+            text = resp.read().decode("gbk", "ignore")
+        start, end = text.find("{"), text.rfind("}")
+        if start >= 0 and end > start:
+            data = json.loads(text[start:end + 1])
+            region = str(data.get("region") or data.get("regiondesc") or "未知").strip() or "未知"
+    except Exception:
+        region = "未知"
+    with _ip_region_lock:
+        if len(_ip_region_cache) >= 2048:
+            _ip_region_cache.clear()
+        _ip_region_cache[ip] = region
+    return region
+
+
+def summarize_progress(game_id, data):
+    """把进度 JSON 压成后台展示用的小摘要。"""
+    if not isinstance(data, dict):
+        return {}
+    if game_id in ("stone-wars", "pvz", "carrot"):
+        return {
+            "unlocked": data.get("unlocked", 1),
+            "stars": len(data.get("stars") or {}),
+            "cleared": len(data.get("cleared") or {}),
+            "endlessBest": data.get("endlessBest", 0),
+        }
+    if game_id == "pokemon":
+        return {
+            "caught": len(data.get("caught") or {}),
+            "questsDone": data.get("questsDone", 0),
+            "money": data.get("money", 0),
+        }
+    if game_id == "vice-city":
+        return {
+            "missionsDone": data.get("missionsDone", 0),
+            "money": data.get("money", 0),
+            "weapons": len(data.get("weapons") or []),
+        }
+    if game_id == "need-for-speed":
+        return {
+            "racesDone": data.get("racesDone", 0),
+            "wins": data.get("wins", 0),
+            "bestLap": data.get("bestLap", 0),
+        }
+    return {}
 
 
 # ---------------------------------------------------------------- HTTP 帮助
@@ -143,9 +263,10 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "same-origin")
         self.send_header("X-Frame-Options", "SAMEORIGIN")
-        if headers:
-            for k, v in headers.items():
-                self.send_header(k, v)
+        extra = dict(headers or {})
+        extra.setdefault("Cache-Control", "no-store")  # API 不缓存；静态文件自带缓存策略
+        for k, v in extra.items():
+            self.send_header(k, v)
         self.end_headers()
         try:
             self.wfile.write(body)
@@ -258,6 +379,22 @@ class Handler(BaseHTTPRequestHandler):
             return self._api_save_progress()
         if sub == "/prefs" and method == "PUT":
             return self._api_save_prefs()
+        if sub == "/track" and method == "POST":
+            return self._api_track()
+        if sub == "/config" and method == "GET":
+            return self._api_config()
+        if sub == "/admin/stats" and method == "GET":
+            return self._api_admin_stats()
+        if sub == "/admin/users" and method == "GET":
+            return self._api_admin_users()
+        if sub == "/admin/users/admin" and method == "PUT":
+            return self._api_admin_toggle()
+        if sub == "/admin/ip-region" and method == "GET":
+            return self._api_admin_ip_region()
+        if sub == "/admin/config" and method == "GET":
+            return self._api_admin_config()
+        if sub == "/admin/config" and method == "PUT":
+            return self._api_admin_save_config()
         raise ApiError(404, "接口不存在")
 
     def _read_json(self):
@@ -326,13 +463,36 @@ class Handler(BaseHTTPRequestHandler):
         conn = db_connect()
         try:
             row = conn.execute(
-                "SELECT u.id, u.username, u.phone, s.expires_at FROM sessions s "
+                "SELECT u.id, u.username, u.phone, u.is_admin, s.expires_at FROM sessions s "
                 "JOIN users u ON u.id = s.user_id WHERE s.token_hash = ?",
                 (token_hash(morsel.value),),
             ).fetchone()
-            if not row or row["expires_at"] < int(time.time()):
-                return None
-            return {"id": row["id"], "username": row["username"], "phone": row["phone"]}
+        finally:
+            conn.close()
+        if not row or row["expires_at"] < int(time.time()):
+            return None
+        user = {
+            "id": row["id"],
+            "username": row["username"],
+            "phone": row["phone"],
+            # 固定管理员：绑定指定手机号的账号永远拥有管理权
+            "is_admin": bool(row["is_admin"]) or row["phone"] == FIXED_ADMIN_PHONE,
+        }
+        return user
+
+    def _require_admin(self):
+        user = self._current_user()
+        if not user:
+            raise ApiError(401, "请先登录")
+        if not user.get("is_admin"):
+            raise ApiError(403, "需要管理员权限")
+        return user
+
+    def _touch_active(self, user_id):
+        conn = db_connect()
+        try:
+            conn.execute("UPDATE users SET last_active_at = ? WHERE id = ?", (int(time.time()), user_id))
+            conn.commit()
         finally:
             conn.close()
 
@@ -373,12 +533,13 @@ class Handler(BaseHTTPRequestHandler):
             raise ApiError(400, "密码长度需为 6-72 位")
         salt = secrets.token_hex(16)
         pass_hash = hash_password(password, salt)
+        register_ip = self._client_ip()
         conn = db_connect()
         try:
             try:
                 cur = conn.execute(
-                    "INSERT INTO users(username, phone, pass_hash, salt, created_at) VALUES (?,?,?,?,?)",
-                    (username, phone or None, pass_hash, salt, int(time.time())),
+                    "INSERT INTO users(username, phone, pass_hash, salt, created_at, register_ip) VALUES (?,?,?,?,?,?)",
+                    (username, phone or None, pass_hash, salt, int(time.time()), register_ip),
                 )
             except sqlite3.IntegrityError:
                 conn.rollback()
@@ -428,6 +589,13 @@ class Handler(BaseHTTPRequestHandler):
         with _login_lock:
             _login_hits.pop(ip, None)
         token = self._create_session(row["id"])
+        conn = db_connect()
+        try:
+            conn.execute("UPDATE users SET last_login_ip = ?, last_active_at = ? WHERE id = ?",
+                        (ip, int(time.time()), row["id"]))
+            conn.commit()
+        finally:
+            conn.close()
         self._json(200, {"user": {"id": row["id"], "username": row["username"], "phone": row["phone"]}},
                    {"Set-Cookie": self._session_cookie(token)})
 
@@ -495,6 +663,7 @@ class Handler(BaseHTTPRequestHandler):
             pref_row = conn.execute("SELECT data FROM prefs WHERE user_id = ?", (user["id"],)).fetchone()
         finally:
             conn.close()
+        self._touch_active(user["id"])
         progress = {}
         for row in rows:
             try:
@@ -575,6 +744,204 @@ class Handler(BaseHTTPRequestHandler):
         finally:
             conn.close()
         self._json(200, {"ok": True, "prefs": merged, "updatedAt": now})
+
+    # ---- 游玩追踪：进入一次游戏记一场（未登录忽略）
+    def _api_track(self):
+        self._check_origin()
+        user = self._current_user()
+        if not user:
+            return self._json(200, {"ok": True, "guest": True})
+        data = self._read_json()
+        game_id = str(data.get("gameId", ""))
+        if game_id not in GAME_IDS:
+            raise ApiError(400, "未知游戏")
+        now = int(time.time())
+        conn = db_connect()
+        try:
+            conn.execute(
+                "INSERT INTO user_plays(user_id, game_id, plays, last_play) VALUES (?,?,1,?) "
+                "ON CONFLICT(user_id, game_id) DO UPDATE SET plays=plays+1, last_play=excluded.last_play",
+                (user["id"], game_id, now),
+            )
+            conn.execute("UPDATE users SET last_active_at = ? WHERE id = ?", (now, user["id"]))
+            conn.commit()
+        finally:
+            conn.close()
+        return self._json(200, {"ok": True})
+
+    # ---- 首页展示配置
+    def _home_games(self):
+        known = [g["id"] for g in HOME_GAMES]
+        conn = db_connect()
+        try:
+            row = conn.execute("SELECT value FROM config WHERE key = 'home_games'").fetchone()
+        finally:
+            conn.close()
+        if row:
+            try:
+                ids = json.loads(row["value"])
+            except ValueError:
+                ids = None
+            if isinstance(ids, list) and ids:
+                filtered = [g for g in ids if g in known]
+                if filtered:
+                    return filtered
+        return list(known)
+
+    def _api_config(self):
+        return self._json(200, {"games": self._home_games()})
+
+    # ---- 后台：统计总览
+    def _api_admin_stats(self):
+        self._require_admin()
+        conn = db_connect()
+        try:
+            total = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+            admin_count = conn.execute(
+                "SELECT COUNT(*) FROM users WHERE is_admin = 1 OR phone = ?", (FIXED_ADMIN_PHONE,)
+            ).fetchone()[0]
+            week = int(time.time()) - 7 * 24 * 3600
+            reg_week = conn.execute("SELECT COUNT(*) FROM users WHERE created_at >= ?", (week,)).fetchone()[0]
+            active_week = conn.execute("SELECT COUNT(*) FROM users WHERE last_active_at >= ?", (week,)).fetchone()[0]
+            plays = conn.execute("SELECT COALESCE(SUM(plays),0) FROM user_plays").fetchone()[0]
+            game_rows = conn.execute(
+                "SELECT game_id, SUM(plays) FROM user_plays GROUP BY game_id ORDER BY 2 DESC"
+            ).fetchall()
+        finally:
+            conn.close()
+        return self._json(200, {
+            "totalUsers": total,
+            "adminCount": admin_count,
+            "registrationsWeek": reg_week,
+            "activeWeek": active_week,
+            "totalPlays": plays,
+            "gamePlays": [{"game": r[0], "plays": r[1]} for r in game_rows],
+            "fixedAdminPhone": FIXED_ADMIN_PHONE,
+        })
+
+    # ---- 后台：账号列表（含 IP / 活跃 / 每款游戏场次与进度）
+    def _api_admin_users(self):
+        self._require_admin()
+        conn = db_connect()
+        try:
+            rows = conn.execute(
+                "SELECT id, username, phone, is_admin, created_at, register_ip, last_login_ip, last_active_at "
+                "FROM users ORDER BY created_at DESC"
+            ).fetchall()
+            play_rows = conn.execute("SELECT user_id, game_id, plays, last_play FROM user_plays").fetchall()
+            prog_rows = conn.execute("SELECT user_id, game_id, data, updated_at FROM progress").fetchall()
+        finally:
+            conn.close()
+        plays_map = {}
+        for r in play_rows:
+            plays_map.setdefault(r["user_id"], {})[r["game_id"]] = {"plays": r["plays"], "lastPlay": r["last_play"]}
+        prog_map = {}
+        for r in prog_rows:
+            try:
+                data = json.loads(r["data"])
+            except ValueError:
+                continue
+            prog_map.setdefault(r["user_id"], {})[r["game_id"]] = {
+                "updatedAt": r["updated_at"], "progress": summarize_progress(r["game_id"], data)
+            }
+        out = []
+        for u in rows:
+            games = []
+            gm = plays_map.get(u["id"], {})
+            pm = prog_map.get(u["id"], {})
+            for gid in sorted(set(gm) | set(pm)):
+                entry = {"game": gid, "plays": (gm.get(gid) or {}).get("plays", 0)}
+                last = (gm.get(gid) or {}).get("lastPlay", 0)
+                if last:
+                    entry["lastPlay"] = last
+                if gid in pm:
+                    entry["updatedAt"] = pm[gid]["updatedAt"]
+                    entry["progress"] = pm[gid]["progress"]
+                games.append(entry)
+            out.append({
+                "id": u["id"],
+                "username": u["username"],
+                "phone": u["phone"],
+                "is_admin": bool(u["is_admin"]) or u["phone"] == FIXED_ADMIN_PHONE,
+                "createdAt": u["created_at"],
+                "registerIp": u["register_ip"] or "",
+                "lastLoginIp": u["last_login_ip"] or "",
+                "lastActiveAt": u["last_active_at"] or 0,
+                "games": games,
+            })
+        return self._json(200, {"users": out})
+
+    # ---- 后台：IP 归属地（按需查询，避免列表页被外网接口拖慢）
+    def _api_admin_ip_region(self):
+        self._require_admin()
+        ip = ""
+        for part in urlparse(self.path).query.split("&"):
+            k, _, v = part.partition("=")
+            if unquote(k) == "ip":
+                ip = unquote(v)
+                break
+        ip = ip.strip()[:64]
+        return self._json(200, {"ip": ip, "region": ip_region(ip)})
+
+    # ---- 后台：设置 / 取消管理员
+    def _api_admin_toggle(self):
+        self._check_origin()
+        admin = self._require_admin()
+        data = self._read_json()
+        user_id = int(data.get("userId") or 0)
+        make = bool(data.get("admin"))
+        conn = db_connect()
+        try:
+            row = conn.execute("SELECT id, username, phone FROM users WHERE id = ?", (user_id,)).fetchone()
+            if not row:
+                raise ApiError(404, "账号不存在")
+            if not make:
+                if row["phone"] == FIXED_ADMIN_PHONE:
+                    raise ApiError(403, "固定管理员 %s 不能取消管理权限" % FIXED_ADMIN_PHONE)
+                if row["id"] == admin["id"]:
+                    raise ApiError(403, "不能取消自己的管理权限")
+            conn.execute("UPDATE users SET is_admin = ? WHERE id = ?", (1 if make else 0, user_id))
+            conn.commit()
+        finally:
+            conn.close()
+        return self._json(200, {"ok": True, "userId": user_id, "admin": make})
+
+    # ---- 后台：首页游戏配置
+    def _api_admin_config(self):
+        self._require_admin()
+        visible = self._home_games()
+        return self._json(200, {
+            "games": [
+                {"id": g["id"], "title": g["title"], "visible": g["id"] in visible}
+                for g in HOME_GAMES
+            ],
+            "order": visible,
+            "fixedAdminPhone": FIXED_ADMIN_PHONE,
+        })
+
+    def _api_admin_save_config(self):
+        self._check_origin()
+        self._require_admin()
+        data = self._read_json()
+        ids = data.get("games")
+        if not isinstance(ids, list):
+            raise ApiError(400, "games 必须是数组")
+        known = {g["id"] for g in HOME_GAMES}
+        cleaned = [g for g in ids if g in known]
+        if not cleaned:
+            raise ApiError(400, "至少保留一款游戏")
+        now = int(time.time())
+        conn = db_connect()
+        try:
+            conn.execute(
+                "INSERT INTO config(key, value, updated_at) VALUES ('home_games',?,?) "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at",
+                (json.dumps(cleaned, ensure_ascii=False), now),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+        return self._json(200, {"ok": True, "games": cleaned})
 
     def log_message(self, fmt, *args):
         # 只记录错误与 API 写操作，避免静态日志刷屏

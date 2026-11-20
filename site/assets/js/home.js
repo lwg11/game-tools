@@ -1,8 +1,12 @@
 import { markDeviceBadge, isMobile } from "./device.js";
-import { initAccount } from "./account.js";
+import { initAccount, account } from "./account.js";
 import { loadMergedProgress, GAME_IDS } from "./progress.js";
+import { api } from "./api.js";
 import { toast } from "./ui.js";
 import { getMode, setMode, applyBodyMode } from "./mode.js";
+import { preventBrowserGestures } from "./gestures.js";
+
+preventBrowserGestures();
 
 markDeviceBadge(document.getElementById("deviceTag"));
 markDeviceBadge(document.getElementById("deviceTag2"));
@@ -28,7 +32,7 @@ if (modeBtn) {
   window.addEventListener("gt:mode-changed", paintMode);
 }
 
-const TOTAL = { "stone-wars": 20, pvz: 12, carrot: 8 };
+const TOTAL = { "stone-wars": 28, pvz: 12, carrot: 8 };
 const els = {
   "stone-wars": {
     bar: document.getElementById("swBar"),
@@ -170,6 +174,38 @@ async function boot() {
     await initAccount(document.querySelector("[data-account-chip]"));
   } catch (err) { /* 游客模式 */ }
   await refreshCards();
+  // 管理员：顶部追加「后台管理」入口
+  try {
+    if (account.getUser() && account.getUser().is_admin) {
+      const head = document.querySelector(".head-right");
+      if (head && !document.getElementById("adminEntry")) {
+        const link = document.createElement("a");
+        link.className = "btn ghost admin-entry";
+        link.id = "adminEntry";
+        link.href = "./admin/";
+        link.textContent = "后台管理";
+        head.appendChild(link);
+      }
+    }
+  } catch (err) { /* ignore */ }
+  // 后台配置的首页展示：只显示配置中选中的游戏
+  try {
+    const cfg = await api.config();
+    const list = Array.isArray(cfg && cfg.games) ? cfg.games : [];
+    if (list.length) {
+      let removed = 0;
+      document.querySelectorAll("[data-game]").forEach((card) => {
+        if (!list.includes(card.dataset.game)) {
+          card.remove();
+          removed += 1;
+        }
+      });
+      if (removed > 0) {
+        const cnt = document.getElementById("portalCount");
+        if (cnt) cnt.textContent = "当前 " + (GAME_IDS.length - removed) + " 款可玩，云端进度自动保存。";
+      }
+    }
+  } catch (err) { /* 配置拉取失败则展示全部游戏 */ }
   // 登录 / 登出后刷新卡片（gt:auth-changed 只在用户状态真正变化时派发）
   window.addEventListener("gt:auth-changed", (e) => {
     refreshCards();

@@ -162,6 +162,29 @@ class StaticRouteTest(ServerBase):
         self.assertEqual(status, 200)
         self.assertTrue(obj["ok"])
 
+    def test_admin_page_served(self):
+        status, data, _, ctype = self.request("GET", "/games/admin/")
+        self.assertEqual(status, 200)
+        self.assertIn("text/html", ctype)
+        self.assertIn("后台管理".encode("utf-8"), data)
+        status, data, _, ctype = self.request("GET", "/games/admin/admin.js")
+        self.assertEqual(status, 200)
+        self.assertIn("javascript", ctype)
+
+    def test_cache_control(self):
+        conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+        # API 一律 no-store
+        conn.request("GET", "/games/api/config")
+        r = conn.getresponse()
+        r.read()
+        self.assertIn("no-store", r.getheader("Cache-Control") or "")
+        # 静态资源仍允许缓存
+        conn.request("GET", "/games/assets/js/api.js")
+        r = conn.getresponse()
+        r.read()
+        self.assertIn("max-age=300", r.getheader("Cache-Control") or "")
+        conn.close()
+
     def test_unknown_api(self):
         status, obj, _ = self.jrequest("GET", "/games/api/nope")
         self.assertEqual(status, 404)
@@ -389,5 +412,113 @@ class SecurityTest(ServerBase):
         self.assertEqual(status, 200)
 
 
+class AdminFlowTest(ServerBase):
+    """后台：固定管理员手机号、账号列表、设/消管理员、首页配置、场次追踪。"""
+
+    def _as_admin(self):
+        status, obj, set_cookie = self.register("固定管理员%s" % self.tag, "pass123456", app.FIXED_ADMIN_PHONE)
+        if status == 409:
+            # 固定手机号已注册（同一测试库内跨用例共享）：改用手机号登录
+            status, obj, set_cookie = self.jrequest("POST", "/games/api/login",
+                                                    {"identifier": app.FIXED_ADMIN_PHONE, "password": "pass123456"})
+        self.assertEqual(status, 200)
+        self.keep_cookie(set_cookie)
+        return obj["user"]["username"]
+
+    def test_fixed_phone_admin(self):
+        username = self._as_admin()
+        status, obj, _ = self.jrequest("GET", "/games/api/me")
+        self.assertEqual(status, 200)
+        self.assertTrue(obj["user"]["is_admin"])
+        self.assertEqual(obj["user"]["phone"], app.FIXED_ADMIN_PHONE)
+
+    def test_non_admin_forbidden(self):
+        username = "普通用户%s" % self.tag
+        status, obj, set_cookie = self.register(username)
+        self.assertEqual(status, 200)
+        self.keep_cookie(set_cookie)
+        status, obj, _ = self.jrequest("GET", "/games/api/me")
+        self.assertFalse(obj["user"]["is_admin"])
+        for path in ["/games/api/admin/users", "/games/api/admin/stats",
+                     "/games/api/admin/config", "/games/api/admin/ip-region?ip=1.1.1.1"]:
+            status, obj, _ = self.jrequest("GET", path)
+            self.assertEqual(status, 403, path)
+
+    def test_track_counts_plays_and_activity(self):
+        self._as_admin()
+        status, obj, _ = self.jrequest("POST", "/games/api/track", {"gameId": "stone-wars"})
+        self.assertEqual(status, 200)
+        status, obj, _ = self.jrequest("POST", "/games/api/track", {"gameId": "stone-wars"})
+        self.assertEqual(status, 200)
+        status, obj, _ = self.jrequest("GET", "/games/api/admin/users")
+        self.assertEqual(status, 200)
+        me = [u for u in obj["users"] if u["phone"] == app.FIXED_ADMIN_PHONE][0]
+        self.assertTrue(me["lastActiveAt"] > 0)
+        plays = [g for g in me["games"] if g["game"] == "stone-wars"][0]
+        self.assertEqual(plays["plays"], 2)
+        status, obj, _ = self.jrequest("POST", "/games/api/track", {"gameId": "xxx"})
+        self.assertEqual(status, 400)
+        # 未登录不计场次也不报错
+        old_cookie, self.cookie = self.cookie, None
+        status, obj, _ = self.jrequest("POST", "/games/api/track", {"gameId": "pvz"})
+        self.assertEqual(status, 200)
+        self.assertTrue(obj.get("guest"))
+        self.cookie = old_cookie
+
+    def test_toggle_admin_rules(self):
+        self._as_admin()
+        admin_cookie = self.cookie
+        status, obj, set_cookie2 = self.register("升管%s" % self.tag)
+        self.assertEqual(status, 200)
+        new_id = obj["user"]["id"]
+        status, obj, _ = self.jrequest("PUT", "/games/api/admin/users/admin", {"userId": new_id, "admin": True})
+        self.assertEqual(status, 200)
+        self.cookie = set_cookie2.split(";")[0]
+        status, obj, _ = self.jrequest("GET", "/games/api/admin/stats")
+        self.assertEqual(status, 200)
+        # 切回固定管理员：新管理员降级
+        self.cookie = admin_cookie
+        status, obj, _ = self.jrequest("PUT", "/games/api/admin/users/admin", {"userId": new_id, "admin": False})
+        self.assertEqual(status, 200)
+        # 固定管理员不可被取消权限，也不允许自我降级
+        users = self.jrequest("GET", "/games/api/admin/users")[1]["users"]
+        fixed_id = [u for u in users if u["phone"] == app.FIXED_ADMIN_PHONE][0]["id"]
+        status, obj, _ = self.jrequest("PUT", "/games/api/admin/users/admin", {"userId": fixed_id, "admin": False})
+        self.assertEqual(status, 403)
+
+    def test_home_games_config(self):
+        self._as_admin()
+        status, obj, _ = self.jrequest("GET", "/games/api/admin/config")
+        self.assertEqual(status, 200)
+        self.assertEqual(len(obj["games"]), 6)
+        status, obj, _ = self.jrequest("PUT", "/games/api/admin/config",
+                                       {"games": ["stone-wars", "pvz"]})
+        self.assertEqual(status, 200)
+        status, obj, _ = self.jrequest("GET", "/games/api/config")
+        self.assertEqual(obj["games"], ["stone-wars", "pvz"])
+        status, obj, _ = self.jrequest("PUT", "/games/api/admin/config",
+                                       {"games": ["stone-wars", "pvz", "carrot"]})
+        self.assertEqual(status, 200)
+        # 非法值被拒绝
+        status, obj, _ = self.jrequest("PUT", "/games/api/admin/config", {"games": []})
+        self.assertEqual(status, 400)
+
+    def test_admin_stats_and_ip_region(self):
+        self._as_admin()
+        status, obj, _ = self.jrequest("GET", "/games/api/admin/stats")
+        self.assertEqual(status, 200)
+        self.assertGreaterEqual(obj["totalUsers"], 1)
+        self.assertEqual(obj["fixedAdminPhone"], app.FIXED_ADMIN_PHONE)
+        # 本地 IP 直接识别；非法输入返回「未知」；公网 IP 返回字符串（离线失败也是「未知」）
+        self.assertEqual(app.ip_region("127.0.0.1"), "本地网络")
+        self.assertEqual(app.ip_region("10.8.0.1"), "本地网络")
+        self.assertEqual(app.ip_region("192.168.1.20"), "本地网络")
+        self.assertEqual(app.ip_region("not-an-ip"), "未知")
+        self.assertIsInstance(app.ip_region("8.8.8.8"), str)
+
+
 if __name__ == "__main__":
     unittest.main()
+
+
+

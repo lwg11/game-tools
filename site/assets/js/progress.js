@@ -282,6 +282,10 @@ export class ProgressStore {
       const me = await api.me();
       this.user = me.user;
       if (me.user) {
+        if (!sessionStorage.getItem("gt.tracked." + this.gameId)) {
+          sessionStorage.setItem("gt.tracked." + this.gameId, "1");
+          api.track(this.gameId).catch(() => { /* 上报失败不影响游戏 */ });
+        }
         await this.syncFromServer(me.progress[this.gameId] || null);
       } else {
         this._setSync("local");

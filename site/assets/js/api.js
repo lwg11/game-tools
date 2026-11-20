@@ -45,4 +45,13 @@ export const api = {
   bindPhone: (phone) => request("/bind-phone", { method: "POST", body: { phone } }),
   saveProgress: (gameId, data) => request("/progress", { method: "PUT", body: { gameId, data } }),
   savePrefs: (data) => request("/prefs", { method: "PUT", body: { data } }),
+  track: (gameId) => request("/track", { method: "POST", body: { gameId } }),
+  config: () => request("/config"),
+  adminStats: () => request("/admin/stats"),
+  adminUsers: () => request("/admin/users"),
+  adminSetAdmin: (userId, admin) =>
+    request("/admin/users/admin", { method: "PUT", body: { userId, admin } }),
+  adminIpRegion: (ip) => request("/admin/ip-region?ip=" + encodeURIComponent(ip)),
+  adminConfig: () => request("/admin/config"),
+  adminSaveConfig: (games) => request("/admin/config", { method: "PUT", body: { games } }),
 };
