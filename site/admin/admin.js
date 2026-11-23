@@ -139,7 +139,7 @@ function renderUsers(users) {
     const fixed = u.phone === "15755782911" ? ' <span class="badge">固定</span>' : "";
     return `
       <div class="u-row" data-user="${u.id}">
-        <div class="u-name"><b>${esc(u.username)}</b><small>${u.phone ? esc(u.phone) : "未绑定手机号"}${fixed}</small></div>
+        <div class="u-name"><span class="u-avatar">${esc(String(u.username || "?").trim().charAt(0).toUpperCase())}</span><div><b>${esc(u.username)}</b><small>${u.phone ? esc(u.phone) : "未绑定手机号"}${fixed}</small></div></div>
         <div class="u-role">${role}${toggle}</div>
         <div class="u-ip">
           <div>注册 ${esc(u.registerIp || "—")} <span class="region" data-ip="${esc(u.registerIp)}">（查询中）</span> · ${esc(fmtDate(u.createdAt))}</div>
@@ -233,6 +233,15 @@ $("loginForm").addEventListener("submit", async (e) => {
 });
 
 $("saveConfig").addEventListener("click", saveConfig);
+
+// 无权限面板：「重新登录」清会话并回到登录表单
+$("forbidLogin").addEventListener("click", async () => {
+  try { await api.logout(); } catch (err) { /* 忽略 */ }
+  $("loginError").textContent = "";
+  $("loginId").value = "";
+  $("loginPw").value = "";
+  showPanel("loginPanel");
+});
 
 document.querySelectorAll(".atab").forEach((tab) => {
   tab.addEventListener("click", () => {
