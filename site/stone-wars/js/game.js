@@ -276,7 +276,13 @@ class StoneWars {
     const unlocked = clamp(Number(this.store.state.unlocked) || 1, 1, LEVELS.length);
     const endlessBest = Number(this.store.state.endlessBest) || 0;
     const grid = document.getElementById("levelGrid");
-    const cards = LEVELS.map((lv) => {
+    // 关卡选择按「时代分组」排列：同一时代的关卡（含 21+ 进阶关）放在一起，
+    // 同时代内仍按关卡号升序；id 与存档进度保持不变。
+    const ERA_RANK = { stone: 0, iron: 1, gun: 2, mech: 3 };
+    const ordered = LEVELS.slice().sort(
+      (a, b) => (ERA_RANK[a.era] - ERA_RANK[b.era]) || (a.id - b.id)
+    );
+    const cards = ordered.map((lv) => {
       const locked = lv.id > unlocked;
       const s = Number(stars[lv.id]) || 0;
       const themeClass = "theme-" + (lv.theme || "dawn");
