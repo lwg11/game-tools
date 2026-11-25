@@ -1,0 +1,26 @@
+{
+  "name": "game-tools",
+  "version": "1.0.0",
+  "main": "index.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lwg11/game-tools.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/lwg11/game-tools/issues"
+  },
+  "homepage": "https://github.com/lwg11/game-tools#readme",
+  "description": "",
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  }
+}
