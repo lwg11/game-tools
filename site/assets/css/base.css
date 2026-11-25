@@ -345,3 +345,29 @@ input, textarea, select, [contenteditable="true"], [data-allow-select] {
 .stage, .stage-wrap, .game-root, canvas {
   touch-action: none;
 }
+
+/* ---------------- 账号编辑（修改用户名/密码/忘记密码） ---------------- */
+.account-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.025);
+}
+.account-edit .btn {
+  min-height: 40px;
+  font-size: 13.5px;
+  border-radius: 10px;
+}
+.forgot-box {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.025);
+  text-align: center;
+}
+.forgot-box p { color: var(--muted); font-size: 13.5px; line-height: 1.7; }
+.forgot-tip { font-size: 12px !important; color: var(--muted-2) !important; margin-top: 6px; }

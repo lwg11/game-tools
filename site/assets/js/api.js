@@ -1,6 +1,5 @@
-/**
- * 后端 API 封装（同源，路径固定为 /games/api）
- */
+import { encryptPassword } from "./crypto.js";
+
 const BASE = "/games/api";
 
 async function request(path, options = {}) {
@@ -37,20 +36,34 @@ async function request(path, options = {}) {
 
 export const api = {
   me: () => request("/me"),
-  register: (username, password, phone) =>
-    request("/register", { method: "POST", body: { username, password, phone: phone || undefined } }),
-  login: (identifier, password) =>
-    request("/login", { method: "POST", body: { identifier, password } }),
+  register: async (username, password, phone) =>
+    request("/register", { method: "POST", body: { username, password: await encryptPassword(password), phone } }),
+  login: async (phone, password) =>
+    request("/login", { method: "POST", body: { phone, password: await encryptPassword(password) } }),
   logout: () => request("/logout", { method: "POST", body: {} }),
   bindPhone: (phone) => request("/bind-phone", { method: "POST", body: { phone } }),
+  changePassword: async (oldPassword, newPassword) =>
+    request("/change-password", {
+      method: "POST",
+      body: {
+        oldPassword: await encryptPassword(oldPassword),
+        newPassword: await encryptPassword(newPassword),
+      },
+    }),
+  changeUsername: (username) =>
+    request("/change-username", { method: "POST", body: { username } }),
   saveProgress: (gameId, data) => request("/progress", { method: "PUT", body: { gameId, data } }),
   savePrefs: (data) => request("/prefs", { method: "PUT", body: { data } }),
   track: (gameId) => request("/track", { method: "POST", body: { gameId } }),
+  heartbeat: () => request("/heartbeat", { method: "POST", body: {} }),
+  leaderboard: (gameId) => request("/leaderboard?game=" + encodeURIComponent(gameId)),
   config: () => request("/config"),
   adminStats: () => request("/admin/stats"),
   adminUsers: () => request("/admin/users"),
   adminSetAdmin: (userId, admin) =>
     request("/admin/users/admin", { method: "PUT", body: { userId, admin } }),
+  adminResetPassword: async (userId, password) =>
+    request("/admin/users/password", { method: "PUT", body: { userId, password: await encryptPassword(password) } }),
   adminIpRegion: (ip) => request("/admin/ip-region?ip=" + encodeURIComponent(ip)),
   adminConfig: () => request("/admin/config"),
   adminSaveConfig: (games) => request("/admin/config", { method: "PUT", body: { games } }),

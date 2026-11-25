@@ -5,6 +5,8 @@ import { api } from "./api.js";
 import { toast } from "./ui.js";
 import { getMode, setMode, applyBodyMode } from "./mode.js";
 import { preventBrowserGestures } from "./gestures.js";
+import { startHeartbeat } from "./heartbeat.js";
+import { leaderboard } from "./leaderboard.js";
 
 preventBrowserGestures();
 
@@ -206,11 +208,33 @@ async function boot() {
       }
     }
   } catch (err) { /* 配置拉取失败则展示全部游戏 */ }
+  // 每个游戏卡片增加「排行榜」按钮
+  document.querySelectorAll(".game-card").forEach((card) => {
+    const gameId = card.dataset.game;
+    if (!gameId) return;
+    const actions = card.querySelector(".card-actions");
+    if (!actions) return;
+    const btn = document.createElement("button");
+    btn.className = "btn ghost lb-btn";
+    btn.type = "button";
+    btn.textContent = "排行榜";
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      leaderboard.open(gameId);
+    });
+    actions.insertBefore(btn, actions.firstChild);
+  });
   // 登录 / 登出后刷新卡片（gt:auth-changed 只在用户状态真正变化时派发）
   window.addEventListener("gt:auth-changed", (e) => {
     refreshCards();
-    if (e.detail && e.detail.user) toast(`欢迎回来，${e.detail.user.username}`, "ok", 1800);
+    if (e.detail && e.detail.user) {
+      toast(`欢迎回来，${e.detail.user.username}`, "ok", 1800);
+      startHeartbeat();
+    }
   });
+  // 已登录用户启动心跳
+  if (account.getUser()) startHeartbeat();
 }
 
 boot();
