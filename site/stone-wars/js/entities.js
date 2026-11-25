@@ -60,9 +60,16 @@ export class Unit {
     if (!this.onGround) {
       this.vy += 1500 * dt;
       const ny = this.y + this.vy * dt;
-      // 空中水平移动（斜跳）
+      // 空中水平移动（斜跳）：直接修改 x，不触发落地逻辑
       if (this.vx !== 0) {
-        this.tryMove(this.vx * dt);
+        const dx = this.vx * dt;
+        const nx = clamp(this.x + dx, 14, W - 14);
+        // 检查是否被墙挡住
+        if (!this.game.terrain.solidAt(nx, this.y - 12) && !this.game.terrain.solidAt(nx, this.y - 34)) {
+          this.x = nx;
+        } else {
+          this.vx = 0;
+        }
         this.vx *= Math.pow(0.3, dt);
         if (Math.abs(this.vx) < 8) this.vx = 0;
       }

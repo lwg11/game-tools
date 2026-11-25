@@ -1242,7 +1242,12 @@ if (!this.players.some((u) => u.alive)) { this.finish(false, "族人全部倒下
         if (!this.aim.active && !this.aim.locked) u.facing = dir;
       }
     } else {
-      u.tryMove(step * 0.62);
+      // 空中移动：直接修改 x，不触发落地逻辑
+      const dx = step * 0.62;
+      const nx = clamp(u.x + dx, 14, W - 14);
+      if (!this.terrain.solidAt(nx, u.y - 12) && !this.terrain.solidAt(nx, u.y - 34)) {
+        u.x = nx;
+      }
       this.moveBudget = Math.max(0, this.moveBudget - Math.abs(step) * 0.62);
     }
   }
