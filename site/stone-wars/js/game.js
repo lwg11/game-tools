@@ -11,7 +11,7 @@ import { initAccount } from "../../assets/js/account.js";
 import { icon, toast } from "../../assets/js/ui.js";
 import { audio } from "../../assets/js/audio.js";
 import { isCrazy, applyBodyMode } from "../../assets/js/mode.js";
-import { ENEMY_TYPES, ERAS, ERA_WEAPONS, LEVELS, THEMES, WEAPONS, ammoFor, getEndlessLevel, getEra, getLevel } from "./levels.js";
+import { ENEMY_TYPES, ERAS, ERA_WEAPONS, LEVELS, THEMES, WEAPONS, ammoFor, getEndlessLevel, getEndlessEra, getEra, getLevel } from "./levels.js";
 import { H, TAU, W, clamp, rand } from "./common.js";
 import { Sfx } from "./sfx.js";
 import { Projectile, Unit } from "./entities.js";
@@ -794,10 +794,13 @@ class StoneWars {
       this.finish(false, "回合耗尽");
       return;
     }
-    if (!this.enemies.some((u) => u.alive)) { this.finish(true); return; }
-    if (!this.players.some((u) => u.alive)) { this.finish(false, "族人全部倒下"); return; }
-    this.turnTeam = 0;
-    this.phase = "aim";
+  if (!this.enemies.some((u) => u.alive)) {
+    if (this.level.endless) { this._updateEndless(0); return; }
+    this.finish(true); return;
+  }
+  if (!this.players.some((u) => u.alive)) { this.finish(false, "族人全部倒下"); return; }
+  this.turnTeam = 0;
+  this.phase = "aim";
     this.wind = this._rollWind();
     this.moveBudget = this.maxMove;
     this.resolveT = null;
@@ -822,7 +825,10 @@ class StoneWars {
 
   _beginEnemyTurn() {
     if (this.phase === "over" || this.cheatRealtime) return;
-    if (!this.enemies.some((u) => u.alive)) { this.finish(true); return; }
+    if (!this.enemies.some((u) => u.alive)) {
+      if (this.level.endless) { this._updateEndless(0); return; }
+      this.finish(true); return;
+    }
     if (!this.players.some((u) => u.alive)) { this.finish(false, "族人全部倒下"); return; }
     this.turnTeam = 1;
     this.phase = "enemyWait";
@@ -840,11 +846,14 @@ class StoneWars {
   /** 敌方回合先走位（被挡住会起跳），再瞄准开火 */
   _enemyMove() {
     if (this.phase !== "enemyWait") return;
-    const u = this._activeEnemy();
-    if (!u) { this.finish(true); return; }
-    const targets = this.players.filter((p) => p.alive);
-    if (!targets.length) { this.finish(false, "族人全部倒下"); return; }
-    const nearest = targets.reduce((a, b) => (Math.abs(a.x - u.x) < Math.abs(b.x - u.x) ? a : b), targets[0]);
+  const u = this._activeEnemy();
+  if (!u) {
+    if (this.level.endless) { this._updateEndless(0); return; }
+    this.finish(true); return;
+  }
+  const targets = this.players.filter((p) => p.alive);
+  if (!targets.length) { this.finish(false, "族人全部倒下"); return; }
+  const nearest = targets.reduce((a, b) => (Math.abs(a.x - u.x) < Math.abs(b.x - u.x) ? a : b), targets[0]);
     const dist = Math.abs(nearest.x - u.x);
     let dir = 0;
     if (dist > 430) dir = Math.sign(nearest.x - u.x);
@@ -891,11 +900,14 @@ class StoneWars {
 
   _enemyDecide() {
     if (this.phase !== "enemyWait" && this.phase !== "enemyMove") return;
-    const u = this._activeEnemy();
-    if (!u) { this.finish(true); return; }
-    const targets = this.players.filter((p) => p.alive);
-    if (!targets.length) { this.finish(false, "族人全部倒下"); return; }
-    const accuracy = clamp((Number(this.level.ai) || 0.4) + this._difficulty().acc, 0, 0.98);
+  const u = this._activeEnemy();
+  if (!u) {
+    if (this.level.endless) { this._updateEndless(0); return; }
+    this.finish(true); return;
+  }
+  const targets = this.players.filter((p) => p.alive);
+  if (!targets.length) { this.finish(false, "族人全部倒下"); return; }
+  const accuracy = clamp((Number(this.level.ai) || 0.4) + this._difficulty().acc, 0, 0.98);
     targets.sort((a, b) => a.hp - b.hp || Math.abs(a.x - u.x) - Math.abs(b.x - u.x));
     // 关卡越靠后，AI 越倾向于集火残血目标
     const focus = accuracy > 0.6 && Math.random() < accuracy * 0.7;
@@ -1108,10 +1120,13 @@ class StoneWars {
   }
 
   // ------------------------------------------------------------ 弹道结算
-  _finishShot() {
-    if (this.phase !== "flying") return;
-    if (!this.enemies.some((u) => u.alive)) { this.finish(true); return; }
-    if (!this.players.some((u) => u.alive)) { this.finish(false, "族人全部倒下"); return; }
+_finishShot() {
+if (this.phase !== "flying") return;
+if (!this.enemies.some((u) => u.alive)) {
+if (this.level.endless) { this._updateEndless(0); return; }
+this.finish(true); return;
+}
+if (!this.players.some((u) => u.alive)) { this.finish(false, "族人全部倒下"); return; }
     if (this.turnTeam === 0) {
       this._beginEnemyTurn();
     } else {
@@ -1233,11 +1248,18 @@ class StoneWars {
   }
 
   _updateEndless(dt) {
-    if (!this.level.endless || this.phase !== "aim") return;
+    if (!this.level.endless) return;
+    if (this.phase !== "aim" && this.phase !== "flying" && this.phase !== "enemyWait") return;
     if (this.enemies.some((e) => e.alive)) return;
     if (this.endlessWave > 0 && !this.endlessCleared) {
       this.endlessCleared = true;
       this._onEndlessWaveClear();
+    }
+    // 敌人全灭后，立即进入下一波准备
+    if (this.phase !== "aim") {
+      this.phase = "aim";
+      this.turnTeam = 0;
+      this._updateHUD();
     }
     this.endlessWaveTimer -= dt;
     if (this.endlessWaveTimer <= 0) {
@@ -1250,22 +1272,39 @@ class StoneWars {
   _spawnEndlessWave() {
     this.endlessWave += 1;
     const wave = this.endlessWave;
+    const eraCfg = getEndlessEra(wave);
+    // 时代递进时切换场景主题与武器
+    const prevEra = this.era ? this.era.id : "stone";
+    if (eraCfg.era !== prevEra) {
+      this.era = getEra(eraCfg.era);
+      this.theme = THEMES[eraCfg.theme] || THEMES.dawn;
+      this.level.era = eraCfg.era;
+      this.level.theme = eraCfg.theme;
+      this.level.ai = eraCfg.ai;
+      this.level.windMax = eraCfg.windMax;
+      // 解锁新时代武器
+      const newWeapons = ERA_WEAPONS[eraCfg.era] || ERA_WEAPONS.stone;
+      this.weaponIds = newWeapons.slice(0, 7);
+      this.ammo = ammoFor(this.level, this.weaponIds);
+      this.selectedWeapon = this.weaponIds.find((k) => (this.ammo[k] || 0) > 0) || this.weaponIds[0];
+      this._refreshWeaponBar();
+      this._showBanner(
+        `进入${this.era.name}`,
+        `第 ${wave} 波 · 敌人更强 · 解锁新武器`,
+        2.2
+      );
+    } else {
+      this._showBanner(`第 ${wave} 波`, "敌人从右侧来袭", 1.8);
+    }
     const count = Math.min(7, 1 + Math.floor(wave * 0.6));
-    const pools = [
-      ["grunt", "thrower", "brute"],
-      ["raider", "shield", "brute"],
-      ["gunner", "grenadier", "shield"],
-      ["mech", "gunner", "grenadier"],
-      ["mech", "warlord", "mech"],
-    ];
-    const pool = pools[Math.min(pools.length - 1, Math.floor((wave - 1) / 2))];
+    const pool = eraCfg.enemies;
     for (let i = 0; i < count; i++) {
       const type = pool[Math.floor(Math.random() * pool.length)];
       const cfg = ENEMY_TYPES[type] || ENEMY_TYPES.grunt;
       const x = clamp(880 + (i % 4) * 78 + rand(-20, 20), 840, W - 40);
       const y = this._spawnY(x);
       const baseHp = cfg.hp;
-      const hp = Math.round(baseHp * (1 + wave * 0.18) * this._difficulty().hp);
+      const hp = Math.round(baseHp * eraCfg.hpMul * (1 + wave * 0.08) * this._difficulty().hp);
       const index = this.enemies.length;
       const u = new Unit(this, 1, x, y, type, hp, index, `${cfg.name} ${wave}-${i + 1}`);
       u.baseHp = baseHp;
@@ -1274,7 +1313,6 @@ class StoneWars {
       this.enemies.push(u);
       this.units.push(u);
     }
-    this._showBanner(`第 ${wave} 波`, "敌人从右侧来袭", 1.8);
     this.sfx.wave ? this.sfx.wave() : this.sfx.turn();
   }
 
@@ -1485,7 +1523,8 @@ class StoneWars {
     if (this.phase === "over" || this.phase === "menu") return;
     if (!this.players.some((u) => u.alive)) { this.finish(false, "族人全部倒下"); return; }
     if (!this.enemies.some((u) => u.alive)) {
-      if (!this.level.endless) this.finish(true);
+      if (this.level.endless) { this._updateEndless(0); return; }
+      this.finish(true);
       return;
     }
     this._refreshFireButton();
@@ -1511,10 +1550,11 @@ class StoneWars {
     let newRecord = false;
     if (win) {
       if (isEndless) {
+        // 无尽模式不会有「胜利」，只有玩家全灭才结束
         this.store.update((p) => {
-          p.endlessBest = Math.max(Number(p.endlessBest) || 0, 1);
+          p.endlessBest = Math.max(Number(p.endlessBest) || 0, this.endlessWave);
         });
-        this.endlessBest = Math.max(this.endlessBest, 1);
+        this.endlessBest = Math.max(this.endlessBest, this.endlessWave);
       } else {
         if (alive === totalPlayers && this.turnNo <= par) stars = 3;
         else if (alive === totalPlayers || this.turnNo <= par) stars = 2;
@@ -1551,20 +1591,20 @@ class StoneWars {
       el.style.transitionDelay = (i * 0.12) + "s";
     });
     $("resultTitle").textContent = isEndless
-      ? (win ? "无限模式胜利" : "无限模式失败")
+      ? "无限模式结束"
       : (win ? "胜利！" : "战败");
     $("resultTitle").style.color = win ? "#ffe0ad" : "#ff9c8f";
     $("resultSub").textContent = isEndless
-      ? "无回合上限 · 对手全灭即胜利"
+      ? `坚持到第 ${this.endlessWave} 波 · 历史最佳 ${this.endlessBest} 波`
       : `第 ${this.level.id} 关 · ${this.level.name}`;
     $("statTurns").textContent = `${this.turnNo}`;
     $("statAlive").textContent = `${alive}/${this.players.length}`;
-    $("statStars").textContent = isEndless ? (win ? "胜利" : "失败") : win ? `${stars}★` : "0★";
+    $("statStars").textContent = isEndless ? `${this.endlessWave} 波` : win ? `${stars}★` : "0★";
     const starLabel = $("statStars").parentElement.querySelector("span");
-    if (starLabel) starLabel.textContent = isEndless ? "结果" : "获得星星";
+    if (starLabel) starLabel.textContent = isEndless ? "坚持波数" : "获得星星";
     let note = "";
     if (isEndless) {
-      note = win ? "无回合上限，你消灭了全部敌人" : "无限模式没有回合上限，调整武器再试一次";
+      note = `你坚持到了第 ${this.endlessWave} 波 · 历史最佳 ${this.endlessBest} 波`;
       if (newRecord) note += " · 新纪录";
     } else if (win) {
       if (stars === 3) note = "三星达成：全员存活，并在目标回合内结束战斗";
@@ -1576,9 +1616,13 @@ class StoneWars {
     }
     $("resultNote").textContent = note;
     const next = $("nextBtn");
-    if (win) {
+    if (isEndless) {
+      // 无尽模式：无论胜负都显示「再来一次」
       next.style.display = "";
-      next.textContent = isEndless ? "再战无限" : (this.level.id < LEVELS.length ? "下一关" : "无限模式");
+      next.textContent = "再来一次";
+    } else if (win) {
+      next.style.display = "";
+      next.textContent = this.level.id < LEVELS.length ? "下一关" : "无限模式";
     } else {
       next.style.display = "none";
     }
@@ -1791,9 +1835,9 @@ class StoneWars {
 
   _updateHUD() {
     if (!this.level) return;
-    document.getElementById("hudLevel").textContent = this.level.endless
-      ? "无限模式 · 机械时代"
-      : `${this.era.name} · 第 ${this.level.id} 关 · ${this.level.name}`;
+document.getElementById("hudLevel").textContent = this.level.endless
+? `无限模式 · ${this.era.name}`
+: `${this.era.name} · 第 ${this.level.id} 关 · ${this.level.name}`;
     document.getElementById("hudTime").textContent = this.cheatRealtime ? "实时" : this.level.endless ? "∞" : String(this.turnNo);
     document.getElementById("windVal").textContent = Math.abs(this.wind).toFixed(1);
     const arrow = document.getElementById("windArrow");

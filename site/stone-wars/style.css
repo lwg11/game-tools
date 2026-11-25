@@ -327,29 +327,50 @@ body.normal-mode #hudCheat { display: none; }
   }
 }
 
-/* ---- 竖屏：武器栏在画布下方黑色区域（不遮挡画面） ---- */
+/* ---- 竖屏：底部统一控制栏（移动 + 武器 + 跳跃） ---- */
 @media (orientation: portrait) {
+  /* 武器栏收起时：在底部控制栏中间 */
   .weapon-bar {
+    position: absolute;
     left: 50%;
     bottom: calc(12px + var(--safe-bottom));
     transform: translateX(-50%);
+    padding: 0;
+    background: transparent;
+    border: none;
+    backdrop-filter: none;
   }
   .weapon-bar.aiming {
     transform: translateX(-50%) translateY(6px);
   }
+  /* 展开时：浮在画布底部区域，不超出屏幕 */
   .weapon-bar.expanded {
-    bottom: calc(12px + var(--safe-bottom));
+    bottom: calc(80px + var(--safe-bottom));
     transform: translateX(-50%);
     flex-wrap: wrap;
     justify-content: center;
     max-width: calc(100vw - 16px);
-    max-height: calc(100dvh - 100vw * 9 / 16 - 80px);
+    max-height: calc(100dvh - 100vw * 9 / 16 - 100px);
     overflow-y: auto;
+    padding: 7px;
+    border-radius: 16px;
+    background: rgba(10, 12, 16, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
   }
   .weapon-bar.expanded .weapon-list {
     flex-wrap: wrap;
     justify-content: center;
     gap: 4px;
+  }
+  /* 竖屏时 touch-pad 和 jump-btn 移到画布下方黑色区域，与武器栏同一水平线 */
+  .touch-pad {
+    left: calc(12px + env(safe-area-inset-left, 0px));
+    bottom: calc(12px + var(--safe-bottom));
+  }
+  .jump-btn {
+    right: calc(12px + env(safe-area-inset-right, 0px));
+    bottom: calc(12px + var(--safe-bottom));
   }
 }
 
@@ -418,7 +439,7 @@ body.normal-mode #hudCheat { display: none; }
   line-height: 1.2;
 }
 
-/* 触控方向键 */
+/* 触控方向键（横屏时定位在画布内左下角） */
 .touch-pad {
   position: absolute;
   left: calc(12px + env(safe-area-inset-left, 0px));
@@ -426,6 +447,7 @@ body.normal-mode #hudCheat { display: none; }
   display: flex;
   gap: 7px;
   pointer-events: auto;
+  z-index: 10;
 }
 .pad-btn {
   width: clamp(44px, 6.4vh, 56px);
@@ -449,13 +471,14 @@ body.normal-mode #hudCheat { display: none; }
 }
 html[data-device="desktop"] .touch-pad { display: none; }
 
-/* 右侧操作区：拖动瞄准后松手发射，只保留跳跃键 */
+/* 右侧操作区：拖动瞄准后松手发射，只保留跳跃键（横屏时定位在画布内右下角） */
 .jump-btn {
   position: absolute;
   right: calc(16px + env(safe-area-inset-right, 0px));
   bottom: calc(13px + var(--safe-bottom));
   width: clamp(48px, 7.6vh, 64px);
   height: clamp(48px, 7.6vh, 64px);
+  z-index: 10;
   border-radius: 50%;
   border: 1px solid rgba(255, 255, 255, 0.18);
   background: rgba(16, 18, 24, 0.72);
@@ -897,21 +920,39 @@ html[data-device="desktop"] .jump-btn { display: none; }
   .weapon-card .w-name { font-size: clamp(8px, 1.1vh, 10px); }
 }
 
-/* 竖屏：HUD 元素紧凑化（武器栏样式已在上方通用规则中定义） */
+/* 竖屏：统一按钮大小（移动/武器/跳跃均为 56px） */
 @media (orientation: portrait) {
   .aim-hint { display: none; }
-  .jump-btn { right: 12px; bottom: 12px; width: 50px; height: 50px; }
-  .touch-pad { bottom: 8px; }
-  .pad-btn { width: 40px; height: 40px; font-size: 16px; }
+  /* 统一底部控制栏按钮大小 */
+  .pad-btn {
+    width: 56px;
+    height: 56px;
+    font-size: 22px;
+    border-radius: 14px;
+  }
+  .jump-btn {
+    width: 56px;
+    height: 56px;
+  }
+  .jump-btn span { font-size: 22px; }
+  .jump-btn b { font-size: 9px; }
+  /* 武器按钮与移动/跳跃按钮统一大小 */
+  .weapon-toggle {
+    width: 56px;
+    height: 56px;
+    border-radius: 14px;
+  }
+  .weapon-toggle svg { width: 26px; height: 26px; }
+  /* 展开的武器卡片 */
   .weapon-card {
-    width: clamp(44px, 11vw, 56px);
-    height: clamp(38px, 5.5vh, 46px);
-    border-radius: 8px;
+    width: clamp(48px, 12vw, 60px);
+    height: clamp(42px, 6vh, 52px);
+    border-radius: 10px;
     gap: 0;
   }
-  .weapon-card svg { width: 14px; height: 14px; }
-  .weapon-card .w-name { font-size: 7.5px; }
-  .weapon-card .w-ammo { font-size: 7.5px; right: 3px; top: 2px; }
+  .weapon-card svg { width: 16px; height: 16px; }
+  .weapon-card .w-name { font-size: 8px; }
+  .weapon-card .w-ammo { font-size: 8px; right: 3px; top: 2px; }
   .weapon-card .w-key { font-size: 7px; left: 3px; top: 2px; }
   .weapon-card .w-power { font-size: 7px; right: 2px; bottom: 2px; }
 }

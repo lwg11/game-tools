@@ -349,31 +349,42 @@ export function getEra(id) {
   return ERAS[id] || ERAS.stone;
 }
 
-/** 无限模式：机械时代武器全开，没有回合上限 */
+/** 无限模式：从石器时代开始，随波次递进时代、敌人、场景与难度 */
 export function getEndlessLevel() {
   return {
     id: 0,
-    era: "mech",
+    era: "stone",
     name: "无限模式",
-    goal: "无回合上限，消灭全部敌人",
-    theme: "night",
+    goal: "从石器时代开始，敌人随波次变强，看看你能撑到第几波",
+    theme: "dawn",
     style: "hills",
     seed: 777,
     player: [{ x: 140 }, { x: 220 }, { x: 300 }],
     enemies: [
-      { x: 860, type: "warlord" },
-      { x: 945, type: "mech" },
-      { x: 1025, type: "gunner" },
-      { x: 1105, type: "mech" },
-      { x: 1180, type: "warlord" },
+      { x: 1000, type: "grunt" },
+      { x: 1100, type: "grunt" },
     ],
-    weapons: ERA_WEAPONS.mech,
+    weapons: ERA_WEAPONS.stone,
     ammo: {
-      laser: Infinity, railgun: 5, rocket: 6, mortar: 6,
-      cannon: 6, crossbow: 6, meteor: 4,
+      spear: Infinity, boulder: 3, grenade: 3, banana: 2,
+      spike: 2, boomerang: 2, meteor: 1,
     },
-    windMax: 6,
-    ai: 0.72,
+    windMax: 3,
+    ai: 0.3,
     endless: true,
   };
+}
+
+/** 无限模式时代递进表：每 2 波提升一个时代 */
+export const ENDLESS_ERAS = [
+  { era: "stone", theme: "dawn", ai: 0.3, windMax: 3, hpMul: 1.0, enemies: ["grunt", "thrower", "brute"] },
+  { era: "iron", theme: "day", ai: 0.45, windMax: 4, hpMul: 1.2, enemies: ["raider", "shield", "brute", "chief"] },
+  { era: "gun", theme: "dusk", ai: 0.58, windMax: 5, hpMul: 1.45, enemies: ["gunner", "grenadier", "shield", "chief"] },
+  { era: "mech", theme: "night", ai: 0.72, windMax: 6, hpMul: 1.7, enemies: ["mech", "gunner", "grenadier", "warlord"] },
+];
+
+/** 根据波次获取当前时代配置（每 2 波递进） */
+export function getEndlessEra(wave) {
+  const idx = Math.min(ENDLESS_ERAS.length - 1, Math.floor((wave - 1) / 2));
+  return ENDLESS_ERAS[idx];
 }
