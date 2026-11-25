@@ -34,6 +34,10 @@ from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import urlparse, unquote
 import urllib.request
+import base64
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import crypto as gt_crypto
 
 APP_NAME = "石器游戏厅"
 PREFIX = "/games"
@@ -150,6 +154,14 @@ def init_db():
                 updated_at INTEGER NOT NULL DEFAULT 0
             )"""
         )
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS user_online_time (
+                user_id INTEGER PRIMARY KEY,
+                total_seconds INTEGER NOT NULL DEFAULT 0,
+                last_heartbeat INTEGER NOT NULL DEFAULT 0,
+                updated_at INTEGER NOT NULL DEFAULT 0
+            )"""
+        )
         conn.commit()
     finally:
         conn.close()
@@ -163,6 +175,15 @@ def hash_password(password, salt_hex):
 
 def token_hash(token):
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def mask_phone(phone):
+    """手机号脱敏：138****8888"""
+    if not phone:
+        return ""
+    if len(phone) == 11:
+        return phone[:3] + "****" + phone[7:]
+    return phone[:3] + "****"
 
 
 def ip_region(ip):
@@ -367,12 +388,18 @@ class Handler(BaseHTTPRequestHandler):
     def _handle_api(self, method, sub):
         if sub == "/register" and method == "POST":
             return self._api_register()
+        if sub == "/crypto-key" and method == "GET":
+            return self._api_crypto_key()
         if sub == "/login" and method == "POST":
             return self._api_login()
         if sub == "/logout" and method == "POST":
             return self._api_logout()
         if sub == "/bind-phone" and method == "POST":
             return self._api_bind_phone()
+        if sub == "/change-password" and method == "POST":
+            return self._api_change_password()
+        if sub == "/change-username" and method == "POST":
+            return self._api_change_username()
         if sub == "/me" and method == "GET":
             return self._api_me()
         if sub == "/progress" and method == "PUT":
@@ -381,6 +408,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._api_save_prefs()
         if sub == "/track" and method == "POST":
             return self._api_track()
+        if sub == "/heartbeat" and method == "POST":
+            return self._api_heartbeat()
+        if sub == "/leaderboard" and method == "GET":
+            return self._api_leaderboard()
         if sub == "/config" and method == "GET":
             return self._api_config()
         if sub == "/admin/stats" and method == "GET":
@@ -389,6 +420,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._api_admin_users()
         if sub == "/admin/users/admin" and method == "PUT":
             return self._api_admin_toggle()
+        if sub == "/admin/users/password" and method == "PUT":
+            return self._api_admin_reset_password()
         if sub == "/admin/ip-region" and method == "GET":
             return self._api_admin_ip_region()
         if sub == "/admin/config" and method == "GET":
@@ -516,18 +549,37 @@ class Handler(BaseHTTPRequestHandler):
             SESSION_COOKIE, token, PREFIX, SESSION_TTL
         )
 
+    def _api_crypto_key(self):
+        key = gt_crypto.get_key()
+        return self._json(200, key.public_jwk())
+
+    def _decrypt_password(self, data):
+        pw = data.get("password")
+        if pw is None:
+            return ""
+        if isinstance(pw, str) and len(pw) >= 200 and re.match(r'^[A-Za-z0-9+/=]+$', pw):
+            try:
+                raw = base64.b64decode(pw)
+                plain = gt_crypto.get_key().decrypt(raw)
+                return plain.decode("utf-8")
+            except Exception:
+                raise ApiError(400, "密码解密失败，请刷新页面重试")
+        return str(pw)
+
     # ---- 注册
     def _api_register(self):
         self._check_origin()
         data = self._read_json()
         username = str(data.get("username", "")).strip()
         phone = str(data.get("phone", "")).strip()
-        password = str(data.get("password", ""))
+        password = self._decrypt_password(data)
         if not USERNAME_RE.match(username):
             raise ApiError(400, "用户名需为 2-20 位中文、字母、数字、下划线或短横线")
         if PHONE_RE.match(username):
             raise ApiError(400, "用户名不能是手机号格式")
-        if phone and not PHONE_RE.match(phone):
+        if not phone:
+            raise ApiError(400, "手机号必填")
+        if not PHONE_RE.match(phone):
             raise ApiError(400, "请输入正确的 11 位手机号")
         if len(password) < 6 or len(password) > 72:
             raise ApiError(400, "密码长度需为 6-72 位")
@@ -551,17 +603,19 @@ class Handler(BaseHTTPRequestHandler):
         finally:
             conn.close()
         token = self._create_session(user_id)
-        self._json(200, {"user": {"id": user_id, "username": username, "phone": phone or None}},
+        self._json(200, {"user": {"id": user_id, "username": username, "phone": mask_phone(phone)}},
                    {"Set-Cookie": self._session_cookie(token)})
 
-    # ---- 登录：支持用户名或手机号
+    # ---- 登录：仅支持手机号
     def _api_login(self):
         self._check_origin()
         data = self._read_json()
-        identifier = str(data.get("identifier") or data.get("username") or "").strip()
-        password = str(data.get("password", ""))
-        if not identifier:
-            raise ApiError(400, "请输入用户名或手机号")
+        phone = str(data.get("phone") or data.get("identifier") or "").strip()
+        password = self._decrypt_password(data)
+        if not phone:
+            raise ApiError(400, "请输入手机号")
+        if not PHONE_RE.match(phone):
+            raise ApiError(400, "请输入正确的 11 位手机号")
         ip = self._client_ip()
         now = time.time()
         with _login_lock:
@@ -572,9 +626,8 @@ class Handler(BaseHTTPRequestHandler):
         conn = db_connect()
         try:
             row = conn.execute(
-                "SELECT id, username, phone, pass_hash, salt FROM users "
-                "WHERE username = ? COLLATE NOCASE OR phone = ?",
-                (identifier, identifier),
+                "SELECT id, username, phone, pass_hash, salt FROM users WHERE phone = ?",
+                (phone,),
             ).fetchone()
         finally:
             conn.close()
@@ -585,7 +638,7 @@ class Handler(BaseHTTPRequestHandler):
         if not ok:
             with _login_lock:
                 _login_hits.setdefault(ip, []).append(now)
-            raise ApiError(401, "用户名 / 手机号或密码不正确")
+            raise ApiError(401, "手机号或密码不正确")
         with _login_lock:
             _login_hits.pop(ip, None)
         token = self._create_session(row["id"])
@@ -596,7 +649,7 @@ class Handler(BaseHTTPRequestHandler):
             conn.commit()
         finally:
             conn.close()
-        self._json(200, {"user": {"id": row["id"], "username": row["username"], "phone": row["phone"]}},
+        self._json(200, {"user": {"id": row["id"], "username": row["username"], "phone": mask_phone(row["phone"])}},
                    {"Set-Cookie": self._session_cookie(token)})
 
     # ---- 绑定手机号（不做验证码，手机号全局唯一）
@@ -616,7 +669,9 @@ class Handler(BaseHTTPRequestHandler):
                 raise ApiError(401, "账号不存在")
             if row["phone"]:
                 if row["phone"] == phone:
-                    return self._json(200, {"user": user, "phone": phone})
+                    safe_user = {"id": user["id"], "username": user["username"],
+                                 "phone": mask_phone(phone), "is_admin": user.get("is_admin", False)}
+                    return self._json(200, {"user": safe_user, "phone": mask_phone(phone)})
                 raise ApiError(409, "当前账号已绑定其他手机号")
             try:
                 conn.execute("UPDATE users SET phone = ? WHERE id = ?", (phone, user["id"]))
@@ -624,10 +679,72 @@ class Handler(BaseHTTPRequestHandler):
                 conn.rollback()
                 raise ApiError(409, "该手机号已被绑定")
             conn.commit()
-            updated = {"id": user["id"], "username": user["username"], "phone": phone}
+            updated = {"id": user["id"], "username": user["username"], "phone": mask_phone(phone)}
             self._json(200, {"user": updated})
         finally:
             conn.close()
+
+    # ---- 修改密码（需验证旧密码）
+    def _api_change_password(self):
+        self._check_origin()
+        user = self._current_user()
+        if not user:
+            raise ApiError(401, "请先登录")
+        data = self._read_json()
+        old_password = self._decrypt_password({"password": data.get("oldPassword")})
+        new_password = self._decrypt_password({"password": data.get("newPassword")})
+        if len(new_password) < 6 or len(new_password) > 72:
+            raise ApiError(400, "新密码长度需为 6-72 位")
+        conn = db_connect()
+        try:
+            row = conn.execute(
+                "SELECT pass_hash, salt FROM users WHERE id = ?", (user["id"],)
+            ).fetchone()
+            if not row:
+                raise ApiError(401, "账号不存在")
+            calc = hash_password(old_password, row["salt"])
+            if not hmac.compare_digest(calc, row["pass_hash"]):
+                raise ApiError(401, "原密码不正确")
+            new_salt = secrets.token_hex(16)
+            new_hash = hash_password(new_password, new_salt)
+            conn.execute(
+                "UPDATE users SET pass_hash = ?, salt = ? WHERE id = ?",
+                (new_hash, new_salt, user["id"]),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+        return self._json(200, {"ok": True})
+
+    # ---- 修改用户名
+    def _api_change_username(self):
+        self._check_origin()
+        user = self._current_user()
+        if not user:
+            raise ApiError(401, "请先登录")
+        data = self._read_json()
+        new_username = str(data.get("username") or "").strip()
+        if not USERNAME_RE.match(new_username):
+            raise ApiError(400, "用户名需为 2-20 位中文、字母、数字、下划线或短横线")
+        if PHONE_RE.match(new_username):
+            raise ApiError(400, "用户名不能是手机号格式")
+        if new_username.lower() == user["username"].lower():
+            return self._json(200, {"ok": True, "user": user})
+        conn = db_connect()
+        try:
+            try:
+                conn.execute(
+                    "UPDATE users SET username = ? WHERE id = ?",
+                    (new_username, user["id"]),
+                )
+                conn.commit()
+            except sqlite3.IntegrityError:
+                conn.rollback()
+                raise ApiError(409, "该用户名已被使用")
+            updated = {"id": user["id"], "username": new_username, "phone": mask_phone(user.get("phone") or "")}
+        finally:
+            conn.close()
+        return self._json(200, {"ok": True, "user": updated})
 
     # ---- 登出
     def _api_logout(self):
@@ -678,7 +795,14 @@ class Handler(BaseHTTPRequestHandler):
                 prefs = {}
             if not isinstance(prefs, dict):
                 prefs = {}
-        self._json(200, {"user": user, "progress": progress, "prefs": prefs})
+        # 对外脱敏手机号
+        safe_user = {
+            "id": user["id"],
+            "username": user["username"],
+            "phone": mask_phone(user.get("phone") or ""),
+            "is_admin": user.get("is_admin", False),
+        }
+        self._json(200, {"user": safe_user, "progress": progress, "prefs": prefs})
 
     # ---- 保存进度（整份覆盖）
     def _api_save_progress(self):
@@ -769,6 +893,129 @@ class Handler(BaseHTTPRequestHandler):
             conn.close()
         return self._json(200, {"ok": True})
 
+    # ---- 心跳：累计在线时长（登录用户每 60s 上报一次）
+    HEARTBEAT_INTERVAL = 60  # 秒，与前端上报间隔一致
+    HEARTBEAT_MAX_GAP = 180  # 单次最多累计 3 分钟，防止长时间挂起后一次性刷量
+
+    def _api_heartbeat(self):
+        self._check_origin()
+        user = self._current_user()
+        if not user:
+            raise ApiError(401, "请先登录")
+        self._discard_body()
+        now = int(time.time())
+        conn = db_connect()
+        try:
+            row = conn.execute(
+                "SELECT total_seconds, last_heartbeat FROM user_online_time WHERE user_id = ?",
+                (user["id"],),
+            ).fetchone()
+            if row:
+                last = row["last_heartbeat"] or 0
+                gap = max(0, now - last)
+                # 只累计合理区间内的时长（防挂起/防刷）
+                add = min(gap, self.HEARTBEAT_MAX_GAP) if gap > 0 else 0
+                total = (row["total_seconds"] or 0) + add
+                conn.execute(
+                    "UPDATE user_online_time SET total_seconds = ?, last_heartbeat = ?, updated_at = ? "
+                    "WHERE user_id = ?",
+                    (total, now, now, user["id"]),
+                )
+            else:
+                conn.execute(
+                    "INSERT INTO user_online_time(user_id, total_seconds, last_heartbeat, updated_at) "
+                    "VALUES (?, 0, ?, ?)",
+                    (user["id"], now, now),
+                )
+            conn.execute("UPDATE users SET last_active_at = ? WHERE id = ?", (now, user["id"]))
+            conn.commit()
+        finally:
+            conn.close()
+        return self._json(200, {"ok": True})
+
+    # ---- 排行榜：登录可见，游客不可见
+    def _api_leaderboard(self):
+        user = self._current_user()
+        if not user:
+            raise ApiError(401, "登录后查看排行榜")
+        game = (urlparse(self.path).query.split("game=")[-1].split("&")[0] if "game=" in self.path else "").strip()
+        if game not in GAME_IDS:
+            raise ApiError(400, "未知游戏")
+        conn = db_connect()
+        try:
+            prog_rows = conn.execute(
+                "SELECT p.user_id, p.data, u.username FROM progress p "
+                "JOIN users u ON u.id = p.user_id WHERE p.game_id = ?",
+                (game,),
+            ).fetchall()
+            play_rows = conn.execute(
+                "SELECT user_id, plays FROM user_plays WHERE game_id = ?", (game,)
+            ).fetchall()
+        finally:
+            conn.close()
+        plays_map = {r["user_id"]: r["plays"] for r in play_rows}
+        entries = []
+        for r in prog_rows:
+            try:
+                data = json.loads(r["data"])
+            except ValueError:
+                continue
+            score, detail = self._leaderboard_score(game, data)
+            entries.append({
+                "userId": r["user_id"],
+                "username": r["username"],
+                "score": score,
+                "detail": detail,
+                "plays": plays_map.get(r["user_id"], 0),
+            })
+        entries.sort(key=lambda e: (-e["score"], -e["plays"], e["username"]))
+        for i, e in enumerate(entries, 1):
+            e["rank"] = i
+        return self._json(200, {"game": game, "entries": entries[:50]})
+
+    def _leaderboard_score(self, game, data):
+        """根据游戏类型计算排行分数与展示文案。返回 (分数, 文案)。
+        分数以核心指标为主，次要指标作为同分时的排序依据。
+        """
+        if not isinstance(data, dict):
+            return 0, "无进度"
+        # 关卡制：石器大战 / 植物大战僵尸 / 保卫萝卜 —— 按最高关卡排名
+        if game in ("stone-wars", "pvz", "carrot"):
+            unlocked = int(data.get("unlocked") or 1)
+            stars = sum(int(v) for v in (data.get("stars") or {}).values())
+            cleared = len(data.get("cleared") or {})
+            endless = int(data.get("endlessBest") or 0)
+            score = unlocked * 1000 + stars * 10 + cleared * 5 + endless
+            parts = [f"第 {unlocked} 关", f"{stars}★"]
+            if endless > 0:
+                parts.append(f"无尽 {endless}")
+            return score, " · ".join(parts)
+        # 收集制：精灵宝可梦 —— 按图鉴收集数排名
+        if game == "pokemon":
+            caught = len(data.get("caught") or {})
+            quests = int(data.get("questsDone") or 0)
+            wins = int(data.get("wins") or 0)
+            score = caught * 1000 + quests * 10 + wins
+            return score, f"图鉴 {caught} · 委托 {quests}"
+        # 任务制：罪恶都市 —— 按主线任务完成数排名
+        if game == "vice-city":
+            missions = int(data.get("missionsDone") or 0)
+            taxi = int(data.get("taxiDone") or 0)
+            weapons = len(data.get("weapons") or [])
+            score = missions * 1000 + taxi * 10 + weapons
+            return score, f"任务 {missions}/10 · 出租 {taxi}"
+        # 竞速制：霓虹海岸 —— 按胜场排名
+        if game == "need-for-speed":
+            wins = int(data.get("wins") or 0)
+            races = int(data.get("racesDone") or 0)
+            best = float(data.get("bestLap") or 0)
+            score = wins * 1000 + races * 10 + (1000.0 / best if best > 0 else 0)
+            detail = f"胜场 {wins} · 场次 {races}"
+            if best > 0:
+                detail += f" · 最佳 {best:.1f}s"
+            return int(score), detail
+        return 0, "有进度"
+
     # ---- 首页展示配置
     def _home_games(self):
         known = [g["id"] for g in HOME_GAMES]
@@ -830,8 +1077,10 @@ class Handler(BaseHTTPRequestHandler):
             ).fetchall()
             play_rows = conn.execute("SELECT user_id, game_id, plays, last_play FROM user_plays").fetchall()
             prog_rows = conn.execute("SELECT user_id, game_id, data, updated_at FROM progress").fetchall()
+            online_rows = conn.execute("SELECT user_id, total_seconds FROM user_online_time").fetchall()
         finally:
             conn.close()
+        online_map = {r["user_id"]: r["total_seconds"] or 0 for r in online_rows}
         plays_map = {}
         for r in play_rows:
             plays_map.setdefault(r["user_id"], {})[r["game_id"]] = {"plays": r["plays"], "lastPlay": r["last_play"]}
@@ -867,9 +1116,37 @@ class Handler(BaseHTTPRequestHandler):
                 "registerIp": u["register_ip"] or "",
                 "lastLoginIp": u["last_login_ip"] or "",
                 "lastActiveAt": u["last_active_at"] or 0,
+                "onlineSeconds": online_map.get(u["id"], 0),
                 "games": games,
             })
         return self._json(200, {"users": out})
+
+    # ---- 后台：管理员重置密码
+    def _api_admin_reset_password(self):
+        self._check_origin()
+        admin = self._require_admin()
+        data = self._read_json()
+        user_id = int(data.get("userId") or 0)
+        new_password = self._decrypt_password(data)
+        if len(new_password) < 6 or len(new_password) > 72:
+            raise ApiError(400, "密码长度需为 6-72 位")
+        conn = db_connect()
+        try:
+            row = conn.execute("SELECT id, username FROM users WHERE id = ?", (user_id,)).fetchone()
+            if not row:
+                raise ApiError(404, "账号不存在")
+            new_salt = secrets.token_hex(16)
+            new_hash = hash_password(new_password, new_salt)
+            conn.execute(
+                "UPDATE users SET pass_hash = ?, salt = ? WHERE id = ?",
+                (new_hash, new_salt, user_id),
+            )
+            # 重置后强制下线：删除该用户所有会话
+            conn.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+            conn.commit()
+        finally:
+            conn.close()
+        return self._json(200, {"ok": True, "userId": user_id})
 
     # ---- 后台：IP 归属地（按需查询，避免列表页被外网接口拖慢）
     def _api_admin_ip_region(self):
