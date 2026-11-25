@@ -96,12 +96,19 @@ def main():
         run(client, "mkdir -p %s/site %s/server %s/data %s/backups %s/.deploy" % (
             REMOTE_DIR, REMOTE_DIR, REMOTE_DIR, REMOTE_DIR, REMOTE_DIR))
 
-        print("[2/7] 上传静态站点到临时目录")
+        print("[2/7] 构建并上传静态站点到临时目录")
+        # 本地构建（esbuild 压缩混淆）
+        import subprocess
+        build = subprocess.run(["node", "build.js"], cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace")
+        if build.returncode != 0:
+            raise RuntimeError("前端构建失败:\n%s\n%s" % (build.stdout, build.stderr))
+        print(build.stdout.strip())
         run(client, "rm -rf %s/.deploy/site" % REMOTE_DIR)
-        upload_tree(sftp, os.path.join(ROOT, "site"), "%s/.deploy/site" % REMOTE_DIR)
+        upload_tree(sftp, os.path.join(ROOT, "dist"), "%s/.deploy/site" % REMOTE_DIR)
 
         print("[3/7] 上传后端")
         upload_file(sftp, os.path.join(ROOT, "server", "app.py"), "%s/.deploy/app.py" % REMOTE_DIR, 0o644)
+        upload_file(sftp, os.path.join(ROOT, "server", "crypto.py"), "%s/.deploy/crypto.py" % REMOTE_DIR, 0o644)
 
         print("[4/7] 切换站点文件（保留旧版本备份）")
         run(client, "rm -rf %s/site.old; [ -d %s/site ] && mv %s/site %s/site.old || true" % (
@@ -109,7 +116,10 @@ def main():
         run(client, "mv %s/.deploy/site %s/site" % (REMOTE_DIR, REMOTE_DIR))
         run(client, "cp -a %s/server/app.py %s/backups/app.py.%s 2>/dev/null || true" % (
             REMOTE_DIR, REMOTE_DIR, STAMP))
+        run(client, "cp -a %s/server/crypto.py %s/backups/crypto.py.%s 2>/dev/null || true" % (
+            REMOTE_DIR, REMOTE_DIR, STAMP))
         run(client, "mv %s/.deploy/app.py %s/server/app.py" % (REMOTE_DIR, REMOTE_DIR))
+        run(client, "mv %s/.deploy/crypto.py %s/server/crypto.py" % (REMOTE_DIR, REMOTE_DIR))
         run(client, "chown -R gametools:gametools %s" % REMOTE_DIR)
         run(client, "chmod 750 %s %s/data" % (REMOTE_DIR, REMOTE_DIR))
 
