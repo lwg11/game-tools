@@ -908,8 +908,9 @@ html[data-device="desktop"] .jump-btn { display: none; }
   .weapon-card .w-key { font-size: 7px; left: 3px; top: 2px; }
   .weapon-card .w-power { font-size: 7px; right: 2px; bottom: 2px; }
   .pad-btn { width: 44px; height: 44px; font-size: 18px; border-radius: 11px; }
-  .touch-pad { left: auto; right: 70px; bottom: 8px; gap: 5px; }
-  .jump-btn { right: 12px; bottom: 8px; width: 46px; height: 46px; }
+  /* 横屏：前后在左，跳跃在右 */
+  .touch-pad { left: calc(8px + env(safe-area-inset-left, 0px)); right: auto; bottom: 8px; gap: 5px; }
+  .jump-btn { right: calc(12px + env(safe-area-inset-right, 0px)); bottom: 8px; width: 46px; height: 46px; }
   .aim-hint { bottom: 62px; }
   .hud-center { font-size: 10px; }
 }

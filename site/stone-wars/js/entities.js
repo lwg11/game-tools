@@ -17,6 +17,7 @@ export class Unit {
     this.alive = true;
     this.onGround = true;
     this.vy = 0;
+    this.vx = 0;
     this.facing = team === 0 ? 1 : -1;
     this.walkPhase = 0;
     this.moveSpeed = 0;
@@ -59,11 +60,18 @@ export class Unit {
     if (!this.onGround) {
       this.vy += 1500 * dt;
       const ny = this.y + this.vy * dt;
+      // 空中水平移动（斜跳）
+      if (this.vx !== 0) {
+        this.tryMove(this.vx * dt);
+        this.vx *= Math.pow(0.3, dt);
+        if (Math.abs(this.vx) < 8) this.vx = 0;
+      }
       if (this.vy > 0) {
         const gy = this.game.terrain.surfaceBelow(this.x, this.y + 1);
         if (gy !== null && ny >= gy) {
           this.y = gy;
           this.vy = 0;
+          this.vx = 0;
           this.onGround = true;
         } else {
           this.y = ny;
@@ -99,10 +107,19 @@ export class Unit {
     return true;
   }
 
-  jump() {
+  /**
+   * 跳跃：如果正在移动（键盘或触摸），则向斜上方跳跃
+   * @param {number} [dir=0] 水平方向：-1 左，1 右，0 垂直
+   */
+  jump(dir = 0) {
     if (!this.alive || !this.onGround) return false;
     this.vy = -470;
     this.onGround = false;
+    // 斜跳：给一个水平初速度
+    if (dir !== 0) {
+      this.vx = dir * 220;
+      this.facing = dir;
+    }
     this.game.sfx.jump();
     return true;
   }

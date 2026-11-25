@@ -233,11 +233,11 @@ class StoneWars {
       btn.addEventListener("pointerleave", () => set(false));
       btn.addEventListener("pointercancel", () => set(false));
     });
-    document.querySelector("[data-jump]").addEventListener("click", () => {
-      if (this.phase !== "aim" || this.paused) return;
-      const u = this._activePlayer();
-      if (u) u.jump();
-    });
+document.querySelector("[data-jump]").addEventListener("click", () => {
+if (this.phase !== "aim" || this.paused) return;
+const u = this._activePlayer();
+if (u) u.jump(this._moveDir());
+});
 
     // 键盘
     window.addEventListener("keydown", (e) => {
@@ -255,10 +255,10 @@ class StoneWars {
       if (["a", "arrowleft", "d", "arrowright", "w", "arrowup", " "].includes(k)) {
         e.preventDefault();
         this.keys[k] = true;
-        if ((k === "w" || k === "arrowup" || k === " ") && !e.repeat) {
-          const u = this._activePlayer();
-          if (u) u.jump();
-        }
+if ((k === "w" || k === "arrowup" || k === " ") && !e.repeat) {
+const u = this._activePlayer();
+if (u) u.jump(this._moveDir());
+}
       }
       if (/^[1-7]$/.test(k)) {
         const id = this.weaponIds[Number(k) - 1];
@@ -1245,6 +1245,15 @@ if (!this.players.some((u) => u.alive)) { this.finish(false, "族人全部倒下
       u.tryMove(step * 0.62);
       this.moveBudget = Math.max(0, this.moveBudget - Math.abs(step) * 0.62);
     }
+  }
+
+  /** 当前移动方向：-1 左，1 右，0 无 */
+  _moveDir() {
+    const left = this.keys["a"] || this.keys["arrowleft"] || this.touch.left;
+    const right = this.keys["d"] || this.keys["arrowright"] || this.touch.right;
+    if (left && !right) return -1;
+    if (right && !left) return 1;
+    return 0;
   }
 
   _updateEndless(dt) {
