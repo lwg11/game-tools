@@ -862,14 +862,15 @@ html[data-device="desktop"] .jump-btn { display: none; }
   .weapon-card .w-name { font-size: clamp(8px, 1.1vh, 10px); }
 }
 
-/* 竖屏：收起时只显示当前武器小按钮，展开时两行网格 */
+/* 竖屏：收起时与左右按钮底部对齐，展开时抬高 */
 @media (orientation: portrait) and (max-width: 900px) {
   .weapon-bar {
-    bottom: calc(70px + var(--safe-bottom));
+    bottom: calc(12px + var(--safe-bottom));
     padding: 5px;
     border-radius: 12px;
   }
   .weapon-bar.expanded {
+    bottom: calc(70px + var(--safe-bottom));
     flex-wrap: wrap;
     justify-content: center;
     max-width: calc(100vw - 20px);
