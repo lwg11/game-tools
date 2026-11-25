@@ -41,6 +41,15 @@ function relTime(ts) {
   return fmtDate(ts);
 }
 
+function fmtDuration(seconds) {
+  if (!seconds || seconds <= 0) return "0 分钟";
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  if (h > 0) return `${h} 小时 ${m} 分`;
+  if (m > 0) return `${m} 分钟`;
+  return `${seconds} 秒`;
+}
+
 function progressText(game, progress) {
   if (!progress) return "无进度";
   if (game === "stone-wars" || game === "pvz" || game === "carrot") {
@@ -136,15 +145,17 @@ function renderUsers(users) {
     const toggle = u.is_admin
       ? '<button class="btn small ghost" data-action="demote" data-id="' + u.id + '">取消管理员</button>'
       : '<button class="btn small ghost" data-action="promote" data-id="' + u.id + '">设为管理员</button>';
+    const resetPw = '<button class="btn small ghost" data-action="resetpw" data-id="' + u.id + '">重置密码</button>';
     const fixed = u.phone === "15755782911" ? ' <span class="badge">固定</span>' : "";
     return `
       <div class="u-row" data-user="${u.id}">
         <div class="u-name"><span class="u-avatar">${esc(String(u.username || "?").trim().charAt(0).toUpperCase())}</span><div><b>${esc(u.username)}</b><small>${u.phone ? esc(u.phone) : "未绑定手机号"}${fixed}</small></div></div>
-        <div class="u-role">${role}${toggle}</div>
+        <div class="u-role">${role}${toggle}${resetPw}</div>
         <div class="u-ip">
           <div>注册 ${esc(u.registerIp || "—")} <span class="region" data-ip="${esc(u.registerIp)}">（查询中）</span> · ${esc(fmtDate(u.createdAt))}</div>
           <div>登录 ${esc(u.lastLoginIp || "—")} <span class="region" data-ip="${esc(u.lastLoginIp)}">（查询中）</span></div>
         </div>
+        <div class="u-online">${esc(fmtDuration(u.onlineSeconds))}<small>累计在线</small></div>
         <div class="u-active">${esc(relTime(u.lastActiveAt))}</div>
         <div class="u-games">${games || '<span class="prog">未游玩过</span>'}</div>
       </div>`;
@@ -170,7 +181,27 @@ function renderUsers(users) {
   box.querySelectorAll("[data-action]").forEach((btn) => {
     btn.addEventListener("click", async () => {
       const id = Number(btn.dataset.id);
-      const make = btn.dataset.action === "promote";
+      const action = btn.dataset.action;
+      if (action === "resetpw") {
+        const newPw = prompt("为账号 ID " + id + " 设置新密码（至少 6 位）：");
+        if (!newPw) return;
+        if (newPw.length < 6) {
+          alert("密码至少 6 位");
+          return;
+        }
+        if (!confirm("确定要重置该用户的密码吗？重置后该用户会被强制下线。")) return;
+        btn.disabled = true;
+        try {
+          await api.adminResetPassword(id, newPw);
+          alert("密码已重置");
+          await loadAll();
+        } catch (err) {
+          alert(err.message || "操作失败");
+          btn.disabled = false;
+        }
+        return;
+      }
+      const make = action === "promote";
       btn.disabled = true;
       try {
         await api.adminSetAdmin(id, make);

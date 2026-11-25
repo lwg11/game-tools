@@ -36,8 +36,8 @@
         <p>仅限管理员账号进入。请使用已绑定的管理账号登录，普通账号无法查看任何数据。</p>
       </div>
       <form id="loginForm">
-        <label for="loginId">用户名 / 手机号</label>
-        <input id="loginId" class="input" maxlength="20" autocomplete="username" placeholder="输入用户名或 11 位手机号" required>
+        <label for="loginId">手机号</label>
+        <input id="loginId" class="input" inputmode="numeric" maxlength="11" autocomplete="tel" placeholder="输入 11 位手机号" required>
         <label for="loginPw">密码</label>
         <input id="loginPw" class="input" type="password" maxlength="72" autocomplete="current-password" placeholder="登录密码" required>
         <div class="form-error" id="loginError"></div>
@@ -76,7 +76,7 @@
 
       <div id="tabAccounts" class="tab-panel">
         <div class="rows-head">
-          <span>账号</span><span>角色</span><span>注册 / 最近登录 IP（归属地）</span><span>活跃度</span><span>各游戏场次与进度</span>
+          <span>账号</span><span>角色</span><span>注册 / 最近登录 IP（归属地）</span><span>在线时长</span><span>活跃度</span><span>各游戏场次与进度</span>
         </div>
         <div id="userRows"></div>
       </div>
