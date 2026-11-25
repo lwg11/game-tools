@@ -59,6 +59,7 @@ class StoneWars {
     this.selectedWeapon = "spear";
     this.ammo = {};
     this.weaponReadyAt = {};
+    this.weaponBarExpanded = false;
     this.endlessWave = 0;
     this.endlessWaveTimer = 0;
     this.endlessRefillTimer = 0;
@@ -179,7 +180,14 @@ class StoneWars {
     $("rotateTip").addEventListener("click", () => document.getElementById("rotateTip").classList.add("hide"));
     $("switchUnit").addEventListener("click", () => { this.sfx.ensure(); this._cyclePlayer(); });
 
-    // 武器栏
+    // 武器栏：展开/收起 + 切换武器
+    $("weaponToggle").addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.sfx.ensure();
+      this.sfx.click();
+      this.weaponBarExpanded = !this.weaponBarExpanded;
+      this._refreshWeaponBar();
+    });
     $("weaponBar").addEventListener("click", (e) => {
       const card = e.target.closest("[data-weapon]");
       if (!card) return;
@@ -192,6 +200,8 @@ class StoneWars {
       this.selectedWeapon = id;
       this.sfx.ensure();
       this.sfx.click();
+      // 选中后自动收起
+      this.weaponBarExpanded = false;
       this._refreshWeaponBar();
       this._refreshFireButton();
       this._updateHUD();
@@ -503,7 +513,11 @@ class StoneWars {
     this.aim.dragLen = 0;
     this.aim.maxDrag = 0;
     this.aim.power = 0.1;
-    // 拖动瞄准时隐藏武器栏，避免遮挡弹道与落点
+    // 拖动瞄准时自动收起武器栏，避免遮挡弹道与落点
+    if (this.weaponBarExpanded) {
+      this.weaponBarExpanded = false;
+      this._refreshWeaponBar();
+    }
     document.getElementById("weaponBar").classList.add("aiming");
   }
 
@@ -1711,9 +1725,11 @@ class StoneWars {
   _refreshWeaponBar() {
     if (!this.level) return;
     const bar = document.getElementById("weaponBar");
-    if (bar.children.length !== this.weaponIds.length || bar.dataset.era !== this.era.id) {
+    const list = document.getElementById("weaponList");
+    // 构建武器列表（仅在时代或武器数量变化时重建 DOM）
+    if (list.children.length !== this.weaponIds.length || bar.dataset.era !== this.era.id) {
       bar.dataset.era = this.era.id;
-      bar.innerHTML = this.weaponIds.map((id, i) => {
+      list.innerHTML = this.weaponIds.map((id, i) => {
         const w = WEAPONS[id];
         return `<button class="weapon-card" data-weapon="${id}" type="button"
           title="${w.name} · 伤害 ${w.damage}${w.blast ? ` · 爆炸范围 ${w.blast}` : ""}\n${w.desc}">
@@ -1726,7 +1742,16 @@ class StoneWars {
         </button>`;
       }).join("");
     }
-    for (const card of bar.children) {
+    // 更新收起按钮（当前武器图标 + 弹药）
+    const curW = WEAPONS[this.selectedWeapon];
+    const curAmmo = this.ammo[this.selectedWeapon] ?? 0;
+    document.getElementById("wtIcon").innerHTML = this._weaponIcon(this.selectedWeapon);
+    document.getElementById("wtAmmo").textContent = curAmmo === Infinity ? "∞" : String(curAmmo);
+    // 展开/收起状态
+    bar.classList.toggle("collapsed", !this.weaponBarExpanded);
+    bar.classList.toggle("expanded", this.weaponBarExpanded);
+    // 更新列表中每张卡片
+    for (const card of list.children) {
       const id = card.dataset.weapon;
       const ammo = this.ammo[id] ?? 0;
       const ammoEl = card.querySelector(".w-ammo");

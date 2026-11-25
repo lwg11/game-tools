@@ -43,7 +43,14 @@
           <button class="switch-unit" id="switchUnit" type="button">切换</button>
         </div>
 
-        <div class="weapon-bar" id="weaponBar"></div>
+        <div class="weapon-bar collapsed" id="weaponBar">
+          <button class="weapon-toggle" id="weaponToggle" type="button" aria-label="展开武器列表">
+            <span class="wt-icon" id="wtIcon"></span>
+            <span class="wt-ammo" id="wtAmmo"></span>
+            <span class="wt-arrow"></span>
+          </button>
+          <div class="weapon-list" id="weaponList"></div>
+        </div>
         <div class="aim-hint" id="aimHint">按住拖动瞄准 · 力度圈更大更好微调 · 松手发射</div>
         <div class="realtime-badge" id="realtimeBadge">实时开火</div>
 

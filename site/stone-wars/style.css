@@ -216,13 +216,14 @@
 /* 常规模式隐藏金手指；疯狂模式才显示 */
 body.normal-mode #hudCheat { display: none; }
 
-/* 武器栏 */
+/* 武器栏：可收起/展开 */
 .weapon-bar {
   position: absolute;
   left: 50%;
   bottom: calc(12px + var(--safe-bottom));
   transform: translateX(-50%);
   display: flex;
+  align-items: center;
   gap: 7px;
   pointer-events: auto;
   padding: 7px;
@@ -232,12 +233,69 @@ body.normal-mode #hudCheat { display: none; }
   backdrop-filter: blur(8px);
   transition: opacity 0.18s ease, transform 0.18s ease;
 }
-/* 拖动瞄准时武器栏半透明并让出点击，避免遮挡弹道与落点 */
+/* 拖动瞄准时武器栏半透明并让出点击 */
 .weapon-bar.aiming {
   opacity: 0.12;
   transform: translateX(-50%) translateY(6px);
   pointer-events: none;
 }
+
+/* 收起状态的当前武器按钮 */
+.weapon-toggle {
+  position: relative;
+  width: clamp(48px, 6.8vh, 60px);
+  height: clamp(48px, 6.8vh, 60px);
+  border-radius: 14px;
+  border: 1px solid rgba(255, 190, 92, 0.55);
+  background: linear-gradient(180deg, rgba(110, 77, 40, 0.95), rgba(52, 34, 20, 0.95));
+  color: #e8dfd0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 4px;
+  transition: transform 0.14s, border-color 0.14s, box-shadow 0.14s;
+}
+.weapon-toggle:hover { border-color: rgba(255, 200, 110, 0.8); transform: translateY(-1px); }
+.weapon-toggle:active { transform: scale(0.95); }
+.weapon-toggle svg { width: clamp(20px, 3vh, 26px); height: clamp(20px, 3vh, 26px); }
+.weapon-toggle .wt-ammo {
+  position: absolute;
+  right: 4px;
+  top: 3px;
+  font-size: 9px;
+  font-weight: 800;
+  color: #ffd08a;
+  font-variant-numeric: tabular-nums;
+}
+.weapon-toggle .wt-arrow {
+  position: absolute;
+  left: 50%;
+  bottom: -7px;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 6px solid rgba(255, 190, 92, 0.6);
+  transition: transform 0.2s;
+}
+.weapon-bar.expanded .weapon-toggle .wt-arrow {
+  transform: translateX(-50%) rotate(180deg);
+}
+
+/* 展开的武器列表 */
+.weapon-list {
+  display: none;
+  gap: 7px;
+}
+.weapon-bar.expanded .weapon-list {
+  display: flex;
+}
+.weapon-bar.collapsed .weapon-list {
+  display: none;
+}
+
 .weapon-card {
   position: relative;
   width: clamp(52px, 7.2vh, 72px);
@@ -756,19 +814,21 @@ html[data-device="desktop"] .jump-btn { display: none; }
   .level-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
-/* 横屏：武器栏改为左侧竖向排列，不遮挡底部弹道区域 */
+/* 横屏：武器栏收起在左侧，展开时竖向列表，不遮挡底部弹道区域 */
 @media (orientation: landscape) and (max-height: 500px) {
   .hud-bar { padding: 5px 9px; }
   .hud-mini { width: 29px; height: 29px; border-radius: 8px; }
   .hud-mini svg { width: 15px; height: 15px; }
   .wind { height: 29px; }
   .hud-status { top: 44px; }
-  /* 竖向武器栏：左侧排列，底部弹道区域完全让出 */
+  /* 武器栏收起在左侧，展开时竖向排列 */
   .weapon-bar {
     left: calc(8px + env(safe-area-inset-left, 0px));
+    right: auto;
     bottom: calc(8px + var(--safe-bottom));
     transform: none;
     flex-direction: column;
+    align-items: flex-start;
     gap: 4px;
     padding: 5px;
     border-radius: 12px;
@@ -779,6 +839,9 @@ html[data-device="desktop"] .jump-btn { display: none; }
     opacity: 0.12;
     transform: translateY(6px);
     pointer-events: none;
+  }
+  .weapon-bar.expanded .weapon-list {
+    flex-direction: column;
   }
   .weapon-card { width: 48px; height: 40px; border-radius: 9px; gap: 0; }
   .weapon-card svg { width: 14px; height: 14px; }
@@ -799,19 +862,25 @@ html[data-device="desktop"] .jump-btn { display: none; }
   .weapon-card .w-name { font-size: clamp(8px, 1.1vh, 10px); }
 }
 
-/* 竖屏：武器栏改为两行紧凑网格，尽量薄，减少遮挡 */
+/* 竖屏：收起时只显示当前武器小按钮，展开时两行网格 */
 @media (orientation: portrait) and (max-width: 900px) {
   .weapon-bar {
     bottom: calc(70px + var(--safe-bottom));
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 4px;
     padding: 5px;
-    max-width: calc(100vw - 20px);
     border-radius: 12px;
   }
+  .weapon-bar.expanded {
+    flex-wrap: wrap;
+    justify-content: center;
+    max-width: calc(100vw - 20px);
+  }
+  .weapon-bar.expanded .weapon-list {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 4px;
+  }
   .weapon-card {
-    width: auto;
+    width: clamp(44px, 11vw, 56px);
     height: clamp(38px, 5.5vh, 46px);
     border-radius: 8px;
     gap: 0;
