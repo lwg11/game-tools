@@ -756,27 +756,73 @@ html[data-device="desktop"] .jump-btn { display: none; }
   .level-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
-/* 横屏矮屏（手机横置） */
-@media (max-height: 460px) and (orientation: landscape) {
+/* 横屏：武器栏改为左侧竖向排列，不遮挡底部弹道区域 */
+@media (orientation: landscape) and (max-height: 500px) {
   .hud-bar { padding: 5px 9px; }
   .hud-mini { width: 29px; height: 29px; border-radius: 8px; }
   .hud-mini svg { width: 15px; height: 15px; }
   .wind { height: 29px; }
   .hud-status { top: 44px; }
-  .weapon-bar { bottom: calc(6px + var(--safe-bottom)); padding: 4px; border-radius: 12px; gap: 4px; }
-  .weapon-card { width: 54px; height: 42px; border-radius: 9px; gap: 0; }
-  .weapon-card svg { width: 15px; height: 15px; }
-  .weapon-card .w-name { font-size: 8px; }
+  /* 竖向武器栏：左侧排列，底部弹道区域完全让出 */
+  .weapon-bar {
+    left: calc(8px + env(safe-area-inset-left, 0px));
+    bottom: calc(8px + var(--safe-bottom));
+    transform: none;
+    flex-direction: column;
+    gap: 4px;
+    padding: 5px;
+    border-radius: 12px;
+    max-height: calc(100dvh - 120px);
+    overflow-y: auto;
+  }
+  .weapon-bar.aiming {
+    opacity: 0.12;
+    transform: translateY(6px);
+    pointer-events: none;
+  }
+  .weapon-card { width: 48px; height: 40px; border-radius: 9px; gap: 0; }
+  .weapon-card svg { width: 14px; height: 14px; }
+  .weapon-card .w-name { font-size: 7.5px; }
+  .weapon-card .w-ammo { font-size: 7.5px; right: 3px; top: 2px; }
+  .weapon-card .w-key { font-size: 7px; left: 3px; top: 2px; }
+  .weapon-card .w-power { font-size: 7px; right: 2px; bottom: 2px; }
   .pad-btn { width: 44px; height: 44px; font-size: 18px; border-radius: 11px; }
-  .touch-pad { left: 8px; bottom: 8px; gap: 5px; }
+  .touch-pad { left: auto; right: 70px; bottom: 8px; gap: 5px; }
   .jump-btn { right: 12px; bottom: 8px; width: 46px; height: 46px; }
   .aim-hint { bottom: 62px; }
   .hud-center { font-size: 10px; }
 }
 
-/* 竖屏时把武器栏抬高，底部操作按钮排成一行（仍建议横屏） */
+/* 横屏高屏（平板/桌面）：武器栏保持底部居中但更紧凑 */
+@media (orientation: landscape) and (min-height: 501px) {
+  .weapon-card { width: clamp(48px, 6.5vh, 62px); height: clamp(44px, 6.5vh, 56px); }
+  .weapon-card .w-name { font-size: clamp(8px, 1.1vh, 10px); }
+}
+
+/* 竖屏：武器栏改为两行紧凑网格，尽量薄，减少遮挡 */
 @media (orientation: portrait) and (max-width: 900px) {
-  .weapon-bar { bottom: calc(78px + var(--safe-bottom)); }
+  .weapon-bar {
+    bottom: calc(70px + var(--safe-bottom));
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 4px;
+    padding: 5px;
+    max-width: calc(100vw - 20px);
+    border-radius: 12px;
+  }
+  .weapon-card {
+    width: auto;
+    height: clamp(38px, 5.5vh, 46px);
+    border-radius: 8px;
+    gap: 0;
+  }
+  .weapon-card svg { width: 14px; height: 14px; }
+  .weapon-card .w-name { font-size: 7.5px; }
+  .weapon-card .w-ammo { font-size: 7.5px; right: 3px; top: 2px; }
+  .weapon-card .w-key { font-size: 7px; left: 3px; top: 2px; }
+  .weapon-card .w-power { font-size: 7px; right: 2px; bottom: 2px; }
   .aim-hint { display: none; }
   .jump-btn { right: 12px; bottom: 12px; width: 50px; height: 50px; }
+  .touch-pad { bottom: 8px; }
+  .pad-btn { width: 40px; height: 40px; font-size: 16px; }
 }
