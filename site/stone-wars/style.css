@@ -219,24 +219,21 @@ body.normal-mode #hudCheat { display: none; }
 /* 武器栏：可收起/展开 */
 .weapon-bar {
   position: absolute;
-  left: 50%;
-  bottom: calc(12px + var(--safe-bottom));
-  transform: translateX(-50%);
+  z-index: 10;
   display: flex;
   align-items: center;
   gap: 7px;
   pointer-events: auto;
   padding: 7px;
   border-radius: 16px;
-  background: rgba(10, 12, 16, 0.58);
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  backdrop-filter: blur(8px);
+  background: rgba(10, 12, 16, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
   transition: opacity 0.18s ease, transform 0.18s ease;
 }
 /* 拖动瞄准时武器栏半透明并让出点击 */
 .weapon-bar.aiming {
-  opacity: 0.12;
-  transform: translateX(-50%) translateY(6px);
+  opacity: 0.1;
   pointer-events: none;
 }
 
@@ -255,6 +252,7 @@ body.normal-mode #hudCheat { display: none; }
   cursor: pointer;
   padding: 4px;
   transition: transform 0.14s, border-color 0.14s, box-shadow 0.14s;
+  flex: none;
 }
 .weapon-toggle:hover { border-color: rgba(255, 200, 110, 0.8); transform: translateY(-1px); }
 .weapon-toggle:active { transform: scale(0.95); }
@@ -294,6 +292,65 @@ body.normal-mode #hudCheat { display: none; }
 }
 .weapon-bar.collapsed .weapon-list {
   display: none;
+}
+
+/* ---- 桌面横屏（高度充足）：武器栏底部居中 ---- */
+@media (orientation: landscape) and (min-height: 501px) {
+  .weapon-bar {
+    left: 50%;
+    bottom: calc(12px + var(--safe-bottom));
+    transform: translateX(-50%);
+  }
+  .weapon-bar.aiming {
+    transform: translateX(-50%) translateY(6px);
+  }
+}
+
+/* ---- 手机横屏（矮屏）：武器栏在左侧，展开时向上生长 ---- */
+@media (orientation: landscape) and (max-height: 500px) {
+  .weapon-bar {
+    left: calc(8px + env(safe-area-inset-left, 0px));
+    bottom: calc(8px + var(--safe-bottom));
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    padding: 5px;
+    border-radius: 12px;
+    max-height: calc(100dvh - 16px);
+    overflow-y: auto;
+  }
+  .weapon-bar.expanded .weapon-list {
+    flex-direction: column;
+  }
+  .weapon-bar.aiming {
+    transform: translateY(6px);
+  }
+}
+
+/* ---- 竖屏：武器栏在画布下方黑色区域（不遮挡画面） ---- */
+@media (orientation: portrait) {
+  .weapon-bar {
+    left: 50%;
+    bottom: calc(12px + var(--safe-bottom));
+    transform: translateX(-50%);
+  }
+  .weapon-bar.aiming {
+    transform: translateX(-50%) translateY(6px);
+  }
+  .weapon-bar.expanded {
+    bottom: calc(12px + var(--safe-bottom));
+    transform: translateX(-50%);
+    flex-wrap: wrap;
+    justify-content: center;
+    max-width: calc(100vw - 16px);
+    max-height: calc(100dvh - 100vw * 9 / 16 - 80px);
+    overflow-y: auto;
+  }
+  .weapon-bar.expanded .weapon-list {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 4px;
+  }
 }
 
 .weapon-card {
@@ -814,35 +871,13 @@ html[data-device="desktop"] .jump-btn { display: none; }
   .level-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
-/* 横屏：武器栏收起在左侧，展开时竖向列表，不遮挡底部弹道区域 */
+/* 横屏矮屏：HUD 元素紧凑化（武器栏样式已在上方通用规则中定义） */
 @media (orientation: landscape) and (max-height: 500px) {
   .hud-bar { padding: 5px 9px; }
   .hud-mini { width: 29px; height: 29px; border-radius: 8px; }
   .hud-mini svg { width: 15px; height: 15px; }
   .wind { height: 29px; }
   .hud-status { top: 44px; }
-  /* 武器栏收起在左侧，展开时竖向排列 */
-  .weapon-bar {
-    left: calc(8px + env(safe-area-inset-left, 0px));
-    right: auto;
-    bottom: calc(8px + var(--safe-bottom));
-    transform: none;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 4px;
-    padding: 5px;
-    border-radius: 12px;
-    max-height: calc(100dvh - 120px);
-    overflow-y: auto;
-  }
-  .weapon-bar.aiming {
-    opacity: 0.12;
-    transform: translateY(6px);
-    pointer-events: none;
-  }
-  .weapon-bar.expanded .weapon-list {
-    flex-direction: column;
-  }
   .weapon-card { width: 48px; height: 40px; border-radius: 9px; gap: 0; }
   .weapon-card svg { width: 14px; height: 14px; }
   .weapon-card .w-name { font-size: 7.5px; }
@@ -856,30 +891,18 @@ html[data-device="desktop"] .jump-btn { display: none; }
   .hud-center { font-size: 10px; }
 }
 
-/* 横屏高屏（平板/桌面）：武器栏保持底部居中但更紧凑 */
+/* 横屏高屏（平板/桌面）：武器卡片更紧凑 */
 @media (orientation: landscape) and (min-height: 501px) {
   .weapon-card { width: clamp(48px, 6.5vh, 62px); height: clamp(44px, 6.5vh, 56px); }
   .weapon-card .w-name { font-size: clamp(8px, 1.1vh, 10px); }
 }
 
-/* 竖屏：收起时与左右按钮底部对齐，展开时抬高 */
-@media (orientation: portrait) and (max-width: 900px) {
-  .weapon-bar {
-    bottom: calc(12px + var(--safe-bottom));
-    padding: 5px;
-    border-radius: 12px;
-  }
-  .weapon-bar.expanded {
-    bottom: calc(70px + var(--safe-bottom));
-    flex-wrap: wrap;
-    justify-content: center;
-    max-width: calc(100vw - 20px);
-  }
-  .weapon-bar.expanded .weapon-list {
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 4px;
-  }
+/* 竖屏：HUD 元素紧凑化（武器栏样式已在上方通用规则中定义） */
+@media (orientation: portrait) {
+  .aim-hint { display: none; }
+  .jump-btn { right: 12px; bottom: 12px; width: 50px; height: 50px; }
+  .touch-pad { bottom: 8px; }
+  .pad-btn { width: 40px; height: 40px; font-size: 16px; }
   .weapon-card {
     width: clamp(44px, 11vw, 56px);
     height: clamp(38px, 5.5vh, 46px);
@@ -891,8 +914,4 @@ html[data-device="desktop"] .jump-btn { display: none; }
   .weapon-card .w-ammo { font-size: 7.5px; right: 3px; top: 2px; }
   .weapon-card .w-key { font-size: 7px; left: 3px; top: 2px; }
   .weapon-card .w-power { font-size: 7px; right: 2px; bottom: 2px; }
-  .aim-hint { display: none; }
-  .jump-btn { right: 12px; bottom: 12px; width: 50px; height: 50px; }
-  .touch-pad { bottom: 8px; }
-  .pad-btn { width: 40px; height: 40px; font-size: 16px; }
 }
