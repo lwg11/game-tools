@@ -230,6 +230,13 @@ body.normal-mode #hudCheat { display: none; }
   background: rgba(10, 12, 16, 0.58);
   border: 1px solid rgba(255, 255, 255, 0.09);
   backdrop-filter: blur(8px);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+/* 拖动瞄准时武器栏半透明并让出点击，避免遮挡弹道与落点 */
+.weapon-bar.aiming {
+  opacity: 0.12;
+  transform: translateX(-50%) translateY(6px);
+  pointer-events: none;
 }
 .weapon-card {
   position: relative;

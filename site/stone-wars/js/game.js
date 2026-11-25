@@ -206,6 +206,7 @@ class StoneWars {
       this.aim.startWorld = null;
       this.aim.currentWorld = null;
       this.aim.dragLen = 0;
+      document.getElementById("weaponBar").classList.remove("aiming");
     });
     this.canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 
@@ -502,6 +503,8 @@ class StoneWars {
     this.aim.dragLen = 0;
     this.aim.maxDrag = 0;
     this.aim.power = 0.1;
+    // 拖动瞄准时隐藏武器栏，避免遮挡弹道与落点
+    document.getElementById("weaponBar").classList.add("aiming");
   }
 
   _onPointerMove(e) {
@@ -523,6 +526,8 @@ class StoneWars {
     this.aim.currentWorld = null;
     this.aim.dragLen = 0;
     this.aim.maxDrag = 0;
+    // 松手后恢复武器栏显示
+    document.getElementById("weaponBar").classList.remove("aiming");
 
     // 轻点队友可以切换操控单位
     if (maxDrag < 40) {
