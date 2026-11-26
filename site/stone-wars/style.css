@@ -306,27 +306,26 @@ body.normal-mode #hudCheat { display: none; }
   }
 }
 
-/* ---- 手机横屏（矮屏）：武器按钮放在前进键右侧，展开时列表向上弹出 ---- */
+/* ---- 手机横屏（矮屏）：武器栏底部居中，在前后和跳跃中间，不遮挡 ---- */
 @media (orientation: landscape) and (max-height: 500px) {
   .weapon-bar {
-    /* 收起时：紧跟在 ← → 按钮右侧，同一行 */
-    left: calc(8px + (var(--ctrl-size) + 5px) * 2 + 6px);
+    left: 50%;
     top: auto;
     bottom: 8px;
-    transform: none;
+    transform: translateX(-50%);
     flex-direction: row;
     align-items: center;
     gap: 4px;
     padding: 4px;
     border-radius: 10px;
-    max-width: calc(100vw - 140px - var(--ctrl-size) * 2);
+    max-width: calc(100vw - 220px);
     overflow-x: auto;
     overflow-y: hidden;
   }
   /* 展开时：武器列表在按钮上方弹出，横向排列 */
   .weapon-bar.expanded {
     flex-direction: column-reverse;
-    align-items: flex-start;
+    align-items: center;
     bottom: calc(8px + var(--ctrl-size) + 8px);
     max-width: calc(100vw - 20px);
     max-height: 120px;
@@ -337,10 +336,10 @@ body.normal-mode #hudCheat { display: none; }
   .weapon-bar.expanded .weapon-list {
     flex-direction: row;
     flex-wrap: nowrap;
-    justify-content: flex-start;
+    justify-content: center;
   }
   .weapon-bar.aiming {
-    transform: translateY(6px);
+    transform: translateX(-50%) translateY(6px);
   }
 }
 
