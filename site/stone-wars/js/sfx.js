@@ -64,83 +64,56 @@ export class Sfx {
     src.start(t);
   }
 
+  /**
+   * 射击音效数据表：每种武器对应一组音频事件
+   * tone: [freq, dur, type, vol, endFreq]
+   * noise: [dur, vol, cutoff]
+   */
+  static SHOOT_SFX = {
+    spear:        { tone: [820, 0.09, "sawtooth", 0.07, 300], noise: [0.08, 0.05, 2400] },
+    boulder:      { noise: [0.18, 0.11, 700], tone: [140, 0.15, "triangle", 0.08, 80] },
+    grenade:      { tone: [220, 0.14, "square", 0.05, 420] },
+    banana:       { tone: [520, 0.12, "triangle", 0.07, 300] },
+    watermelon:   { tone: [380, 0.1, "triangle", 0.07, 200], noise: [0.08, 0.04, 1200] },
+    durian:       { noise: [0.12, 0.08, 800], tone: [160, 0.12, "triangle", 0.06, 90] },
+    poisonshroom: { tone: [280, 0.16, "sine", 0.06, 140] },
+    flail:        { noise: [0.1, 0.06, 2000], tone: [240, 0.1, "triangle", 0.05, 120] },
+    flare:        { tone: [900, 0.08, "sine", 0.05, 1400] },
+    molotov:      { noise: [0.14, 0.09, 1000], tone: [200, 0.12, "sawtooth", 0.05, 80] },
+    cluster:      { tone: [440, 0.1, "triangle", 0.06, 220] },
+    drone:        { tone: [680, 0.12, "sine", 0.05, 900], noise: [0.08, 0.03, 3000] },
+    gravity:      { tone: [120, 0.2, "sine", 0.08, 60] },
+    sword:        { tone: [1200, 0.08, "sine", 0.06, 2400], noise: [0.06, 0.03, 4000] },
+    fireball:     { noise: [0.14, 0.08, 900], tone: [300, 0.12, "sawtooth", 0.05, 150] },
+    thunder:      { noise: [0.2, 0.12, 3000], tone: [180, 0.18, "square", 0.06, 60] },
+    swordarray:   { tone: [800, 0.12, "sine", 0.06, 1600], tone2: [1000, 0.1, "sine", 0.04, 2000] },
+    dragonpalm:   { noise: [0.16, 0.1, 700], tone: [140, 0.16, "triangle", 0.08, 70] },
+    shieldcharm:  { tone: [700, 0.1, "sine", 0.05, 1000] },
+    soulchain:    { noise: [0.1, 0.06, 1500], tone: [220, 0.12, "triangle", 0.05, 110] },
+    teleport:     { tone: [900, 0.08, "sine", 0.05, 1800], noise: [0.06, 0.03, 5000] },
+    poisonmist:   { noise: [0.16, 0.07, 600], tone: [160, 0.14, "sine", 0.05, 80] },
+    heal:         { tone: [520, 0.12, "sine", 0.05, 780], tone2: [660, 0.1, "sine", 0.04, 990] },
+    storm:        { noise: [0.22, 0.1, 1200], tone: [200, 0.18, "triangle", 0.06, 100] },
+    skylightning: { noise: [0.28, 0.14, 4000], tone: [120, 0.24, "square", 0.08, 40] },
+    formation:    { tone: [600, 0.14, "sine", 0.06, 1200], tone2: [800, 0.12, "sine", 0.05, 1600], noise: [0.1, 0.04, 3000] },
+    // 新增：补天术 / 场景恢复
+    mend:         { tone: [440, 0.14, "sine", 0.06, 880], tone2: [550, 0.12, "sine", 0.05, 1100], noise: [0.12, 0.04, 2000] },
+    // 新增：搬山术 / 放置石块
+    stonewall:    { noise: [0.2, 0.12, 500], tone: [110, 0.18, "triangle", 0.09, 55] },
+  };
+
+  /** 默认音效（未匹配到的武器类型） */
+  static DEFAULT_SHOOT_SFX = { noise: [0.16, 0.07, 1600], tone: [180, 0.1, "sawtooth", 0.05, 90] };
+
+  /**
+   * 射击音效：数据驱动，查表播放
+   * @param {string} type 武器 ID
+   */
   shoot(type) {
-    if (type === "spear") {
-      this.tone(820, 0.09, "sawtooth", 0.07, 300);
-      this.noise(0.08, 0.05, 2400);
-    } else if (type === "boulder") {
-      this.noise(0.18, 0.11, 700);
-      this.tone(140, 0.15, "triangle", 0.08, 80);
-    } else if (type === "grenade") {
-      this.tone(220, 0.14, "square", 0.05, 420);
-    } else if (type === "banana") {
-      this.tone(520, 0.12, "triangle", 0.07, 300);
-    } else if (type === "watermelon") {
-      this.tone(380, 0.1, "triangle", 0.07, 200);
-      this.noise(0.08, 0.04, 1200);
-    } else if (type === "durian") {
-      this.noise(0.12, 0.08, 800);
-      this.tone(160, 0.12, "triangle", 0.06, 90);
-    } else if (type === "poisonshroom") {
-      this.tone(280, 0.16, "sine", 0.06, 140);
-    } else if (type === "flail") {
-      this.noise(0.1, 0.06, 2000);
-      this.tone(240, 0.1, "triangle", 0.05, 120);
-    } else if (type === "flare") {
-      this.tone(900, 0.08, "sine", 0.05, 1400);
-    } else if (type === "molotov") {
-      this.noise(0.14, 0.09, 1000);
-      this.tone(200, 0.12, "sawtooth", 0.05, 80);
-    } else if (type === "cluster") {
-      this.tone(440, 0.1, "triangle", 0.06, 220);
-    } else if (type === "drone") {
-      this.tone(680, 0.12, "sine", 0.05, 900);
-      this.noise(0.08, 0.03, 3000);
-    } else if (type === "gravity") {
-      this.tone(120, 0.2, "sine", 0.08, 60);
-    } else if (type === "sword") {
-      this.tone(1200, 0.08, "sine", 0.06, 2400);
-      this.noise(0.06, 0.03, 4000);
-    } else if (type === "fireball") {
-      this.noise(0.14, 0.08, 900);
-      this.tone(300, 0.12, "sawtooth", 0.05, 150);
-    } else if (type === "thunder") {
-      this.noise(0.2, 0.12, 3000);
-      this.tone(180, 0.18, "square", 0.06, 60);
-    } else if (type === "swordarray") {
-      this.tone(800, 0.12, "sine", 0.06, 1600);
-      this.tone(1000, 0.1, "sine", 0.04, 2000);
-    } else if (type === "dragonpalm") {
-      this.noise(0.16, 0.1, 700);
-      this.tone(140, 0.16, "triangle", 0.08, 70);
-    } else if (type === "shieldcharm") {
-      this.tone(700, 0.1, "sine", 0.05, 1000);
-    } else if (type === "soulchain") {
-      this.noise(0.1, 0.06, 1500);
-      this.tone(220, 0.12, "triangle", 0.05, 110);
-    } else if (type === "teleport") {
-      this.tone(900, 0.08, "sine", 0.05, 1800);
-      this.noise(0.06, 0.03, 5000);
-    } else if (type === "poisonmist") {
-      this.noise(0.16, 0.07, 600);
-      this.tone(160, 0.14, "sine", 0.05, 80);
-    } else if (type === "heal") {
-      this.tone(520, 0.12, "sine", 0.05, 780);
-      this.tone(660, 0.1, "sine", 0.04, 990);
-    } else if (type === "storm") {
-      this.noise(0.22, 0.1, 1200);
-      this.tone(200, 0.18, "triangle", 0.06, 100);
-    } else if (type === "skylightning") {
-      this.noise(0.28, 0.14, 4000);
-      this.tone(120, 0.24, "square", 0.08, 40);
-    } else if (type === "formation") {
-      this.tone(600, 0.14, "sine", 0.06, 1200);
-      this.tone(800, 0.12, "sine", 0.05, 1600);
-      this.noise(0.1, 0.04, 3000);
-    } else {
-      this.noise(0.16, 0.07, 1600);
-      this.tone(180, 0.1, "sawtooth", 0.05, 90);
-    }
+    const cfg = Sfx.SHOOT_SFX[type] || Sfx.DEFAULT_SHOOT_SFX;
+    if (cfg.noise) this.noise(...cfg.noise);
+    if (cfg.tone) this.tone(...cfg.tone);
+    if (cfg.tone2) this.tone(...cfg.tone2);
   }
 
   explode(size = 60) {

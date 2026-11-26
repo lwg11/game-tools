@@ -55,6 +55,8 @@ class StoneWars {
     applyBodyMode();
     window.addEventListener("gt:mode-changed", () => { this.crazy = isCrazy(); });
     this.fires = [];
+    // 万剑归宗：剑雨中的飞剑列表
+    this.swordRain = [];
     this.weaponIds = [...ERA_WEAPONS.stone];
     this.selectedWeapon = "spear";
     this.ammo = {};
@@ -383,6 +385,7 @@ if (u) u.jump(this._moveDir());
     this.muzzleFlashes = [];
     this.glows = [];
     this.fires = [];
+    this.swordRain = [];
     this.screenFlash = 0;
     this.units = [];
     this.players = [];
@@ -416,7 +419,17 @@ if (u) u.jump(this._moveDir());
     this.cheatOpen = false;
     document.getElementById("cheatScreen").classList.remove("show");
 
-    this.weaponIds = (this.level.weapons || ERA_WEAPONS[this.era.id] || ERA_WEAPONS.stone).slice(0, 7);
+    // 修仙高境界关卡动态解锁更多神通（最多 7 格）
+    let baseWeapons = this.level.weapons || ERA_WEAPONS[this.era.id] || ERA_WEAPONS.stone;
+    if (this.era.id === "cultivation" && !this.level.endless) {
+      const lv = this.level.id;
+      const extra = [];
+      if (lv >= 50) extra.push("heal", "storm");
+      if (lv >= 56) extra.push("skylightning", "formation", "mend", "stonewall");
+      // 去重并截断到 7
+      baseWeapons = [...new Set([...baseWeapons, ...extra])].slice(0, 7);
+    }
+    this.weaponIds = baseWeapons;
     this.ammo = ammoFor(this.level, this.weaponIds);
     this.selectedWeapon = this.weaponIds.find((k) => (this.ammo[k] || 0) > 0) || this.weaponIds[0];
 
@@ -777,6 +790,34 @@ if (u) u.jump(this._moveDir());
         this.addText(caster.x, caster.y - 80, "瞬移", "#6fe8ff");
       }
       this.sfx.shoot("teleport");
+    } else if (w.buffType === "mend") {
+      // 补天术：全体友军恢复至上回合血量，并修复被破坏的地形
+      for (const u of allies) {
+        if (!u.alive) continue;
+        const healed = Math.max(0, u.prevHp - u.hp);
+        u.hp = Math.min(u.maxHp, u.prevHp);
+        this.spawnParticles(u.x, u.y - 40, 14, "#a8ffd8", "spark");
+        this.addText(u.x, u.y - 80, healed > 0 ? `补天 +${Math.round(healed)}` : "补天", "#a8ffd8");
+      }
+      // 恢复地形到上一回合快照
+      if (this.terrainSnapshot) {
+        this.terrain.restore(this.terrainSnapshot);
+        this.terrainDirty = true;
+        // 地形恢复时的绿色光柱特效
+        for (let i = 0; i < 20; i++) {
+          const a = rand(0, TAU);
+          const r = rand(40, 200);
+          this.particles.push({
+            x: caster.x + Math.cos(a) * r, y: caster.y - 40 + Math.sin(a) * r * 0.4,
+            vx: Math.cos(a) * 40, vy: rand(-120, -40),
+            life: rand(0.5, 1.0), maxLife: 1.0, size: rand(2, 5),
+            color: "#a8ffd8", kind: "spark", gravity: -60,
+          });
+        }
+        this.rings.push({ x: caster.x, y: caster.y - 40, r: 20, max: 260, t: 0, life: 0.6, color: "rgba(168,255,216,.6)" });
+      }
+      this.sfx.shoot("mend");
+      this._showBanner("补天术", "全体友军恢复至上回合血量 · 地形修复", true);
     }
     this._refreshWeaponBar();
     this._refreshFireButton();
@@ -870,6 +911,9 @@ if (u) u.jump(this._moveDir());
     this.aim.currentWorld = null;
     this.aim.dragLen = 0;
     this.aim.maxDrag = 0;
+    // 补天术快照：记录本回合开始时的血量与地形，供补天术回溯
+    for (const u of this.units) u.prevHp = u.hp;
+    this.terrainSnapshot = this.terrain ? this.terrain.snapshot() : null;
     this._activePlayer();
     if ((this.ammo[this.selectedWeapon] || 0) <= 0) this.selectedWeapon = this._fallbackWeapon();
     this._updateHUD();
@@ -1575,6 +1619,120 @@ if (!this.players.some((u) => u.alive)) { this.finish(false, "族人全部倒下
   }
 
   // ------------------------------------------------------------ 爆炸 / 伤害
+  /**
+   * 万剑归宗：在目标区域召唤剑雨。
+   * 12 把飞剑从施法者方向的上空腾空而起，呈抛物线落向目标区域，每把剑落地产生小范围爆炸。
+   */
+  spawnSwordRain(x, y, team, damage, blast, weaponType) {
+    const caster = team === 0 ? this._activePlayer() : this._activeEnemy();
+    const srcX = caster ? caster.x : x;
+    const count = 12;
+    for (let i = 0; i < count; i++) {
+      // 每把剑从施法者上空不同高度生成，落点覆盖目标区域
+      const spread = 130;
+      const tx = x + rand(-spread, spread);
+      const ty = y + rand(-40, 40);
+      const startX = srcX + rand(-70, 70);
+      const startY = rand(20, 120);
+      // 延迟依次落下，形成剑雨层次感
+      const delay = i * 0.06 + rand(0, 0.05);
+      this.swordRain.push({
+        x: startX, y: startY,
+        sx: startX, sy: startY,
+        tx, ty,
+        vx: (tx - startX) * 0.9,
+        vy: -rand(60, 160),
+        delay,
+        age: 0,
+        damage, blast,
+        team,
+        weaponType,
+        dead: false,
+      });
+    }
+    // 剑雨启动特效：施法者处剑光冲天
+    if (caster) {
+      this.rings.push({ x: caster.x, y: caster.y - 40, r: 10, max: 120, t: 0, life: 0.4, color: "rgba(168,216,255,.6)" });
+      this.spawnParticles(caster.x, caster.y - 40, 20, "#a8d8ff", "spark");
+    }
+    this.sfx.shoot("swordarray");
+  }
+
+  /** 更新剑雨中的飞剑 */
+  _updateSwordRain(dt) {
+    if (!this.swordRain.length) return;
+    for (let i = this.swordRain.length - 1; i >= 0; i--) {
+      const s = this.swordRain[i];
+      if (s.delay > 0) { s.delay -= dt; continue; }
+      s.age += dt;
+      // 重力加速下落
+      s.vy += 1500 * dt;
+      s.x += s.vx * dt;
+      s.y += s.vy * dt;
+      // 剑尾灵气粒子
+      if (Math.random() < 0.5) {
+        this.particles.push({
+          x: s.x + rand(-2, 2), y: s.y - 14 + rand(-2, 2),
+          vx: rand(-15, 15), vy: rand(-40, -10),
+          life: rand(0.2, 0.4), maxLife: 0.4, size: rand(1.5, 3),
+          color: "#a8d8ff", kind: "spark", gravity: -20,
+        });
+      }
+      // 落地：命中地形或到达目标区域
+      const hitGround = this.terrain && this.terrain.circleHit(s.x, s.y, 3);
+      const reached = s.y >= s.ty && s.vy > 0;
+      if (hitGround || reached) {
+        this.explode(s.x, s.y, s.blast * 0.7, s.damage, s.team, "blast", "swordarray");
+        // 落地剑光
+        this.rings.push({ x: s.x, y: s.y, r: 6, max: 46, t: 0, life: 0.25, color: "rgba(168,216,255,.7)" });
+        this.swordRain.splice(i, 1);
+      } else if (s.age > 3.5 || s.y > H + 60) {
+        this.swordRain.splice(i, 1);
+      }
+    }
+  }
+
+  /** 绘制剑雨中的飞剑 */
+  _drawSwordRain(ctx) {
+    if (!this.swordRain.length) return;
+    for (const s of this.swordRain) {
+      if (s.delay > 0) continue;
+      ctx.save();
+      ctx.translate(s.x, s.y);
+      // 剑身朝速度方向
+      const ang = Math.atan2(s.vy, s.vx);
+      ctx.rotate(ang);
+      ctx.globalCompositeOperation = "lighter";
+      // 剑芒拖尾
+      ctx.strokeStyle = "rgba(168,216,255,.4)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(-10, 0);
+      ctx.lineTo(-26 - rand(0, 5), rand(-2, 2));
+      ctx.stroke();
+      // 剑身
+      ctx.fillStyle = "#d8ecff";
+      ctx.shadowColor = "#a8d8ff";
+      ctx.shadowBlur = 10;
+      ctx.beginPath();
+      ctx.moveTo(12, 0);
+      ctx.lineTo(-4, -2.5);
+      ctx.lineTo(-10, 0);
+      ctx.lineTo(-4, 2.5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      // 剑格
+      ctx.strokeStyle = "#8ab8d8";
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(-4, -4);
+      ctx.lineTo(-4, 4);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
   explode(x, y, radius, damage, team, kind = "blast", weaponType = null) {
     if (!this.terrain) return;
     const beam = kind === "laser";
@@ -1593,6 +1751,7 @@ if (!this.players.some((u) => u.alive)) { this.finish(false, "族人全部倒下
       storm:      { ring: "#6ac8ff", glow: "rgba(106,200,255,.75)", flash: "#6ac8ff", spark: "#d8ecff" },
       skylightning:{ ring: "#fff8c8", glow: "rgba(255,248,200,.8)", flash: "#fff8c8", spark: "#ffffff" },
       formation:  { ring: "#ff6a9a", glow: "rgba(255,106,154,.75)", flash: "#ff6a9a", spark: "#ffd8e8" },
+      mend:       { ring: "#a8ffd8", glow: "rgba(168,255,216,.75)", flash: "#a8ffd8", spark: "#d8ffe8" },
     }[weaponType];
     // 减速/中毒效果配置
     const weaponSlow = weaponType === "soulchain" ? { dur: 3, mul: 0.35 }
@@ -2164,6 +2323,8 @@ if (id === "swordarray") return `<svg ${common}><path d="M12 2v8M12 14v8M2 12h8M
 if (id === "dragonpalm") return `<svg ${common}><path d="M4 12c3-4 6-6 8-6s5 2 8 6c-3 4-6 6-8 6s-5-2-8-6z"/><circle cx="12" cy="12" r="2"/></svg>`;
 if (id === "shieldcharm") return `<svg ${common}><path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg>`;
 if (id === "soulchain") return `<svg ${common}><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M6 6l12 12M18 6L6 18"/></svg>`;
+if (id === "mend") return `<svg ${common}><path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"/><path d="M12 15v6M9 18h6"/></svg>`;
+if (id === "stonewall") return `<svg ${common}><path d="M4 18h16"/><path d="M6 18v-6h5v6"/><path d="M13 18v-9h5v9"/><path d="M8 12h1M15 9h1"/></svg>`;
 return `<svg ${common}><circle cx="12" cy="12" r="5"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l3 3M18 6l-3 3M6 18l3-3M18 18l-3-3"/></svg>`;
   }
 
@@ -2237,6 +2398,8 @@ document.getElementById("hudLevel").textContent = this.level.endless
       this.terrainDirty = false;
     }
     if (this.terrain) ctx.drawImage(this.terrain.canvas, 0, 0);
+    // 动态浮空岛 / 云朵平台：每帧绘制（不进入离屏缓存）
+    if (this.terrain) this.terrain.drawPlatforms(ctx, this.theme);
     this._drawAmbient(ctx);
     this._drawWindStreaks(ctx);
 
@@ -2244,6 +2407,7 @@ document.getElementById("hudLevel").textContent = this.level.endless
     for (const u of sorted) u.draw(ctx, this);
     this._drawFires(ctx);
     for (const p of this.projectiles) p.draw(ctx);
+    this._drawSwordRain(ctx);
 
     if (this.phase === "aim" && (this.aim.active || this.aim.locked)) this._drawPlayerAim(ctx);
     if (this.phase === "aim") this._drawEnemyAims(ctx);
@@ -3389,6 +3553,77 @@ document.getElementById("hudLevel").textContent = this.level.endless
         ctx.closePath();
         ctx.fill();
         ctx.restore();
+      }
+    } else if (type === "mend") {
+      // 补天术：手持时青绿生命之光 + 星辰环绕
+      ctx.globalCompositeOperation = "lighter";
+      const mg = ctx.createRadialGradient(18, 0, 0, 18, 0, 22);
+      mg.addColorStop(0, "rgba(168,255,216,.4)");
+      mg.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = mg;
+      ctx.beginPath();
+      ctx.arc(18, 0, 22, 0, TAU);
+      ctx.fill();
+      ctx.globalCompositeOperation = "source-over";
+      // 星形核心
+      ctx.fillStyle = "#a8ffd8";
+      ctx.shadowColor = "#a8ffd8";
+      ctx.shadowBlur = 12;
+      ctx.beginPath();
+      for (let i = 0; i < 5; i++) {
+        const a = (i / 5) * TAU - Math.PI / 2;
+        const a2 = ((i + 0.5) / 5) * TAU - Math.PI / 2;
+        const r1 = 9, r2 = 4;
+        if (i === 0) ctx.moveTo(18 + Math.cos(a) * r1, Math.sin(a) * r1);
+        else ctx.lineTo(18 + Math.cos(a) * r1, Math.sin(a) * r1);
+        ctx.lineTo(18 + Math.cos(a2) * r2, Math.sin(a2) * r2);
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      // 环绕光点
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * TAU + performance.now() / 400;
+        ctx.fillStyle = "rgba(200,255,230,.6)";
+        ctx.beginPath();
+        ctx.arc(18 + Math.cos(a) * 14, Math.sin(a) * 14, 1.5, 0, TAU);
+        ctx.fill();
+      }
+    } else if (type === "stonewall") {
+      // 搬山术：手持时巨石虚影 + 土石碎光
+      ctx.globalCompositeOperation = "lighter";
+      const sg = ctx.createRadialGradient(18, 0, 0, 18, 0, 20);
+      sg.addColorStop(0, "rgba(200,184,168,.45)");
+      sg.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = sg;
+      ctx.beginPath();
+      ctx.arc(18, 0, 20, 0, TAU);
+      ctx.fill();
+      ctx.globalCompositeOperation = "source-over";
+      // 不规则石块核心
+      ctx.fillStyle = "#8a7a6c";
+      ctx.strokeStyle = "#3a322c";
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      const rockR = 8;
+      for (let i = 0; i < 7; i++) {
+        const a = (i / 7) * TAU;
+        const rr = rockR * (0.8 + ((i * 37) % 10) / 28);
+        const px = 18 + Math.cos(a) * rr;
+        const py = Math.sin(a) * rr;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      // 土石碎光
+      for (let i = 0; i < 5; i++) {
+        const a = (i / 5) * TAU + performance.now() / 500;
+        ctx.fillStyle = "rgba(220,200,180,.5)";
+        ctx.beginPath();
+        ctx.arc(18 + Math.cos(a) * 13, Math.sin(a) * 13, 1.4, 0, TAU);
+        ctx.fill();
       }
     } else {
       // 默认木棒

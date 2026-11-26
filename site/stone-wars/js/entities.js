@@ -36,6 +36,7 @@ export class Unit {
     this.regenRate = 0;    // 回血速率
     this.flyT = 0;         // 飞行剩余时间（修仙模式）
     this.hoverH = 0;       // 悬浮高度（修仙模式）
+    this.prevHp = hp;      // 上一回合血量（补天术用）
     // 实时模式下的敌方 AI 计时器
     this.aiTimer = rand(0.9, 2.2);
     this.aiMoveTimer = rand(0.6, 1.8);
@@ -97,8 +98,25 @@ export class Unit {
     }
     const slow = this.slowT > 0 ? this.slowMul : 1;
     if (this.onGround) {
-      const gy = this.game.terrain.surfaceBelow(this.x, this.y - 8);
-      if (gy === null || gy > this.y + 6) this.onGround = false;
+      // 动态平台承载：单位站在浮空岛/云朵上时，随平台一起移动
+      const plat = this.game.terrain.platformUnder(this.x, this.y);
+      if (plat) {
+        const rect = this.game.terrain._platformRect(plat);
+        // 平台表面跟随（上下悬浮）
+        this.y = rect.y;
+        // 平台水平漂移带动单位
+        if (plat._lastRect) this.x += rect.x - plat._lastRect.x;
+        this.vy = 0;
+        this.groundPlatform = plat;
+      } else {
+        // 离开平台（平台移走了或单位走下平台）
+        if (this.groundPlatform) {
+          this.groundPlatform = null;
+          this.onGround = false;
+        }
+        const gy = this.game.terrain.surfaceBelow(this.x, this.y - 8);
+        if (gy === null || gy > this.y + 6) this.onGround = false;
+      }
     }
     if (!this.onGround) {
       // 修仙模式：御剑飞行，重力减小，空中可自由移动
@@ -168,6 +186,12 @@ export class Unit {
    */
   jump(dir = 0) {
     if (!this.alive || !this.onGround) return false;
+    // 定身状态无法跳跃
+    if (this.stunT > 0) return false;
+    // 回合制：移动预算耗尽后不能跳跃（防止「不能移动却跳到对面」的 bug）
+    if (!this.game.cheatRealtime && this.game.turnTeam === 0 && this.team === 0 && this.game.moveBudget <= 0) {
+      return false;
+    }
     // 修仙模式：跳跃更高（御剑飞行）
     const isCult = this.era === "cultivation";
     this.vy = isCult ? -620 : -470;
@@ -653,7 +677,7 @@ export class Projectile {
       swordarray: "#a8d8ff", dragonpalm: "#ff8a5a", shieldcharm: "#ffd25e",
       soulchain: "#b48ce8", teleport: "#6fe8ff", poisonmist: "#8aff6a",
       heal: "#6affa8", storm: "#6ac8ff", skylightning: "#fff8c8",
-      formation: "#ff6a9a",
+      formation: "#ff6a9a", mend: "#a8ffd8", stonewall: "#c8b8a8",
     }[type] || null;
   }
 
@@ -872,6 +896,23 @@ export class Projectile {
     const g = this.game;
     const dmg = this.weapon.damage * (this.damageMul || 1);
     const blast = this.weapon.blast * (this.blastMul || 1);
+    // 万剑归宗：剑丸命中后，召唤剑雨从修仙者处腾空落向目标区域
+    if (this.kind === "swordrain") {
+      g.spawnSwordRain(this.x, this.y, this.team, dmg, blast, this.type);
+      return;
+    }
+    // 搬山术：落地放置金庚石平台，不爆炸
+    if (this.type === "stonewall") {
+      const placed = g.terrain.placeBlocks(this.x, this.y, 4);
+      // 放置石块的土石特效
+      g.spawnParticles(this.x, this.y, 18, "#c8b8a8", "dirt");
+      g.rings.push({ x: this.x, y: this.y, r: 8, max: 60, t: 0, life: 0.4, color: "rgba(200,184,168,.7)" });
+      g.addText(this.x, this.y - 30, placed ? "搬山" : "落石", "#c8b8a8");
+      g.shake = Math.max(g.shake, 4);
+      g.terrainDirty = true;
+      g.sfx.tone(140, 0.18, "triangle", 0.12);
+      return;
+    }
     if (this.type === "banana") {
       g.explode(this.x, this.y, blast, dmg, this.team, "blast");
       for (let i = 0; i < 3; i++) {
@@ -953,6 +994,42 @@ export class Projectile {
       ctx.lineTo(0, 0);
       ctx.lineTo(-2, 5);
       ctx.stroke();
+    } else if (type === "stonewall") {
+      // 搬山术：不规则巨石 + 土石裂纹 + 灵光
+      ctx.rotate(this.rotation);
+      ctx.fillStyle = "#8a7a6c";
+      ctx.strokeStyle = "#3a322c";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      const rr = 9;
+      for (let i = 0; i < 7; i++) {
+        const a = (i / 7) * TAU;
+        const rad = rr * (0.82 + ((i * 37) % 10) / 30);
+        const px = Math.cos(a) * rad;
+        const py = Math.sin(a) * rad;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      // 土石裂纹
+      ctx.strokeStyle = "rgba(40,32,26,.6)";
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(-4, -5);
+      ctx.lineTo(0, 0);
+      ctx.lineTo(-2, 6);
+      ctx.moveTo(3, -3);
+      ctx.lineTo(5, 2);
+      ctx.stroke();
+      // 灵光晕
+      ctx.globalCompositeOperation = "lighter";
+      ctx.fillStyle = "rgba(200,184,168,.25)";
+      ctx.beginPath();
+      ctx.arc(0, 0, 13, 0, TAU);
+      ctx.fill();
+      ctx.globalCompositeOperation = "source-over";
     } else if (type === "grenade") {
       const pulse = this.fuse !== null && this.fuse < 0.7 ? 1 + Math.sin(this.age * 40) * 0.15 : 1;
       ctx.scale(pulse, pulse);

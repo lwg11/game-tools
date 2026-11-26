@@ -201,9 +201,9 @@ export const WEAPONS = {
   },
   // 金丹期：神通初成
   swordarray: {
-    id: "swordarray", name: "万剑归宗", short: "万", era: "cultivation", kind: "split",
-    desc: "召唤 12 把飞剑，从空中俯冲覆盖大片区域",
-    color: "#a8d8ff", speed: 700, gravity: 850, damage: 28, blast: 56,
+    id: "swordarray", name: "万剑归宗", short: "万", era: "cultivation", kind: "swordrain",
+    desc: "剑丸飞抵目标后，12 把飞剑从修仙者处腾空而起，呈剑雨落向目标区域，范围伤害",
+    color: "#a8d8ff", speed: 760, gravity: 850, damage: 30, blast: 60,
     cooldown: 3.0, icon: "swordarray", realm: "金丹",
   },
   dragonpalm: {
@@ -253,6 +253,20 @@ export const WEAPONS = {
     color: "#ff6a9a", speed: 600, gravity: 800, damage: 45, blast: 80,
     cooldown: 4.5, icon: "formation", realm: "渡劫",
   },
+  // 渡劫期：补天术（群体回血 + 场景恢复）
+  mend: {
+    id: "mend", name: "补天术", short: "补", era: "cultivation", kind: "buff",
+    desc: "补天造人，全体友军恢复至上回合血量，并修复被破坏的地形",
+    color: "#a8ffd8", speed: 0, gravity: 0, damage: 0, blast: 0,
+    cooldown: 14, icon: "mend", realm: "渡劫", buffType: "mend",
+  },
+  // 渡劫期：搬山术（抛掷石块，落地放置金庚石平台）
+  stonewall: {
+    id: "stonewall", name: "搬山术", short: "山", era: "cultivation", kind: "boulder",
+    desc: "抛掷巨石，落地后拔地而起形成金庚石平台，可阻挡敌人或垫脚",
+    color: "#c8b8a8", speed: 780, gravity: 980, damage: 12, blast: 24,
+    cooldown: 3.5, icon: "stonewall", realm: "渡劫",
+  },
 };
 
 export const WEAPON_ORDER = [
@@ -263,7 +277,7 @@ export const WEAPON_ORDER = [
   "laser", "railgun", "drone", "gravity",
   "sword", "fireball", "thunder", "shieldcharm", "soulchain",
   "swordarray", "dragonpalm", "teleport", "poisonmist",
-  "heal", "storm", "skylightning", "formation",
+  "heal", "storm", "skylightning", "formation", "mend", "stonewall",
 ];
 
 /** 每个时代的默认武器栏（最多 7 格） */
@@ -273,6 +287,7 @@ export const ERA_WEAPONS = {
   gun: ["rifle", "rocket", "mortar", "molotov", "cluster", "grenade", "meteor"],
   mech: ["laser", "railgun", "drone", "gravity", "rocket", "cannon", "meteor"],
   cultivation: ["sword", "fireball", "thunder", "shieldcharm", "soulchain", "swordarray", "dragonpalm"],
+  // 高境界关卡会动态解锁更多武器（见 _chooseEnemyWeapon / startLevel）
 };
 
 export const ERAS = {

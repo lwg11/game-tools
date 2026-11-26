@@ -3,10 +3,25 @@
  * 采用 80×45 的瓦片网格（每格 16px）：
  * - 支持坑洞、悬崖、桥、洞顶等结构
  * - 爆炸会真实挖掉瓦片，地表也会随之塌陷
- * - 瓦片值 2＝无尽模式基岩、4＝玄铁岩（炸不坏）、3＝普通障碍石（可炸）
- * - 地形离屏缓存，只有爆炸时才重绘
+ * - 材质等级系统（瓦片值）：
+ *     1 = 泥土（1 次打击摧毁）——石器时代
+ *     2 = 石头（2 次打击）——铁骑/火器时代
+ *     3 = 混凝土（3 次打击）——机械时代
+ *     4 = 金庚石（4 次打击）——修仙时代
+ *     5 = 玄铁岩（不可破坏）——高难关卡
+ *     6 = 无尽模式基岩（不可破坏）
+ * - 瓦片值 3 同时兼作「关卡障碍石」（旧逻辑兼容）
+ * - 材质 hp 网格记录每次打击后的剩余耐久
+ * - 动态浮空岛 / 云朵平台 / 移动岛屿（随时间摆动，可承载单位）
+ * - 地形离屏缓存，只有爆炸或平台移动时才重绘
  */
 import { WORLD, THEMES } from "./levels.js";
+import { clamp, TAU } from "./common.js";
+
+/** 材质等级对应的初始耐久次数 */
+const MAT_HP = { 1: 1, 2: 2, 3: 3, 4: 4, 5: Infinity, 6: Infinity };
+/** 各时代对应的基底材质等级 */
+const ERA_MAT = { stone: 1, iron: 2, gun: 2, mech: 3, cultivation: 4 };
 
 export function mulberry32(seed) {
   let a = seed >>> 0;
@@ -32,23 +47,188 @@ export class Terrain {
     this.rows = WORLD.rows;
     this.tile = WORLD.tile;
     this.grid = new Uint8Array(this.cols * this.rows);
+    // 材质耐久网格：记录每个瓦片剩余可承受打击次数
+    this.hp = new Uint8Array(this.cols * this.rows);
     this.rng = mulberry32(level.seed || 1);
     this.hard = !!(level.hard || level.endless);
+    this.eraMat = ERA_MAT[level.era] || 1;
     this.decor = [];
+    // 动态平台（浮空岛 / 云朵 / 移动岛屿），不进入静态 grid，单独绘制与碰撞
+    this.platforms = [];
+    this.time = 0;
     this.canvas = document.createElement("canvas");
     this.canvas.width = WORLD.w;
     this.canvas.height = WORLD.h;
     this.ctx = this.canvas.getContext("2d");
     this._build();
     // 无尽模式铺一层不可破坏的基岩，防止玩家把敌人脚下整片地面挖空后自动刷波
-    if (level.endless) this.fillRect(0, this.rows - 2, this.cols - 1, this.rows - 1, 2);
+    if (level.endless) this.fillRect(0, this.rows - 2, this.cols - 1, this.rows - 1, 6);
     // 高难关卡（21+）铺一层玄铁地基：炸不坏，杜绝「把石头全炸完」后的无解局
     if (level.hardFloor) {
-      for (let c = 0; c < this.cols; c++) this.grid[this.idx(c, this.rows - 1)] = 4;
+      for (let c = 0; c < this.cols; c++) this.grid[this.idx(c, this.rows - 1)] = 5;
     }
+    // 初始化所有瓦片的耐久
+    this._initHp();
+    // 前期关卡掺入少量高等级石头（不能一击必碎）
+    this._mixHardTiles(level);
     this._addObstacles(level);
+    this._makePlatforms(level);
     this._makeDecor();
     this.redraw(THEMES[level.theme] || THEMES.day);
+  }
+
+  // ------------------------------------------------------------ 动态平台（浮空岛 / 云朵 / 移动岛屿）
+  /**
+   * 根据关卡风格生成动态平台：
+   * - floatpeak / penglai / spiritvalley / palace：浮空岛上下悬浮 + 少量横向漂移
+   * - 其他修仙关卡：云朵平台左右漂移 + 上下悬浮小岛
+   * - 非修仙关卡：不生成（保持经典体验）
+   */
+  _makePlatforms(level) {
+    if (level.era !== "cultivation" && level.theme !== "cultivation"
+      && level.theme !== "immortal" && level.theme !== "penglai"
+      && level.theme !== "palace" && level.theme !== "spirit"
+      && level.theme !== "swordgrave") return;
+    const rng = mulberry32((level.seed || 1) * 17 + 5);
+    const style = level.style || "hills";
+    // 浮空岛：上下悬浮（ampY 大，ampX 小）
+    const islandCount = style === "floatpeak" || style === "penglai" ? 5 : 3;
+    for (let i = 0; i < islandCount; i++) {
+      const w = 5 + Math.floor(rng() * 5); // 5~9 格宽
+      const c0 = 18 + Math.floor(rng() * (this.cols - 36 - w));
+      const baseY = 14 + Math.floor(rng() * 14); // 14~27 行（空中）
+      this.platforms.push({
+        type: "island",
+        c0, c1: c0 + w - 1,
+        baseY, baseX: 0,
+        ampY: 2 + rng() * 3.5,       // 上下悬浮幅度（格）
+        ampX: rng() * 1.5,           // 横向漂移幅度（格）
+        speed: 0.5 + rng() * 0.7,
+        phase: rng() * TAU,
+        mat: 4,                       // 金庚石
+        hp: Infinity, maxHp: Infinity,
+        y: baseY, x: 0,
+      });
+    }
+    // 云朵平台：左右漂移（ampX 大，ampY 小），半透明
+    const cloudCount = 2 + Math.floor(rng() * 2);
+    for (let i = 0; i < cloudCount; i++) {
+      const w = 6 + Math.floor(rng() * 4);
+      const c0 = 12 + Math.floor(rng() * (this.cols - 24 - w));
+      const baseY = 20 + Math.floor(rng() * 12);
+      this.platforms.push({
+        type: "cloud",
+        c0, c1: c0 + w - 1,
+        baseY, baseX: 0,
+        ampY: 1 + rng() * 1.5,
+        ampX: 4 + rng() * 5,
+        speed: 0.35 + rng() * 0.4,
+        phase: rng() * TAU,
+        mat: 0,                       // 云朵无材质（不可破坏）
+        hp: Infinity, maxHp: Infinity,
+        y: baseY, x: 0,
+      });
+    }
+    // 移动岛屿：横向来回移动（ampX 大），位置较低
+    if (style === "penglai" || style === "spiritvalley" || rng() > 0.5) {
+      const w = 4 + Math.floor(rng() * 3);
+      const c0 = 24 + Math.floor(rng() * (this.cols - 48 - w));
+      const baseY = 26 + Math.floor(rng() * 8);
+      this.platforms.push({
+        type: "move",
+        c0, c1: c0 + w - 1,
+        baseY, baseX: 0,
+        ampY: 0.8 + rng() * 1.2,
+        ampX: 8 + rng() * 8,
+        speed: 0.4 + rng() * 0.5,
+        phase: rng() * TAU,
+        mat: 4,
+        hp: Infinity, maxHp: Infinity,
+        y: baseY, x: 0,
+      });
+    }
+    this._updatePlatforms(0);
+  }
+
+  /** 更新所有动态平台的位置（每帧调用） */
+  _updatePlatforms(dt) {
+    this.time += dt;
+    const t = this.time;
+    for (const p of this.platforms) {
+      p.y = p.baseY + Math.sin(t * p.speed + p.phase) * p.ampY;
+      p.x = p.baseX + Math.sin(t * p.speed * 0.7 + p.phase * 1.3) * p.ampX;
+      // 记录本帧位置，供单位随平台移动计算差值
+      p._lastRect = this._platformRect(p);
+    }
+  }
+
+  /** 平台左上角像素坐标 */
+  _platformRect(p) {
+    const tile = this.tile;
+    return {
+      x: (p.c0 + p.x) * tile,
+      y: p.y * tile,
+      w: (p.c1 - p.c0 + 1) * tile,
+      h: tile,
+    };
+  }
+
+  /** 点 (x,y) 是否落在某个动态平台上表面（用于承载单位） */
+  platformAt(x, y) {
+    const tile = this.tile;
+    for (const p of this.platforms) {
+      const r = this._platformRect(p);
+      if (x >= r.x - 2 && x <= r.x + r.w + 2 && y >= r.y - 4 && y <= r.y + tile * 0.7) {
+        return p;
+      }
+    }
+    return null;
+  }
+
+  /** 单位脚下平台（更宽松的判定，用于随平台移动） */
+  platformUnder(x, y) {
+    const tile = this.tile;
+    for (const p of this.platforms) {
+      const r = this._platformRect(p);
+      if (x >= r.x - 4 && x <= r.x + r.w + 4 && y >= r.y - 8 && y <= r.y + tile * 1.2) {
+        return p;
+      }
+    }
+    return null;
+  }
+
+  /** 动态平台是否阻挡弹道（圆形碰撞） */
+  _platformCircleHit(x, y, radius) {
+    for (const p of this.platforms) {
+      const r = this._platformRect(p);
+      // 圆与矩形相交
+      const cx = clamp(x, r.x, r.x + r.w);
+      const cy = clamp(y, r.y, r.y + r.h);
+      const dx = x - cx;
+      const dy = y - cy;
+      if (dx * dx + dy * dy < radius * radius) return true;
+    }
+    return false;
+  }
+
+  // ------------------------------------------------------------ 快照 / 恢复（补天术）
+  /** 保存当前地形快照（网格 + 平台状态） */
+  snapshot() {
+    return {
+      grid: this.grid.slice(),
+      hp: this.hp.slice(),
+      platforms: this.platforms.map((p) => ({ ...p })),
+    };
+  }
+
+  /** 恢复到指定快照 */
+  restore(snap) {
+    if (!snap || !snap.grid || snap.grid.length !== this.grid.length) return;
+    this.grid.set(snap.grid);
+    if (snap.hp && snap.hp.length === this.hp.length) this.hp.set(snap.hp);
+    if (snap.platforms && snap.platforms.length === this.platforms.length) {
+      for (let i = 0; i < snap.platforms.length; i++) Object.assign(this.platforms[i], snap.platforms[i]);
+    }
   }
 
   // ------------------------------------------------------------ 基础操作
@@ -62,7 +242,9 @@ export class Terrain {
   }
 
   solidAt(x, y) {
-    return this.solid(Math.floor(x / this.tile), Math.floor(y / this.tile));
+    if (this.solid(Math.floor(x / this.tile), Math.floor(y / this.tile))) return true;
+    // 动态平台：像素级矩形碰撞（上表面 + 薄体）
+    return this._platformCircleHit(x, y, 1);
   }
 
   fillRect(c0, r0, c1, r1, value = 1) {
@@ -71,7 +253,50 @@ export class Terrain {
     const c = Math.max(0, Math.min(r0, r1));
     const d = Math.min(this.rows - 1, Math.max(r0, r1));
     for (let r = c; r <= d; r++) {
-      for (let col = a; col <= b; col++) this.grid[this.idx(col, r)] = value;
+      for (let col = a; col <= b; col++) {
+        this.grid[this.idx(col, r)] = value;
+        // 同步初始化耐久
+        this.hp[this.idx(col, r)] = MAT_HP[value] ?? 1;
+      }
+    }
+  }
+
+  /** 初始化所有瓦片的耐久值 */
+  _initHp() {
+    for (let i = 0; i < this.grid.length; i++) {
+      this.hp[i] = MAT_HP[this.grid[i]] ?? 1;
+    }
+  }
+
+  /** 前期关卡掺入少量高等级石头，让其不能一击必碎 */
+  _mixHardTiles(level) {
+    const id = Number(level.id) || 0;
+    // 石器时代（1-8）：掺入少量石头（等级2）
+    // 铁骑/火器（9-24）：掺入少量混凝土（等级3）
+    // 机械（25-32）：掺入少量金庚石（等级4）
+    // 修仙（33+）：基底已是金庚石，掺入少量玄铁岩（等级5）
+    let hardVal, count;
+    if (id <= 8) { hardVal = 2; count = 12; }
+    else if (id <= 24) { hardVal = 3; count = 14; }
+    else if (id <= 32) { hardVal = 4; count = 16; }
+    else { hardVal = 5; count = 20; }
+    if (level.endless) return;
+    const rng = mulberry32((level.seed || 1) * 31 + 7);
+    for (let i = 0; i < count; i++) {
+      // 随机选一个地表瓦片替换为高等级材质
+      const c = 4 + Math.floor(rng() * (this.cols - 8));
+      // 从地表往下找第一个实心瓦片
+      for (let r = 0; r < this.rows; r++) {
+        if (this.grid[this.idx(c, r)] !== 0) {
+          // 只替换基底材质（1/2/3/4），不替换障碍石和基岩
+          const v = this.grid[this.idx(c, r)];
+          if (v >= 1 && v <= 4) {
+            this.grid[this.idx(c, r)] = hardVal;
+            this.hp[this.idx(c, r)] = MAT_HP[hardVal];
+          }
+          break;
+        }
+      }
     }
   }
 
@@ -84,10 +309,17 @@ export class Terrain {
     const c = Math.floor(x / this.tile);
     if (c < 0 || c >= this.cols) return null;
     const start = Math.max(0, Math.floor(fromY / this.tile));
+    let best = null;
     for (let r = start; r < this.rows; r++) {
-      if (this.solid(c, r)) return r * this.tile;
+      if (this.solid(c, r)) { best = r * this.tile; break; }
     }
-    return null;
+    // 动态平台：取 fromY 以下最近的平台表面
+    for (const p of this.platforms) {
+      const rect = this._platformRect(p);
+      if (x < rect.x - 2 || x > rect.x + rect.w + 2) continue;
+      if (rect.y >= fromY - 2 && (best === null || rect.y < best)) best = rect.y;
+    }
+    return best;
   }
 
   /** 从顶部扫描，用于出生点与落点检测 */
@@ -99,6 +331,7 @@ export class Terrain {
   circleHit(x, y, radius) {
     if (x - radius < 0 || x + radius > WORLD.w || y - radius > WORLD.h) return true;
     if (this.solidAt(x, y)) return true;
+    if (this._platformCircleHit(x, y, radius)) return true;
     const pts = 8;
     for (let i = 0; i < pts; i++) {
       const a = (i / pts) * Math.PI * 2;
@@ -121,8 +354,18 @@ export class Terrain {
         const dx = px - cx;
         const dy = py - cy;
         const edge = 0.82 + hash2(c, r, this.level.seed || 1) * 0.36;
-        if (dx * dx + dy * dy <= r2 * edge && this.grid[this.idx(c, r)] !== 2 && this.grid[this.idx(c, r)] !== 4) {
-          this.grid[this.idx(c, r)] = 0;
+        const idx = this.idx(c, r);
+        const v = this.grid[idx];
+        if (v === 0) continue;
+        // 不可破坏材质（5=玄铁岩, 6=基岩）
+        if (v === 5 || v === 6) continue;
+        if (dx * dx + dy * dy <= r2 * edge) {
+          // 材质耐久递减：高等级材质需要多次打击
+          this.hp[idx] -= 1;
+          if (this.hp[idx] <= 0) {
+            this.grid[idx] = 0;
+            this.hp[idx] = 0;
+          }
         }
       }
     }
@@ -535,9 +778,11 @@ export class Terrain {
         const depth = this._depth(c, r);
         const tileValue = this.grid[this.idx(c, r)];
         let color;
-        if (tileValue === 2) color = "#2b3038"; // 无尽模式基岩
-        else if (tileValue === 4) color = "#3c475e"; // 玄铁岩（不可破坏）
-        else if (tileValue === 3) color = "#6d665c"; // 关卡障碍石
+        if (tileValue === 6) color = "#2b3038"; // 无尽模式基岩
+        else if (tileValue === 5) color = "#3c475e"; // 玄铁岩（不可破坏）
+        else if (tileValue === 4) color = "#8a7a9a"; // 金庚石（修仙）
+        else if (tileValue === 3) color = "#7a7a7a"; // 混凝土（机械）
+        else if (tileValue === 2) color = "#6d665c"; // 石头（铁骑/火器）
         else if (depth === 0) color = t.grass;
         else if (depth < 3) color = dirt[0];
         else if (depth < 8) color = dirt[1];
@@ -549,10 +794,10 @@ export class Terrain {
         if (n > 0.55) ctx.fillRect(x + (n * 10) % 10, y + (n * 13) % 10, 3, 3);
         // 顶面草皮 / 石头高光
         if (!this.solid(c, r - 1)) {
-          if (tileValue === 2) {
+          if (tileValue === 6) {
             ctx.fillStyle = "rgba(150,210,255,.35)";
             ctx.fillRect(x, y, tile, 3);
-          } else if (tileValue === 4) {
+          } else if (tileValue === 5) {
             // 玄铁岩：冷色金属高光 + 菱形结晶，猛一看就知道炸不动
             ctx.fillStyle = "rgba(140,180,235,.5)";
             ctx.fillRect(x, y, tile, 3);
@@ -560,12 +805,34 @@ export class Terrain {
             ctx.fillRect(x, y + tile - 3, tile, 3);
             ctx.fillStyle = "rgba(170,210,255,.5)";
             ctx.fillRect(x + 2 + (n * 6) % 8, y + 6 + (n * 9) % 8, 3, 3);
+          } else if (tileValue === 4) {
+            // 金庚石：紫金光泽 + 结晶纹理
+            ctx.fillStyle = "rgba(200,180,255,.5)";
+            ctx.fillRect(x, y, tile, 3);
+            ctx.fillStyle = "rgba(40,20,60,.5)";
+            ctx.fillRect(x, y + tile - 3, tile, 3);
+            ctx.fillStyle = "rgba(220,200,255,.5)";
+            ctx.fillRect(x + 2 + (n * 6) % 8, y + 6 + (n * 9) % 8, 3, 3);
           } else if (tileValue === 3) {
+            // 混凝土：灰色工业质感
+            ctx.fillStyle = "rgba(200,200,200,.4)";
+            ctx.fillRect(x, y, tile, 3);
+            ctx.fillStyle = "rgba(30,30,30,.5)";
+            ctx.fillRect(x, y + tile - 3, tile, 3);
+            if (n > 0.6) {
+              ctx.strokeStyle = "rgba(40,40,40,.4)";
+              ctx.lineWidth = 1;
+              ctx.beginPath();
+              ctx.moveTo(x + 2, y + 5);
+              ctx.lineTo(x + 9 + n * 4, y + 11);
+              ctx.stroke();
+            }
+          } else if (tileValue === 2) {
+            // 石头：浅灰高光 + 石缝
             ctx.fillStyle = "rgba(232,220,200,.42)";
             ctx.fillRect(x, y, tile, 3);
             ctx.fillStyle = "rgba(38,33,27,.5)";
             ctx.fillRect(x, y + tile - 3, tile, 3);
-            // 石缝
             if (n > 0.6) {
               ctx.strokeStyle = "rgba(34,29,23,.45)";
               ctx.lineWidth = 1;
@@ -660,5 +927,128 @@ export class Terrain {
       else break;
     }
     return d;
+  }
+
+  // ------------------------------------------------------------ 动态平台绘制（每帧）
+  /**
+   * 在主画布上绘制动态平台（浮空岛 / 云朵 / 移动岛屿）。
+   * 平台每帧移动，因此不进入离屏缓存，由 game.js 每帧调用。
+   */
+  drawPlatforms(ctx, theme) {
+    if (!this.platforms.length) return;
+    const t = theme || THEMES.day;
+    const tile = this.tile;
+    for (const p of this.platforms) {
+      const r = this._platformRect(p);
+      const n = hash2(p.c0, Math.round(p.baseY), this.level.seed || 1);
+      ctx.save();
+      if (p.type === "cloud") {
+        // 云朵：半透明白色蓬松质感 + 底部阴影
+        ctx.globalAlpha = 0.82;
+        const grd = ctx.createLinearGradient(0, r.y, 0, r.y + r.h);
+        grd.addColorStop(0, "rgba(255,255,255,.95)");
+        grd.addColorStop(1, "rgba(210,225,245,.75)");
+        ctx.fillStyle = grd;
+        this._roundRect(ctx, r.x, r.y, r.w, r.h + 4, 8);
+        ctx.fill();
+        // 云团高光
+        ctx.fillStyle = "rgba(255,255,255,.9)";
+        for (let i = 0; i < Math.floor(r.w / 26); i++) {
+          const cx = r.x + 14 + i * 26 + n * 6;
+          ctx.beginPath();
+          ctx.ellipse(cx, r.y + 4, 12, 5, 0, 0, TAU);
+          ctx.fill();
+        }
+        ctx.fillStyle = "rgba(160,180,210,.35)";
+        ctx.fillRect(r.x + 4, r.y + r.h - 2, r.w - 8, 3);
+      } else {
+        // 浮空岛 / 移动岛屿：金庚石质感 + 底部岩石 + 光晕
+        const isMove = p.type === "move";
+        // 底部光晕（修仙飘逸感）
+        ctx.globalAlpha = 0.35 + Math.sin(this.time * 2 + p.phase) * 0.1;
+        const glow = ctx.createRadialGradient(
+          r.x + r.w / 2, r.y + r.h, 4,
+          r.x + r.w / 2, r.y + r.h, r.w * 0.7
+        );
+        glow.addColorStop(0, isMove ? "rgba(168,216,255,.8)" : "rgba(200,180,255,.8)");
+        glow.addColorStop(1, "rgba(200,180,255,0)");
+        ctx.fillStyle = glow;
+        ctx.fillRect(r.x - r.w * 0.3, r.y + r.h - 6, r.w * 1.6, r.h + 18);
+        ctx.globalAlpha = 1;
+        // 主体岩石
+        const body = ctx.createLinearGradient(0, r.y, 0, r.y + r.h + 6);
+        body.addColorStop(0, "#8a7a9a");
+        body.addColorStop(0.5, "#5a4a6c");
+        body.addColorStop(1, "#3a2e48");
+        ctx.fillStyle = body;
+        this._roundRect(ctx, r.x, r.y, r.w, r.h + 5, 5);
+        ctx.fill();
+        // 顶部灵草皮
+        ctx.fillStyle = t.grassLight;
+        this._roundRect(ctx, r.x, r.y, r.w, 5, 3);
+        ctx.fill();
+        ctx.fillStyle = t.grass;
+        ctx.fillRect(r.x + 2, r.y + 4, r.w - 4, 2);
+        // 紫金结晶高光
+        ctx.fillStyle = "rgba(220,200,255,.55)";
+        for (let i = 0; i < Math.floor(r.w / 22); i++) {
+          const cx = r.x + 8 + i * 22 + n * 5;
+          ctx.fillRect(cx, r.y + 8 + n * 3, 3, 3);
+        }
+        // 底部尖锐岩石（浮空岛倒锥）
+        if (!isMove) {
+          ctx.fillStyle = "#4a3c5c";
+          ctx.beginPath();
+          ctx.moveTo(r.x + 3, r.y + r.h + 4);
+          ctx.lineTo(r.x + r.w / 2, r.y + r.h + 12 + n * 4);
+          ctx.lineTo(r.x + r.w - 3, r.y + r.h + 4);
+          ctx.closePath();
+          ctx.fill();
+        }
+        // 边缘阴影
+        ctx.fillStyle = "rgba(0,0,0,.25)";
+        ctx.fillRect(r.x + 2, r.y + r.h + 2, r.w - 4, 3);
+      }
+      ctx.restore();
+    }
+  }
+
+  // ------------------------------------------------------------ 搬山术：放置石块
+  /**
+   * 在指定像素位置放置一组金庚石瓦片（3×2），形成可站立/阻挡的平台。
+   * 返回是否成功放置。
+   */
+  placeBlocks(x, y, mat = 4) {
+    const tile = this.tile;
+    const c = Math.floor(x / tile);
+    const r = Math.floor(y / tile);
+    const w = 3, h = 2;
+    let placed = false;
+    for (let dr = 0; dr < h; dr++) {
+      for (let dc = 0; dc < w; dc++) {
+        const cc = c + dc - 1;
+        const rr = r + dr;
+        if (cc < 0 || cc >= this.cols || rr < 0 || rr >= this.rows) continue;
+        const idx = this.idx(cc, rr);
+        // 只填充空气，不覆盖已有地形
+        if (this.grid[idx] === 0) {
+          this.grid[idx] = mat;
+          this.hp[idx] = MAT_HP[mat] ?? 4;
+          placed = true;
+        }
+      }
+    }
+    return placed;
+  }
+
+  _roundRect(ctx, x, y, w, h, r) {
+    const rr = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + rr, y);
+    ctx.arcTo(x + w, y, x + w, y + h, rr);
+    ctx.arcTo(x + w, y + h, x, y + h, rr);
+    ctx.arcTo(x, y + h, x, y, rr);
+    ctx.arcTo(x, y, x + w, y, rr);
+    ctx.closePath();
   }
 }
