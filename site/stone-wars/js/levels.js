@@ -166,48 +166,92 @@ export const WEAPONS = {
     cooldown: 3.2, icon: "gravity",
   },
 
-  // ------------------------------------------------------------ 修仙时代
+  // ------------------------------------------------------------ 修仙时代（按境界递进）
+  // 炼气期：基础攻击
   sword: {
-    id: "sword", name: "飞剑", short: "剑", era: "cultivation", kind: "spear",
+    id: "sword", name: "御剑诀", short: "剑", era: "cultivation", kind: "spear",
     desc: "御剑飞行，直线穿透敌人",
     color: "#e8f4ff", speed: 1800, gravity: 0, damage: 42, blast: 24,
-    cooldown: 0.45, pierce: true, icon: "sword",
+    cooldown: 0.45, pierce: true, icon: "sword", realm: "炼气",
   },
   fireball: {
     id: "fireball", name: "火球术", short: "火", era: "cultivation", kind: "boulder",
     desc: "抛射火球，爆炸后留下火海",
     color: "#ff6a3a", speed: 860, gravity: 900, damage: 58, blast: 92,
-    cooldown: 1.6, icon: "fireball",
+    cooldown: 1.6, icon: "fireball", realm: "炼气",
   },
+  // 筑基期：防御与控制
   thunder: {
     id: "thunder", name: "雷符", short: "雷", era: "cultivation", kind: "grenade",
     desc: "落地后召唤天雷，大范围高伤害",
     color: "#ffe95c", speed: 780, gravity: 950, damage: 72, blast: 120,
-    fuse: 1.8, bounce: 0.3, cooldown: 2.4, icon: "thunder",
-  },
-  swordarray: {
-    id: "swordarray", name: "万剑归宗", short: "万", era: "cultivation", kind: "split",
-    desc: "召唤 8 把飞剑，覆盖大片区域",
-    color: "#a8d8ff", speed: 700, gravity: 850, damage: 28, blast: 56,
-    cooldown: 3.0, icon: "swordarray",
-  },
-  dragonpalm: {
-    id: "dragonpalm", name: "降龙十八掌", short: "龙", era: "cultivation", kind: "boulder",
-    desc: "掌力化龙，命中后剧烈爆炸",
-    color: "#ff8a5a", speed: 920, gravity: 880, damage: 80, blast: 130,
-    cooldown: 2.8, icon: "dragonpalm",
+    fuse: 1.8, bounce: 0.3, cooldown: 2.4, icon: "thunder", realm: "筑基",
   },
   shieldcharm: {
-    id: "shieldcharm", name: "护体符", short: "护", era: "cultivation", kind: "spear",
-    desc: "短距离护体金光，可弹开敌人",
-    color: "#ffd25e", speed: 1200, gravity: 200, damage: 25, blast: 40,
-    cooldown: 1.2, icon: "shieldcharm",
+    id: "shieldcharm", name: "护体符", short: "护", era: "cultivation", kind: "buff",
+    desc: "为全体友军施加护盾，抵挡一次伤害",
+    color: "#ffd25e", speed: 0, gravity: 0, damage: 0, blast: 0,
+    cooldown: 8, icon: "shieldcharm", realm: "筑基", buffType: "shield", buffVal: 80, buffDur: 12,
   },
   soulchain: {
     id: "soulchain", name: "锁魂链", short: "锁", era: "cultivation", kind: "spike",
-    desc: "贴地锁链，碰到敌人爆炸并减速",
-    color: "#b48ce8", speed: 700, gravity: 1100, damage: 45, blast: 70,
-    cooldown: 2.0, icon: "soulchain",
+    desc: "贴地锁链，命中后减速敌人 3 秒",
+    color: "#b48ce8", speed: 700, gravity: 1100, damage: 25, blast: 50,
+    cooldown: 2.5, icon: "soulchain", realm: "筑基", slowDur: 3, slowMul: 0.35,
+  },
+  // 金丹期：神通初成
+  swordarray: {
+    id: "swordarray", name: "万剑归宗", short: "万", era: "cultivation", kind: "split",
+    desc: "召唤 12 把飞剑，从空中俯冲覆盖大片区域",
+    color: "#a8d8ff", speed: 700, gravity: 850, damage: 28, blast: 56,
+    cooldown: 3.0, icon: "swordarray", realm: "金丹",
+  },
+  dragonpalm: {
+    id: "dragonpalm", name: "降龙十八掌", short: "龙", era: "cultivation", kind: "boulder",
+    desc: "掌力化龙，蜿蜒冲撞，命中后剧烈爆炸",
+    color: "#ff8a5a", speed: 920, gravity: 880, damage: 80, blast: 130,
+    cooldown: 2.8, icon: "dragonpalm", realm: "金丹",
+  },
+  // 元婴期：神识强大
+  teleport: {
+    id: "teleport", name: "瞬移", short: "瞬", era: "cultivation", kind: "buff",
+    desc: "瞬间移动到指定位置，躲避攻击",
+    color: "#6fe8ff", speed: 0, gravity: 0, damage: 0, blast: 0,
+    cooldown: 5, icon: "teleport", realm: "元婴", buffType: "teleport",
+  },
+  poisonmist: {
+    id: "poisonmist", name: "毒雾术", short: "毒", era: "cultivation", kind: "grenade",
+    desc: "释放毒雾，使敌人中毒持续掉血",
+    color: "#8aff6a", speed: 750, gravity: 900, damage: 20, blast: 80,
+    fuse: 1.2, bounce: 0.3, cooldown: 3.5, icon: "poisonmist", realm: "元婴",
+    poisonDur: 5, poisonDps: 8,
+  },
+  // 化神期：呼风唤雨
+  heal: {
+    id: "heal", name: "回春术", short: "春", era: "cultivation", kind: "buff",
+    desc: "治疗全体友军，持续回血 5 秒",
+    color: "#6affa8", speed: 0, gravity: 0, damage: 0, blast: 0,
+    cooldown: 10, icon: "heal", realm: "化神", buffType: "heal", buffVal: 15, buffDur: 5,
+  },
+  storm: {
+    id: "storm", name: "呼风唤雨", short: "风", era: "cultivation", kind: "grenade",
+    desc: "召唤风暴，大范围减速并伤害敌人",
+    color: "#6ac8ff", speed: 600, gravity: 800, damage: 40, blast: 150,
+    fuse: 2.0, bounce: 0.2, cooldown: 4.0, icon: "storm", realm: "化神",
+    slowDur: 4, slowMul: 0.3,
+  },
+  // 渡劫期：毁天灭地
+  skylightning: {
+    id: "skylightning", name: "天雷灭世", short: "灭", era: "cultivation", kind: "grenade",
+    desc: "召唤九天神雷，毁灭一切",
+    color: "#fff8c8", speed: 500, gravity: 700, damage: 120, blast: 180,
+    fuse: 2.5, bounce: 0.2, cooldown: 5.0, icon: "skylightning", realm: "渡劫",
+  },
+  formation: {
+    id: "formation", name: "诛仙阵", short: "诛", era: "cultivation", kind: "split",
+    desc: "布下诛仙剑阵，万剑齐发，毁天灭地",
+    color: "#ff6a9a", speed: 600, gravity: 800, damage: 45, blast: 80,
+    cooldown: 4.5, icon: "formation", realm: "渡劫",
   },
 };
 
@@ -217,7 +261,9 @@ export const WEAPON_ORDER = [
   "crossbow", "cannon", "firebomb", "flail", "flare",
   "rifle", "mortar", "rocket", "molotov", "cluster",
   "laser", "railgun", "drone", "gravity",
-  "sword", "fireball", "thunder", "swordarray", "dragonpalm", "shieldcharm", "soulchain",
+  "sword", "fireball", "thunder", "shieldcharm", "soulchain",
+  "swordarray", "dragonpalm", "teleport", "poisonmist",
+  "heal", "storm", "skylightning", "formation",
 ];
 
 /** 每个时代的默认武器栏（最多 7 格） */
@@ -226,34 +272,58 @@ export const ERA_WEAPONS = {
   iron: ["crossbow", "cannon", "firebomb", "flail", "flare", "spike", "meteor"],
   gun: ["rifle", "rocket", "mortar", "molotov", "cluster", "grenade", "meteor"],
   mech: ["laser", "railgun", "drone", "gravity", "rocket", "cannon", "meteor"],
-  cultivation: ["sword", "fireball", "thunder", "swordarray", "dragonpalm", "shieldcharm", "soulchain"],
+  cultivation: ["sword", "fireball", "thunder", "shieldcharm", "soulchain", "swordarray", "dragonpalm"],
 };
 
 export const ERAS = {
   stone: {
-    id: "stone", name: "石器时代", short: "石器", range: "1-5 关",
+    id: "stone", name: "石器时代", short: "石器", range: "1-8 关",
     accent: "#d8b06a", playerHp: 110,
     desc: "石矛与石弹，靠地形和蛮力取胜",
+    realms: [
+      { name: "原始期", levels: [1, 2, 3], weapon: "spear" },
+      { name: "部落期", levels: [4, 5, 6, 7, 8], weapon: "boulder" },
+    ],
   },
   iron: {
-    id: "iron", name: "铁骑时代", short: "铁骑", range: "6-10 关",
+    id: "iron", name: "铁骑时代", short: "铁骑", range: "9-16 关",
     accent: "#9fb0c2", playerHp: 140,
     desc: "铁甲、弩炮与骑兵，爆炸范围更大",
+    realms: [
+      { name: "铁器初现", levels: [9, 10, 11], weapon: "crossbow" },
+      { name: "重甲洪流", levels: [12, 13, 14, 15, 16], weapon: "cannon" },
+    ],
   },
   gun: {
-    id: "gun", name: "火器时代", short: "火器", range: "11-15 关",
+    id: "gun", name: "火器时代", short: "火器", range: "17-24 关",
     accent: "#ffa15c", playerHp: 180,
     desc: "火枪齐射、迫击炮覆盖与火箭轰炸",
+    realms: [
+      { name: "火药初鸣", levels: [17, 18, 19], weapon: "rifle" },
+      { name: "炮火覆盖", levels: [20, 21, 22, 23, 24], weapon: "mortar" },
+    ],
   },
   mech: {
-    id: "mech", name: "机械时代", short: "机械", range: "16-20 关",
+    id: "mech", name: "机械时代", short: "机械", range: "25-32 关",
     accent: "#6fe8ff", playerHp: 220,
     desc: "激光与电磁炮，能贯穿整条战线",
+    realms: [
+      { name: "钢铁黎明", levels: [25, 26, 27], weapon: "laser" },
+      { name: "电磁风暴", levels: [28, 29, 30, 31, 32], weapon: "railgun" },
+    ],
   },
   cultivation: {
-    id: "cultivation", name: "修仙时代", short: "修仙", range: "29-38 关",
+    id: "cultivation", name: "修仙时代", short: "修仙", range: "33-60 关",
     accent: "#c8a8ff", playerHp: 260,
     desc: "御剑飞行、雷法火术，神通广大",
+    realms: [
+      { name: "炼气期", levels: [33, 34, 35], weapon: "sword" },
+      { name: "筑基期", levels: [36, 37, 38, 39], weapon: "fireball" },
+      { name: "金丹期", levels: [40, 41, 42, 43, 44], weapon: "swordarray" },
+      { name: "元婴期", levels: [45, 46, 47, 48, 49], weapon: "dragonpalm" },
+      { name: "化神期", levels: [50, 51, 52, 53, 54, 55], weapon: "storm" },
+      { name: "渡劫期", levels: [56, 57, 58, 59, 60], weapon: "skylightning" },
+    ],
   },
 };
 
@@ -419,99 +489,160 @@ function makeLevel(id, era, name, goal, theme, style, seed, players, enemies, ai
 }
 
 export const LEVELS = [
-  // ------------------------------------------------------------ 石器时代 1-5
+  // ============================================================ 石器时代 1-8
+  // ---- 原始期（1-3）----
   makeLevel(1, "stone", "初次狩猎", "消灭对面落单的野人", "dawn", "hills", 11,
     [170, 246], [{ x: 1030, type: "grunt", hp: 70 }], 0.3, 2, 6, 2),
   makeLevel(2, "stone", "峡谷回声", "两两对决，把他们打下山崖", "day", "canyon", 21,
     [150, 230], [{ x: 1000, type: "grunt" }, { x: 1085, type: "grunt" }], 0.38, 4, 10, 3),
   makeLevel(3, "stone", "高台哨兵", "敌人占据高地，用抛物线教他下来", "dawn", "plateau", 31,
     [160, 250], [{ x: 960, type: "thrower" }, { x: 1060, type: "grunt" }], 0.45, 4, 10, 3.5),
+  // ---- 部落期（4-8）----
   makeLevel(4, "stone", "落日部落", "三打二，别浪费手里的刺球", "dusk", "hills", 41,
     [140, 215, 288], [{ x: 980, type: "thrower" }, { x: 1075, type: "grunt" }], 0.48, 4, 10, 4),
   makeLevel(5, "stone", "蘑菇林地", "以少打多，利用地形和炸弹", "day", "forest", 51,
     [165, 250], [{ x: 900, type: "grunt" }, { x: 1000, type: "grunt" }, { x: 1095, type: "thrower" }], 0.5, 5, 12, 3),
+  makeLevel(6, "stone", "石林迷阵", "玄铁巨柱挡路，绕过柱子炸掉对手", "dawn", "hills", 61,
+    [150, 235, 315], [{ x: 950, type: "brute" }, { x: 1035, type: "thrower" }, { x: 1120, type: "chief" }], 0.54, 5, 13, 4.5, true),
+  makeLevel(7, "stone", "岩原伏击", "先清两侧投手，再轰酋长", "dusk", "canyon", 71,
+    [145, 225, 310], [{ x: 940, type: "thrower" }, { x: 1030, type: "brute" }, { x: 1115, type: "chief", hp: 200 }], 0.58, 6, 13, 5, true),
+  makeLevel(8, "stone", "部落酋长", "酋长身披兽皮，全力击败他", "dusk", "fortress", 81,
+    [150, 240], [{ x: 980, type: "chief", hp: 240 }, { x: 1080, type: "brute" }, { x: 1150, type: "thrower" }], 0.6, 6, 14, 4),
 
-  // ------------------------------------------------------------ 铁骑时代 6-10
-  makeLevel(6, "iron", "铁蹄初鸣", "铁甲骑兵正面压上，换铁弩试试", "dusk", "hills", 61,
+  // ============================================================ 铁骑时代 9-16
+  // ---- 铁器初现（9-11）----
+  makeLevel(9, "iron", "铁蹄初鸣", "铁甲骑兵正面压上，换铁弩试试", "dusk", "hills", 91,
     [150, 235], [{ x: 1010, type: "raider" }, { x: 1100, type: "raider" }], 0.5, 4, 11, 4),
-  makeLevel(7, "iron", "铁壁要塞", "重甲兵躲在城垛后，用加农炮拆墙", "day", "fortress", 71,
+  makeLevel(10, "iron", "铁壁要塞", "重甲兵躲在城垛后，用加农炮拆墙", "day", "fortress", 101,
     [150, 235, 310], [{ x: 980, type: "shield" }, { x: 1080, type: "raider" }], 0.54, 5, 12, 3),
-  makeLevel(8, "iron", "悬崖铁桥", "隔崖互轰，火油弹会反弹", "dusk", "bridge", 81,
+  makeLevel(11, "iron", "悬崖铁桥", "隔崖互轰，火油弹会反弹", "dusk", "bridge", 111,
     [150, 235], [{ x: 1000, type: "raider" }, { x: 1090, type: "shield" }], 0.56, 5, 11, 4.5),
-  makeLevel(9, "iron", "铁甲洪流", "三名铁甲敌人，炮弹要落在人群里", "night", "cave", 91,
+  // ---- 重甲洪流（12-16）----
+  makeLevel(12, "iron", "铁甲洪流", "三名铁甲敌人，炮弹要落在人群里", "night", "cave", 121,
     [145, 225, 305], [{ x: 940, type: "raider" }, { x: 1025, type: "shield" }, { x: 1110, type: "raider" }], 0.6, 5, 12, 5),
-  makeLevel(10, "iron", "铁骑首领", "首领身披重甲，先清骑兵再集火", "dusk", "fortress", 101,
-    [150, 240], [{ x: 980, type: "warlord", hp: 220 }, { x: 1080, type: "raider" }, { x: 1150, type: "shield" }], 0.62, 6, 13, 4),
+  makeLevel(13, "iron", "铁石要塞", "玄铁城垛炸不动，用火油弹灌进去", "day", "fortress", 131,
+    [150, 235], [{ x: 975, type: "shield" }, { x: 1060, type: "raider" }, { x: 1140, type: "raider" }, { x: 1020, type: "shield", hp: 230 }], 0.62, 6, 14, 4, true),
+  makeLevel(14, "iron", "断崖铁门", "玄铁桥墩炸不坏，隔崖互轰", "dusk", "bridge", 141,
+    [150, 235, 310], [{ x: 995, type: "raider" }, { x: 1075, type: "shield", hp: 240 }, { x: 1150, type: "raider" }], 0.64, 6, 14, 5, true),
+  makeLevel(15, "iron", "铁骑首领", "首领身披重甲，先清骑兵再集火", "dusk", "fortress", 151,
+    [150, 240], [{ x: 980, type: "warlord", hp: 220 }, { x: 1080, type: "raider" }, { x: 1150, type: "shield" }], 0.66, 6, 13, 4),
+  makeLevel(16, "iron", "铁壁终局", "重甲洪流最后的防线", "night", "cave", 161,
+    [145, 225, 305], [{ x: 930, type: "shield", hp: 260 }, { x: 1010, type: "raider" }, { x: 1090, type: "shield", hp: 260 }, { x: 1160, type: "raider" }], 0.68, 7, 15, 5, true),
 
-  // ------------------------------------------------------------ 火器时代 11-15
-  makeLevel(11, "gun", "火枪齐射", "火枪手射速很快，别站着不动", "day", "trench", 111,
+  // ============================================================ 火器时代 17-24
+  // ---- 火药初鸣（17-19）----
+  makeLevel(17, "gun", "火枪齐射", "火枪手射速很快，别站着不动", "day", "trench", 171,
     [150, 235], [{ x: 1000, type: "gunner" }, { x: 1090, type: "gunner" }], 0.6, 4, 11, 3),
-  makeLevel(12, "gun", "硝烟战壕", "躲在战壕里，用迫击炮吊射", "dusk", "trench", 121,
+  makeLevel(18, "gun", "硝烟战壕", "躲在战壕里，用迫击炮吊射", "dusk", "trench", 181,
     [150, 230, 310], [{ x: 950, type: "gunner" }, { x: 1030, type: "grenadier" }, { x: 1110, type: "shield" }], 0.64, 5, 12, 4),
-  makeLevel(13, "gun", "炮火覆盖", "夜里先看清落点，再决定开火", "night", "hills", 131,
+  makeLevel(19, "gun", "炮火覆盖", "夜里先看清落点，再决定开火", "night", "hills", 191,
     [145, 225, 305], [{ x: 940, type: "gunner" }, { x: 1020, type: "gunner" }, { x: 1100, type: "grenadier" }], 0.66, 5, 12, 5),
-  makeLevel(14, "gun", "空袭警报", "火箭弹飞行很快，注意躲开对方的弹道", "day", "dunes", 141,
+  // ---- 炮火覆盖（20-24）----
+  makeLevel(20, "gun", "空袭警报", "火箭弹飞行很快，注意躲开对方的弹道", "day", "dunes", 201,
     [150, 230], [{ x: 980, type: "grenadier" }, { x: 1060, type: "gunner" }, { x: 1140, type: "gunner" }], 0.68, 5, 12, 4),
-  makeLevel(15, "gun", "火药要塞", "四方守军，把要塞连同守军一起炸开", "volcano", "fortress", 151,
+  makeLevel(21, "gun", "火药要塞", "四方守军，把要塞连同守军一起炸开", "volcano", "fortress", 211,
     [150, 235, 310], [{ x: 930, type: "gunner" }, { x: 1000, type: "grenadier" }, { x: 1070, type: "shield", hp: 220 }, { x: 1150, type: "gunner" }], 0.7, 6, 14, 5),
+  makeLevel(22, "gun", "钢柱战壕", "玄铁立柱封路，火枪齐射别的缝", "night", "trench", 221,
+    [150, 235], [{ x: 960, type: "gunner" }, { x: 1040, type: "grenadier" }, { x: 1120, type: "shield", hp: 260 }, { x: 1175, type: "gunner" }], 0.72, 7, 15, 4.5, true),
+  makeLevel(23, "gun", "硝石峡谷", "风大坑深，火箭弹别打偏", "dusk", "canyon", 231,
+    [145, 225, 305], [{ x: 930, type: "grenadier" }, { x: 1020, type: "gunner" }, { x: 1100, type: "gunner" }, { x: 1170, type: "grenadier" }], 0.74, 7, 15, 7, true),
+  makeLevel(24, "gun", "炮火终局", "火器时代最后的防线", "volcano", "pyramid", 241,
+    [145, 225, 305], [{ x: 920, type: "warlord", hp: 300 }, { x: 1000, type: "grenadier" }, { x: 1080, type: "gunner" }, { x: 1160, type: "grenadier" }], 0.78, 8, 16, 6, true),
 
-  // ------------------------------------------------------------ 机械时代 16-20
-  makeLevel(16, "mech", "钢铁黎明", "机甲兵装甲厚重，激光炮可以连射", "night", "pyramid", 161,
+  // ============================================================ 机械时代 25-32
+  // ---- 钢铁黎明（25-27）----
+  makeLevel(25, "mech", "钢铁黎明", "机甲兵装甲厚重，激光炮可以连射", "night", "pyramid", 251,
     [150, 235], [{ x: 960, type: "mech", hp: 220 }, { x: 1050, type: "gunner" }, { x: 1130, type: "mech", hp: 220 }], 0.7, 6, 13, 4),
-  makeLevel(17, "mech", "熔炉核心", "火山口地形狭窄，电磁炮能贯穿一排", "volcano", "volcano", 171,
+  makeLevel(26, "mech", "熔炉核心", "火山口地形狭窄，电磁炮能贯穿一排", "volcano", "volcano", 261,
     [150, 230, 310], [{ x: 930, type: "mech", hp: 230 }, { x: 1010, type: "grenadier" }, { x: 1100, type: "mech", hp: 230 }], 0.74, 6, 14, 5),
-  makeLevel(18, "mech", "电磁风暴", "强风沙丘，激光不受风影响", "night", "dunes", 181,
+  makeLevel(27, "mech", "电磁风暴", "强风沙丘，激光不受风影响", "night", "dunes", 271,
     [150, 235, 315], [{ x: 940, type: "mech" }, { x: 1030, type: "mech" }, { x: 1120, type: "raider" }, { x: 1180, type: "gunner" }], 0.76, 7, 15, 8),
-  makeLevel(19, "mech", "机械军团", "四台机甲列阵，找准贯穿角度", "night", "bridge", 191,
+  // ---- 电磁风暴（28-32）----
+  makeLevel(28, "mech", "机械军团", "四台机甲列阵，找准贯穿角度", "night", "bridge", 281,
     [150, 230, 310], [{ x: 900, type: "mech" }, { x: 980, type: "mech" }, { x: 1060, type: "grenadier" }, { x: 1140, type: "mech" }], 0.8, 7, 15, 6),
-  makeLevel(20, "mech", "终焉之战", "战争领主与机甲卫队，最后一战", "volcano", "pyramid", 201,
+  makeLevel(29, "mech", "电磁要塞", "重装机甲守城，贯穿角度是关键", "night", "fortress", 291,
+    [150, 235, 310], [{ x: 940, type: "mech", hp: 260 }, { x: 1030, type: "mech", hp: 260 }, { x: 1120, type: "warlord", hp: 320 }, { x: 990, type: "gunner" }], 0.82, 8, 16, 5, true),
+  makeLevel(30, "mech", "终局裂谷", "双领主与电磁卫队，最后决战", "volcano", "volcano", 301,
+    [145, 225, 305], [{ x: 900, type: "warlord", hp: 340 }, { x: 985, type: "mech", hp: 260 }, { x: 1070, type: "mech", hp: 260 }, { x: 1155, type: "grenadier" }], 0.86, 9, 18, 8, true),
+  makeLevel(31, "mech", "机械终焉", "战争领主与机甲卫队，最后一战", "volcano", "pyramid", 311,
     [145, 225, 305], [
       { x: 900, type: "warlord", hp: 300 },
       { x: 980, type: "mech", hp: 240 },
       { x: 1050, type: "mech", hp: 240 },
       { x: 1120, type: "mech", hp: 240 },
       { x: 1180, type: "gunner", hp: 180 },
-    ], 0.84, 8, 18, 7),
+    ], 0.88, 9, 18, 7, true),
+  makeLevel(32, "mech", "钢铁挽歌", "机械时代的终章，全力以赴", "night", "cave", 321,
+    [145, 225, 305], [
+      { x: 900, type: "mech", hp: 280 },
+      { x: 980, type: "warlord", hp: 360 },
+      { x: 1060, type: "mech", hp: 280 },
+      { x: 1140, type: "grenadier" },
+    ], 0.9, 9, 18, 8, true),
 
-  // ------------------------------------------------------------ 进阶关卡 21-28（玄铁岩：炸不动）
-  makeLevel(21, "stone", "石林迷阵", "玄铁巨柱挡路，绕过柱子炸掉对手", "dawn", "hills", 211,
-    [150, 235, 315], [{ x: 950, type: "brute" }, { x: 1035, type: "thrower" }, { x: 1120, type: "chief" }], 0.58, 5, 13, 4.5, true),
-  makeLevel(22, "stone", "岩原伏击", "先清两侧投手，再轰酋长", "dusk", "canyon", 221,
-    [145, 225, 310], [{ x: 940, type: "thrower" }, { x: 1030, type: "brute" }, { x: 1115, type: "chief", hp: 200 }], 0.6, 6, 13, 5, true),
-  makeLevel(23, "iron", "铁石要塞", "玄铁城垛炸不动，用火油弹灌进去", "day", "fortress", 231,
-    [150, 235], [{ x: 975, type: "shield" }, { x: 1060, type: "raider" }, { x: 1140, type: "raider" }, { x: 1020, type: "shield", hp: 230 }], 0.66, 6, 14, 4, true),
-  makeLevel(24, "iron", "断崖铁门", "玄铁桥墩炸不坏，隔崖互轰", "dusk", "bridge", 241,
-    [150, 235, 310], [{ x: 995, type: "raider" }, { x: 1075, type: "shield", hp: 240 }, { x: 1150, type: "raider" }], 0.68, 6, 14, 5, true),
-  makeLevel(25, "gun", "钢柱战壕", "玄铁立柱封路，火枪齐射别的缝", "night", "trench", 251,
-    [150, 235], [{ x: 960, type: "gunner" }, { x: 1040, type: "grenadier" }, { x: 1120, type: "shield", hp: 260 }, { x: 1175, type: "gunner" }], 0.72, 7, 15, 4.5, true),
-  makeLevel(26, "gun", "硝石峡谷", "风大坑深，火箭弹别打偏", "dusk", "canyon", 261,
-    [145, 225, 305], [{ x: 930, type: "grenadier" }, { x: 1020, type: "gunner" }, { x: 1100, type: "gunner" }, { x: 1170, type: "grenadier" }], 0.74, 7, 15, 7, true),
-  makeLevel(27, "mech", "电磁要塞", "重装机甲守城，贯穿角度是关键", "night", "fortress", 271,
-    [150, 235, 310], [{ x: 940, type: "mech", hp: 260 }, { x: 1030, type: "mech", hp: 260 }, { x: 1120, type: "warlord", hp: 320 }, { x: 990, type: "gunner" }], 0.82, 8, 16, 5, true),
-  makeLevel(28, "mech", "终局裂谷", "双领主与电磁卫队，最后决战", "volcano", "volcano", 281,
-    [145, 225, 305], [{ x: 900, type: "warlord", hp: 340 }, { x: 985, type: "mech", hp: 260 }, { x: 1070, type: "mech", hp: 260 }, { x: 1155, type: "grenadier" }], 0.88, 9, 18, 8, true),
-
-  // ------------------------------------------------------------ 修仙时代 29-38（10 关）
-  makeLevel(29, "cultivation", "初入仙门", "散修拦路，御剑诀试试手", "cultivation", "floatpeak", 291,
+  // ============================================================ 修仙时代 33-60
+  // ---- 炼气期（33-35）：基础攻击 ----
+  makeLevel(33, "cultivation", "初入仙门", "散修拦路，御剑诀试试手", "cultivation", "floatpeak", 331,
     [150, 235], [{ x: 980, type: "cultivator" }, { x: 1070, type: "cultivator" }], 0.6, 5, 12, 4),
-  makeLevel(30, "cultivation", "剑修对决", "剑修出剑极快，别站直线", "immortal", "swordgrave", 301,
-    [150, 230, 310], [{ x: 950, type: "swordmaster" }, { x: 1040, type: "cultivator" }, { x: 1120, type: "taoist" }], 0.64, 6, 13, 5),
-  makeLevel(31, "cultivation", "剑冢悟道", "巨剑插地，在剑冢中领悟剑意", "swordgrave", "swordgrave", 311,
-    [150, 235], [{ x: 960, type: "taoist" }, { x: 1050, type: "swordmaster" }, { x: 1130, type: "cultivator" }], 0.68, 6, 14, 4.5),
-  makeLevel(32, "cultivation", "灵脉峡谷", "灵脉涌动，峡谷中灵气充沛", "spirit", "spiritvalley", 321,
+  makeLevel(34, "cultivation", "灵气初现", "感应天地灵气，火球术轰碎敌阵", "cultivation", "spiritvalley", 341,
+    [150, 230, 310], [{ x: 950, type: "cultivator" }, { x: 1040, type: "cultivator" }, { x: 1120, type: "taoist" }], 0.64, 6, 13, 5),
+  makeLevel(35, "cultivation", "御剑飞行", "剑修出剑极快，别站直线", "immortal", "swordgrave", 351,
+    [150, 235], [{ x: 960, type: "cultivator" }, { x: 1050, type: "swordmaster" }, { x: 1130, type: "cultivator" }], 0.68, 6, 14, 4.5),
+  // ---- 筑基期（36-39）：防御与控制 ----
+  makeLevel(36, "cultivation", "护体符光", "符师拦路，用护体符挡住伤害", "swordgrave", "swordgrave", 361,
+    [150, 235], [{ x: 960, type: "taoist" }, { x: 1050, type: "swordmaster" }, { x: 1130, type: "cultivator" }], 0.7, 6, 14, 4.5),
+  makeLevel(37, "cultivation", "锁魂链阵", "锁魂链减速敌人，逐个击破", "spirit", "spiritvalley", 371,
     [145, 225, 305], [{ x: 940, type: "swordmaster" }, { x: 1020, type: "swordmaster" }, { x: 1100, type: "taoist" }, { x: 1170, type: "cultivator" }], 0.72, 7, 15, 6),
-  makeLevel(33, "cultivation", "蓬莱仙岛", "海上仙岛，灵气缭绕", "penglai", "penglai", 331,
-    [145, 225, 305], [{ x: 920, type: "immortal", hp: 320 }, { x: 1000, type: "swordmaster" }, { x: 1080, type: "taoist" }, { x: 1160, type: "cultivator" }], 0.78, 8, 17, 7),
-  makeLevel(34, "cultivation", "天宫台阶", "天宫台阶，层层递进", "palace", "palace", 341,
-    [150, 235], [{ x: 960, type: "cultivator" }, { x: 1040, type: "swordmaster" }, { x: 1120, type: "taoist" }], 0.7, 6, 14, 5),
-  makeLevel(35, "cultivation", "万剑归宗", "敌方剑阵密集，用万剑归宗对轰", "swordgrave", "spiritvalley", 351,
-    [145, 225, 305], [{ x: 940, type: "swordmaster" }, { x: 1020, type: "swordmaster" }, { x: 1100, type: "taoist" }, { x: 1170, type: "cultivator" }], 0.74, 7, 15, 6),
-  makeLevel(36, "cultivation", "雷符天降", "符师引动天雷，小心雷符落地", "immortal", "floatpeak", 361,
-    [150, 230, 310], [{ x: 930, type: "taoist" }, { x: 1010, type: "taoist" }, { x: 1090, type: "swordmaster" }, { x: 1160, type: "cultivator" }], 0.76, 7, 16, 6.5),
-  makeLevel(37, "cultivation", "龙吟九天", "仙人座下护法，龙形掌力惊人", "palace", "palace", 371,
-    [145, 225, 305], [{ x: 920, type: "immortal", hp: 360 }, { x: 1000, type: "swordmaster" }, { x: 1080, type: "taoist" }, { x: 1160, type: "swordmaster" }], 0.82, 8, 17, 7),
-  makeLevel(38, "cultivation", "仙人降临", "仙人法力无边，全力一战", "immortal", "penglai", 381,
-    [145, 225, 305], [{ x: 900, type: "immortal", hp: 400 }, { x: 980, type: "swordmaster" }, { x: 1060, type: "taoist" }, { x: 1140, type: "swordmaster" }, { x: 1190, type: "cultivator" }], 0.88, 9, 18, 8),
+  makeLevel(38, "cultivation", "雷符天降", "符师引动天雷，小心雷符落地", "immortal", "floatpeak", 381,
+    [150, 230, 310], [{ x: 930, type: "taoist" }, { x: 1010, type: "taoist" }, { x: 1090, type: "swordmaster" }, { x: 1160, type: "cultivator" }], 0.74, 7, 16, 6.5),
+  makeLevel(39, "cultivation", "筑基圆满", "筑基期最后的试炼", "palace", "palace", 391,
+    [145, 225, 305], [{ x: 920, type: "swordmaster" }, { x: 1000, type: "taoist" }, { x: 1080, type: "swordmaster" }, { x: 1160, type: "cultivator" }], 0.76, 8, 16, 6),
+  // ---- 金丹期（40-44）：神通初成 ----
+  makeLevel(40, "cultivation", "万剑归宗", "敌方剑阵密集，用万剑归宗对轰", "swordgrave", "spiritvalley", 401,
+    [145, 225, 305], [{ x: 940, type: "swordmaster" }, { x: 1020, type: "swordmaster" }, { x: 1100, type: "taoist" }, { x: 1170, type: "cultivator" }], 0.76, 7, 15, 6),
+  makeLevel(41, "cultivation", "龙吟九天", "仙人座下护法，龙形掌力惊人", "palace", "palace", 411,
+    [145, 225, 305], [{ x: 920, type: "immortal", hp: 360 }, { x: 1000, type: "swordmaster" }, { x: 1080, type: "taoist" }, { x: 1160, type: "swordmaster" }], 0.8, 8, 17, 7),
+  makeLevel(42, "cultivation", "金丹大道", "金丹期修士法力无边", "immortal", "floatpeak", 421,
+    [145, 225, 305], [{ x: 920, type: "immortal", hp: 380 }, { x: 1000, type: "swordmaster" }, { x: 1080, type: "taoist" }, { x: 1160, type: "cultivator" }], 0.82, 8, 17, 7),
+  makeLevel(43, "cultivation", "剑冢悟道", "巨剑插地，在剑冢中领悟剑意", "swordgrave", "swordgrave", 431,
+    [150, 235], [{ x: 960, type: "taoist" }, { x: 1050, type: "swordmaster" }, { x: 1130, type: "cultivator" }], 0.84, 8, 16, 5),
+  makeLevel(44, "cultivation", "蓬莱仙岛", "海上仙岛，灵气缭绕", "penglai", "penglai", 441,
+    [145, 225, 305], [{ x: 920, type: "immortal", hp: 320 }, { x: 1000, type: "swordmaster" }, { x: 1080, type: "taoist" }, { x: 1160, type: "cultivator" }], 0.86, 8, 17, 7),
+  // ---- 元婴期（45-49）：神识强大 ----
+  makeLevel(45, "cultivation", "元婴出窍", "元婴期修士神识强大，瞬移躲避", "spirit", "spiritvalley", 451,
+    [145, 225, 305], [{ x: 940, type: "swordmaster" }, { x: 1020, type: "swordmaster" }, { x: 1100, type: "taoist" }, { x: 1170, type: "cultivator" }], 0.84, 8, 16, 6),
+  makeLevel(46, "cultivation", "毒雾弥漫", "毒雾术让敌人持续掉血", "immortal", "floatpeak", 461,
+    [145, 225, 305], [{ x: 920, type: "immortal", hp: 400 }, { x: 1000, type: "swordmaster" }, { x: 1080, type: "taoist" }, { x: 1160, type: "cultivator" }], 0.86, 8, 17, 7),
+  makeLevel(47, "cultivation", "天宫台阶", "天宫台阶，层层递进", "palace", "palace", 471,
+    [150, 235], [{ x: 960, type: "cultivator" }, { x: 1040, type: "swordmaster" }, { x: 1120, type: "taoist" }], 0.88, 8, 16, 5),
+  makeLevel(48, "cultivation", "元婴神通", "元婴期修士神通广大", "swordgrave", "swordgrave", 481,
+    [145, 225, 305], [{ x: 920, type: "immortal", hp: 420 }, { x: 1000, type: "swordmaster" }, { x: 1080, type: "taoist" }, { x: 1160, type: "swordmaster" }], 0.88, 9, 18, 7),
+  makeLevel(49, "cultivation", "元婴圆满", "元婴期最后的试炼", "penglai", "penglai", 491,
+    [145, 225, 305], [{ x: 900, type: "immortal", hp: 440 }, { x: 980, type: "swordmaster" }, { x: 1060, type: "taoist" }, { x: 1140, type: "swordmaster" }, { x: 1190, type: "cultivator" }], 0.9, 9, 18, 8),
+  // ---- 化神期（50-55）：呼风唤雨 ----
+  makeLevel(50, "cultivation", "呼风唤雨", "化神期修士呼风唤雨，风暴降临", "spirit", "spiritvalley", 501,
+    [145, 225, 305], [{ x: 940, type: "swordmaster" }, { x: 1020, type: "swordmaster" }, { x: 1100, type: "taoist" }, { x: 1170, type: "cultivator" }], 0.88, 8, 16, 6),
+  makeLevel(51, "cultivation", "回春之术", "回春术治疗友军，持续作战", "immortal", "floatpeak", 511,
+    [145, 225, 305], [{ x: 920, type: "immortal", hp: 460 }, { x: 1000, type: "swordmaster" }, { x: 1080, type: "taoist" }, { x: 1160, type: "cultivator" }], 0.9, 9, 18, 7),
+  makeLevel(52, "cultivation", "化神大道", "化神期修士法力通天", "palace", "palace", 521,
+    [145, 225, 305], [{ x: 900, type: "immortal", hp: 480 }, { x: 980, type: "swordmaster" }, { x: 1060, type: "taoist" }, { x: 1140, type: "swordmaster" }], 0.9, 9, 18, 8),
+  makeLevel(53, "cultivation", "灵脉风暴", "灵脉峡谷中风暴肆虐", "spirit", "spiritvalley", 531,
+    [145, 225, 305], [{ x: 900, type: "immortal", hp: 500 }, { x: 980, type: "swordmaster" }, { x: 1060, type: "taoist" }, { x: 1140, type: "swordmaster" }, { x: 1190, type: "cultivator" }], 0.92, 9, 18, 8),
+  makeLevel(54, "cultivation", "仙岛风暴", "蓬莱仙岛风暴来袭", "penglai", "penglai", 541,
+    [145, 225, 305], [{ x: 900, type: "immortal", hp: 520 }, { x: 980, type: "swordmaster" }, { x: 1060, type: "taoist" }, { x: 1140, type: "swordmaster" }, { x: 1190, type: "cultivator" }], 0.92, 10, 20, 8),
+  makeLevel(55, "cultivation", "化神圆满", "化神期最后的试炼", "swordgrave", "swordgrave", 551,
+    [145, 225, 305], [{ x: 900, type: "immortal", hp: 540 }, { x: 980, type: "swordmaster" }, { x: 1060, type: "taoist" }, { x: 1140, type: "swordmaster" }, { x: 1190, type: "cultivator" }], 0.94, 10, 20, 8),
+  // ---- 渡劫期（56-60）：毁天灭地 ----
+  makeLevel(56, "cultivation", "天雷灭世", "渡劫期修士引动天雷，毁灭一切", "immortal", "floatpeak", 561,
+    [145, 225, 305], [{ x: 900, type: "immortal", hp: 560 }, { x: 980, type: "swordmaster" }, { x: 1060, type: "taoist" }, { x: 1140, type: "swordmaster" }, { x: 1190, type: "cultivator" }], 0.94, 10, 20, 8),
+  makeLevel(57, "cultivation", "诛仙阵起", "诛仙剑阵，万剑齐发", "swordgrave", "spiritvalley", 571,
+    [145, 225, 305], [{ x: 900, type: "immortal", hp: 580 }, { x: 980, type: "swordmaster" }, { x: 1060, type: "taoist" }, { x: 1140, type: "swordmaster" }, { x: 1190, type: "cultivator" }], 0.95, 10, 20, 8),
+  makeLevel(58, "cultivation", "渡劫天威", "渡劫期修士天威难测", "palace", "palace", 581,
+    [145, 225, 305], [{ x: 900, type: "immortal", hp: 600 }, { x: 980, type: "swordmaster" }, { x: 1060, type: "taoist" }, { x: 1140, type: "swordmaster" }, { x: 1190, type: "cultivator" }], 0.96, 10, 20, 8),
+  makeLevel(59, "cultivation", "飞升之路", "飞升前的最后考验", "penglai", "penglai", 591,
+    [145, 225, 305], [{ x: 900, type: "immortal", hp: 620 }, { x: 980, type: "swordmaster" }, { x: 1060, type: "taoist" }, { x: 1140, type: "swordmaster" }, { x: 1190, type: "cultivator" }], 0.97, 10, 20, 8),
+  makeLevel(60, "cultivation", "仙人降临", "仙人法力无边，全力一战", "immortal", "penglai", 601,
+    [145, 225, 305], [{ x: 900, type: "immortal", hp: 650 }, { x: 980, type: "swordmaster" }, { x: 1060, type: "taoist" }, { x: 1140, type: "swordmaster" }, { x: 1190, type: "cultivator" }], 0.98, 10, 20, 8),
 ];
 
 /** 根据关卡与武器栏生成弹药：首个武器无限，其余按关卡递增 */
