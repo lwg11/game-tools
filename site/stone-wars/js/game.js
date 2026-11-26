@@ -291,7 +291,7 @@ if (u) u.jump(this._moveDir());
     const grid = document.getElementById("levelGrid");
     // 关卡选择按「时代分组」排列：同一时代的关卡（含 21+ 进阶关）放在一起，
     // 同时代内仍按关卡号升序；id 与存档进度保持不变。
-    const ERA_RANK = { stone: 0, iron: 1, gun: 2, mech: 3 };
+    const ERA_RANK = { stone: 0, iron: 1, gun: 2, mech: 3, cultivation: 4 };
     const ordered = LEVELS.slice().sort(
       (a, b) => (ERA_RANK[a.era] - ERA_RANK[b.era]) || (a.id - b.id)
     );
@@ -425,6 +425,7 @@ if (u) u.jump(this._moveDir());
       iron: ["铁牙", "铁盾", "铁锤"],
       gun: ["老枪", "快枪", "炮手"],
       mech: ["零式", "壹式", "贰式"],
+      cultivation: ["青云", "紫霞", "玄明"],
     };
     const names = nameSets[this.era.id] || nameSets.stone;
     const playerHp = this.era.playerHp || 100;
@@ -878,6 +879,23 @@ if (u) u.jump(this._moveDir());
       this._enemyDecide();
       return;
     }
+    // 前方地面检测：避免 AI 走着走着掉下悬崖
+    if (u.onGround) {
+      const aheadX = u.x + m.dir * 34;
+      const gy = this.terrain.surfaceBelow(aheadX, u.y - 40);
+      const hasGround = gy !== null && gy <= u.y + 22;
+      if (!hasGround) {
+        // 前方是悬崖：尝试跳过去，跳不过就停止移动
+        u.jump(m.dir);
+        m.t -= dt * 2.5;
+        if (Math.abs(u.vx) < 20) {
+          // 跳不起来（被挡住）：停止移动，进入瞄准
+          this.enemyMove = null;
+          this._enemyDecide();
+          return;
+        }
+      }
+    }
     const step = m.dir * 96 * dt;
     const before = u.x;
     if (u.onGround) {
@@ -886,7 +904,7 @@ if (u) u.jump(this._moveDir());
         u.facing = m.dir;
       } else {
         // 被地形挡住：起跳翻越并继续前进
-        u.jump();
+        u.jump(m.dir);
         m.t -= dt * 1.5;
       }
     } else {
@@ -966,37 +984,56 @@ if (u) u.jump(this._moveDir());
     const lv = this.level.endless ? 20 : this.level.id;
     const era = this.era.id;
     const roll = Math.random();
+    if (era === "cultivation") {
+      if (roll < 0.08) return WEAPONS.dragonpalm;
+      if (roll < 0.18) return WEAPONS.swordarray;
+      if (roll < 0.28) return WEAPONS.thunder;
+      if (dist > 500 && roll < 0.45) return WEAPONS.fireball;
+      if (dist < 260 && roll < 0.45) return WEAPONS.soulchain;
+      if (roll < 0.62) return WEAPONS.sword;
+      if (roll < 0.72) return WEAPONS.shieldcharm;
+      return WEAPONS.fireball;
+    }
     if (era === "mech") {
-      if (roll < 0.1) return WEAPONS.meteor;
-      if (roll < 0.32) return WEAPONS.railgun;
-      if (dist > 520 && roll < 0.55) return WEAPONS.rocket;
-      if (dist < 240 && roll < 0.55) return WEAPONS.cannon;
-      if (dist > 420 && roll < 0.7) return WEAPONS.mortar;
+      if (roll < 0.08) return WEAPONS.meteor;
+      if (roll < 0.24) return WEAPONS.railgun;
+      if (roll < 0.36) return WEAPONS.drone;
+      if (roll < 0.46) return WEAPONS.gravity;
+      if (dist > 520 && roll < 0.6) return WEAPONS.rocket;
+      if (dist < 240 && roll < 0.6) return WEAPONS.cannon;
+      if (dist > 420 && roll < 0.72) return WEAPONS.mortar;
       return WEAPONS.laser;
     }
     if (era === "gun") {
-      if (roll < 0.08) return WEAPONS.meteor;
+      if (roll < 0.06) return WEAPONS.meteor;
+      if (roll < 0.16) return WEAPONS.cluster;
+      if (roll < 0.26) return WEAPONS.molotov;
       if (dist > 500) return roll < 0.55 ? WEAPONS.rocket : WEAPONS.mortar;
       if (dist < 250) return roll < 0.5 ? WEAPONS.firebomb : WEAPONS.rifle;
-      if (roll < 0.38) return WEAPONS.rifle;
+      if (roll < 0.4) return WEAPONS.rifle;
       if (roll < 0.58) return WEAPONS.grenade;
       return WEAPONS.mortar;
     }
     if (era === "iron") {
-      if (lv >= 9 && roll < 0.08) return WEAPONS.meteor;
+      if (lv >= 9 && roll < 0.06) return WEAPONS.meteor;
+      if (roll < 0.14) return WEAPONS.flail;
+      if (roll < 0.2) return WEAPONS.flare;
       if (dist > 480) return roll < 0.55 ? WEAPONS.cannon : WEAPONS.crossbow;
       if (dist < 250) return roll < 0.5 ? WEAPONS.firebomb : WEAPONS.crossbow;
-      if (roll < 0.15) return WEAPONS.boomerang;
+      if (roll < 0.28) return WEAPONS.boomerang;
       return WEAPONS.crossbow;
     }
     // 石器时代
     if (lv <= 1) return Math.random() < 0.4 ? WEAPONS.boulder : WEAPONS.spear;
-    if (lv >= 5 && Math.random() < 0.07) return WEAPONS.meteor;
-    if (lv >= 5 && Math.random() < 0.16) return WEAPONS.boomerang;
+    if (lv >= 5 && Math.random() < 0.06) return WEAPONS.meteor;
+    if (lv >= 5 && Math.random() < 0.14) return WEAPONS.boomerang;
+    if (lv >= 4 && Math.random() < 0.12) return WEAPONS.watermelon;
+    if (lv >= 4 && Math.random() < 0.1) return WEAPONS.durian;
+    if (lv >= 5 && Math.random() < 0.08) return WEAPONS.poisonshroom;
     if (dist > 500) return Math.random() < 0.75 ? WEAPONS.boulder : WEAPONS.spear;
     if (dist < 260) return Math.random() < 0.45 ? WEAPONS.grenade : WEAPONS.spear;
-    if (lv >= 4 && Math.random() < 0.16) return WEAPONS.banana;
-    if (lv >= 4 && Math.random() < 0.14) return WEAPONS.spike;
+    if (lv >= 4 && Math.random() < 0.14) return WEAPONS.banana;
+    if (lv >= 4 && Math.random() < 0.12) return WEAPONS.spike;
     return Math.random() < 0.35 ? WEAPONS.grenade : WEAPONS.spear;
   }
 
@@ -1415,22 +1452,122 @@ if (!this.players.some((u) => u.alive)) { this.finish(false, "族人全部倒下
   }
 
   // ------------------------------------------------------------ 爆炸 / 伤害
-  explode(x, y, radius, damage, team, kind = "blast") {
+  explode(x, y, radius, damage, team, kind = "blast", weaponType = null) {
     if (!this.terrain) return;
     const beam = kind === "laser";
+    // 修仙武器爆炸特效配置
+    const cultFx = {
+      sword:      { ring: "#a8d8ff", glow: "rgba(168,216,255,.75)", flash: "#a8d8ff", spark: "#d8ecff" },
+      fireball:   { ring: "#ff8a4a", glow: "rgba(255,138,74,.75)",  flash: "#ff8a4a", spark: "#ffd15c" },
+      thunder:    { ring: "#ffe95c", glow: "rgba(255,233,92,.8)",   flash: "#ffe95c", spark: "#fff8c8" },
+      swordarray: { ring: "#a8d8ff", glow: "rgba(168,216,255,.7)",  flash: "#a8d8ff", spark: "#d8ecff" },
+      dragonpalm: { ring: "#ff8a5a", glow: "rgba(255,138,90,.8)",   flash: "#ff8a5a", spark: "#ffd25e" },
+      shieldcharm:{ ring: "#ffd25e", glow: "rgba(255,210,94,.75)",  flash: "#ffd25e", spark: "#fff8c8" },
+      soulchain:  { ring: "#b48ce8", glow: "rgba(180,140,232,.75)", flash: "#b48ce8", spark: "#d8b8ff" },
+    }[weaponType];
     this.terrain.carve(x, y, radius * 0.8);
     this.terrainDirty = true;
     this.shake = Math.max(this.shake, Math.min(26, radius * 0.19));
     // 双层冲击波 + 中心辉光，强武器一眼能看出威力
-    this.rings.push({ x, y, r: radius * 0.25, max: radius * 1.55, t: 0, life: 0.34, color: beam ? "#9ff4ff" : "#ffe0a0" });
-    this.rings.push({ x, y, r: radius * 0.1, max: radius * 2.1, t: 0, life: 0.55, color: beam ? "rgba(110,230,255,.7)" : "rgba(255,170,90,.7)" });
+    const ringColor = cultFx ? cultFx.ring : beam ? "#9ff4ff" : "#ffe0a0";
+    const ringColor2 = cultFx ? cultFx.glow : beam ? "rgba(110,230,255,.7)" : "rgba(255,170,90,.7)";
+    this.rings.push({ x, y, r: radius * 0.25, max: radius * 1.55, t: 0, life: 0.34, color: ringColor });
+    this.rings.push({ x, y, r: radius * 0.1, max: radius * 2.1, t: 0, life: 0.55, color: ringColor2 });
     this.glows.push({
       x, y, r: radius * 1.15, life: 0.34, max: 0.34,
-      color: beam ? "rgba(120,240,255,.75)" : "rgba(255,190,110,.75)",
+      color: cultFx ? cultFx.glow : beam ? "rgba(120,240,255,.75)" : "rgba(255,190,110,.75)",
     });
     if (radius >= 80) {
       this.screenFlash = Math.max(this.screenFlash, Math.min(0.42, radius / 420));
-      this.flashColor = beam ? "#9ff4ff" : "#ffd08a";
+      this.flashColor = cultFx ? cultFx.flash : beam ? "#9ff4ff" : "#ffd08a";
+    }
+    // ---- 修仙武器特殊爆炸特效 ----
+    if (cultFx) {
+      // 雷符：天降雷柱
+      if (weaponType === "thunder") {
+        this.rings.push({ x, y: y - 200, r: 4, max: radius * 1.8, t: 0, life: 0.28, color: "#fff8c8" });
+        for (let i = 0; i < 16; i++) {
+          const a = rand(0, TAU);
+          const sp = rand(200, 600);
+          this.particles.push({
+            x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 100,
+            life: rand(0.2, 0.5), maxLife: 0.5, size: rand(1.5, 3),
+            color: "#fff8c8", kind: "spark", gravity: 200,
+          });
+        }
+        // 垂直闪电束
+        this.particles.push({
+          x, y: y - 100, vx: 0, vy: 800,
+          life: 0.15, maxLife: 0.15, size: radius * 0.8,
+          color: "rgba(255,248,200,.6)", kind: "fire", gravity: 0,
+        });
+      }
+      // 降龙十八掌：龙形冲击波（多层扩散环）
+      if (weaponType === "dragonpalm") {
+        for (let i = 0; i < 3; i++) {
+          this.rings.push({ x, y, r: radius * (0.2 + i * 0.15), max: radius * (1.2 + i * 0.5), t: 0, life: 0.4 + i * 0.12, color: `rgba(255,${140 + i * 30},80,${0.6 - i * 0.15})` });
+        }
+        // 龙形粒子（波浪排列）
+        for (let i = 0; i < 20; i++) {
+          const t = i / 20;
+          const a = t * TAU * 2;
+          const r = radius * (0.3 + t * 0.7);
+          this.particles.push({
+            x: x + Math.cos(a) * r, y: y + Math.sin(a) * r * 0.6,
+            vx: Math.cos(a) * 180, vy: Math.sin(a) * 120 - 40,
+            life: rand(0.3, 0.7), maxLife: 0.7, size: rand(2, 5),
+            color: "#ff8a5a", kind: "fire", gravity: -40,
+          });
+        }
+      }
+      // 万剑归宗：剑气四散
+      if (weaponType === "swordarray") {
+        for (let i = 0; i < 12; i++) {
+          const a = (i / 12) * TAU + rand(-0.2, 0.2);
+          const sp = rand(200, 500);
+          this.particles.push({
+            x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+            life: rand(0.2, 0.45), maxLife: 0.45, size: rand(1.5, 3),
+            color: "#a8d8ff", kind: "spark", gravity: 100,
+          });
+        }
+      }
+      // 护体符：金色符文扩散
+      if (weaponType === "shieldcharm") {
+        for (let i = 0; i < 8; i++) {
+          const a = (i / 8) * TAU;
+          this.particles.push({
+            x: x + Math.cos(a) * 10, y: y + Math.sin(a) * 10,
+            vx: Math.cos(a) * 120, vy: Math.sin(a) * 120 - 60,
+            life: rand(0.3, 0.6), maxLife: 0.6, size: rand(2, 4),
+            color: "#ffd25e", kind: "spark", gravity: -20,
+          });
+        }
+      }
+      // 锁魂链：紫色魂火爆裂
+      if (weaponType === "soulchain") {
+        for (let i = 0; i < 14; i++) {
+          const a = rand(0, TAU);
+          const sp = rand(100, 350);
+          this.particles.push({
+            x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 50,
+            life: rand(0.3, 0.6), maxLife: 0.6, size: rand(2, 4),
+            color: Math.random() < 0.5 ? "#b48ce8" : "#d8b8ff", kind: "spark", gravity: -30,
+          });
+        }
+      }
+      // 飞剑：剑光穿刺
+      if (weaponType === "sword") {
+        for (let i = 0; i < 8; i++) {
+          const a = rand(0, TAU);
+          const sp = rand(150, 400);
+          this.particles.push({
+            x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+            life: rand(0.15, 0.35), maxLife: 0.35, size: rand(1, 2.5),
+            color: "#d8ecff", kind: "spark", gravity: 200,
+          });
+        }
+      }
     }
     const dirtCount = kind === "spear" ? 10 : Math.min(44, 12 + Math.floor(radius * 0.32));
     for (let i = 0; i < dirtCount; i++) {
@@ -1845,8 +1982,24 @@ if (!this.players.some((u) => u.alive)) { this.finish(false, "族人全部倒下
     if (id === "mortar") return `<svg ${common}><path d="M7 17L15 4l5 3-8 13z"/><path d="M3 20l6-3"/><path d="M9 19l3 2"/></svg>`;
     if (id === "rocket") return `<svg ${common}><path d="M14 4l6 8-6 8-3-4h-5V8h5z"/><path d="M9 12H3"/><path d="M8 8L4 5M8 16l-4 3"/></svg>`;
     if (id === "laser") return `<svg ${common}><path d="M3 12h10"/><path d="M13 9l7 3-7 3z"/><path d="M5 8v8M9 9v6"/></svg>`;
-    if (id === "railgun") return `<svg ${common}><path d="M2 12h20"/><path d="M4 8v8M9 9v6M14 8v8M19 9v6"/></svg>`;
-    return `<svg ${common}><circle cx="12" cy="12" r="5"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l3 3M18 6l-3 3M6 18l3-3M18 18l-3-3"/></svg>`;
+if (id === "railgun") return `<svg ${common}><path d="M2 12h20"/><path d="M4 8v8M9 9v6M14 8v8M19 9v6"/></svg>`;
+if (id === "watermelon") return `<svg ${common}><circle cx="12" cy="13" r="8"/><path d="M8 10c2 1 6 1 8 0M8 14c2 1 6 1 8 0"/></svg>`;
+if (id === "durian") return `<svg ${common}><path d="M12 3l2 3 3-1 1 3 3 1-1 3 2 2-3 1 1 3-3-1-1 3-2-2-3 1-1-3-3-1 2-2-1-3 3 1z"/></svg>`;
+if (id === "poisonshroom") return `<svg ${common}><path d="M4 12a8 6 0 0116 0z"/><path d="M9 12v5a3 3 0 006 0v-5"/><circle cx="9" cy="9" r="1"/><circle cx="15" cy="8" r="1.2"/></svg>`;
+if (id === "flail") return `<svg ${common}><circle cx="7" cy="7" r="3"/><path d="M9 9l6 6"/><circle cx="17" cy="17" r="4"/><path d="M17 13v-2M13 17h-2"/></svg>`;
+if (id === "flare") return `<svg ${common}><path d="M12 3v8"/><path d="M8 8l4 4 4-4"/><path d="M5 17l7-4 7 4"/><path d="M8 21h8"/></svg>`;
+if (id === "molotov") return `<svg ${common}><path d="M9 3h6v4l2 3v9a2 2 0 01-2 2h-6a2 2 0 01-2-2v-9l2-3z"/><path d="M12 3c2 2 1 3 0 4-1-1-1-2 0-4z"/></svg>`;
+if (id === "cluster") return `<svg ${common}><circle cx="12" cy="12" r="3"/><circle cx="5" cy="6" r="2"/><circle cx="19" cy="6" r="2"/><circle cx="5" cy="18" r="2"/><circle cx="19" cy="18" r="2"/></svg>`;
+if (id === "drone") return `<svg ${common}><circle cx="12" cy="12" r="2"/><path d="M12 4v4M12 16v4M4 12h4M16 12h4"/><circle cx="5" cy="5" r="1.5"/><circle cx="19" cy="5" r="1.5"/><circle cx="5" cy="19" r="1.5"/><circle cx="19" cy="19" r="1.5"/></svg>`;
+if (id === "gravity") return `<svg ${common}><circle cx="12" cy="12" r="3"/><path d="M12 3a9 9 0 019 9M12 21a9 9 0 01-9-9"/><path d="M12 7v10M7 12h10"/></svg>`;
+if (id === "sword") return `<svg ${common}><path d="M12 2l2 6-2 12-2-12z"/><path d="M7 14h10"/><circle cx="12" cy="17" r="1.5"/></svg>`;
+if (id === "fireball") return `<svg ${common}><circle cx="12" cy="13" r="6"/><path d="M12 3c2 2 3 4 3 6M9 4c1 1 2 2 2 3"/></svg>`;
+if (id === "thunder") return `<svg ${common}><path d="M13 2L5 14h6l-2 8 8-12h-6z"/></svg>`;
+if (id === "swordarray") return `<svg ${common}><path d="M12 2v8M12 14v8M2 12h8M14 12h8M5 5l4 4M19 5l-4 4M5 19l4-4M19 19l-4-4"/></svg>`;
+if (id === "dragonpalm") return `<svg ${common}><path d="M4 12c3-4 6-6 8-6s5 2 8 6c-3 4-6 6-8 6s-5-2-8-6z"/><circle cx="12" cy="12" r="2"/></svg>`;
+if (id === "shieldcharm") return `<svg ${common}><path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg>`;
+if (id === "soulchain") return `<svg ${common}><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M6 6l12 12M18 6L6 18"/></svg>`;
+return `<svg ${common}><circle cx="12" cy="12" r="5"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l3 3M18 6l-3 3M6 18l3-3M18 18l-3-3"/></svg>`;
   }
 
   _updateHUD() {
@@ -2582,6 +2735,333 @@ document.getElementById("hudLevel").textContent = this.level.endless
         ctx.fillRect(18, 2.1, 20, 2.4);
       }
       ctx.shadowBlur = 0;
+    } else if (type === "watermelon") {
+      ctx.fillStyle = "#4a8c3f";
+      ctx.strokeStyle = "#2c5c26";
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.arc(18, 0, 8 * s, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+      ctx.strokeStyle = "#7ed957";
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(12, -4);
+      ctx.quadraticCurveTo(18, 0, 24, -4);
+      ctx.moveTo(11, 2);
+      ctx.quadraticCurveTo(18, 6, 25, 2);
+      ctx.stroke();
+    } else if (type === "durian") {
+      ctx.fillStyle = "#c8b45a";
+      ctx.strokeStyle = "#6a5a2a";
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.arc(18, 0, 7 * s, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+      ctx.strokeStyle = "#8a7a3a";
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * TAU;
+        ctx.beginPath();
+        ctx.moveTo(18 + Math.cos(a) * 6, Math.sin(a) * 6);
+        ctx.lineTo(18 + Math.cos(a) * 10, Math.sin(a) * 10);
+        ctx.stroke();
+      }
+    } else if (type === "poisonshroom") {
+      ctx.fillStyle = "#b48ce8";
+      ctx.strokeStyle = "#5c3a8a";
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.arc(18, -2, 7 * s, Math.PI, 0);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "#e8dff0";
+      ctx.fillRect(15, -2, 6, 8);
+    } else if (type === "flail") {
+      ctx.strokeStyle = "#a8b0ba";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(8, 0);
+      ctx.lineTo(20, 0);
+      ctx.stroke();
+      ctx.fillStyle = "#7d8a96";
+      ctx.strokeStyle = "#3d4550";
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.arc(28, 0, 6 * s, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+    } else if (type === "flare") {
+      ctx.fillStyle = "#ffd25e";
+      ctx.shadowColor = "#ffd25e";
+      ctx.shadowBlur = 8;
+      ctx.beginPath();
+      ctx.moveTo(18, -8);
+      ctx.lineTo(22, 0);
+      ctx.lineTo(18, 8);
+      ctx.lineTo(14, 0);
+      ctx.closePath();
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    } else if (type === "molotov") {
+      ctx.fillStyle = "#ff6a3a";
+      ctx.strokeStyle = "#8a2a1a";
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.arc(20, 0, 7 * s, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "#ffb04a";
+      ctx.beginPath();
+      ctx.arc(20, -9, 3 * s, 0, TAU);
+      ctx.fill();
+    } else if (type === "cluster") {
+      ctx.fillStyle = "#e8a0ff";
+      ctx.strokeStyle = "#8a4a9a";
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.arc(18, 0, 6 * s, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "#c87add";
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * TAU + 0.4;
+        ctx.beginPath();
+        ctx.arc(18 + Math.cos(a) * 9, Math.sin(a) * 9, 2.5, 0, TAU);
+        ctx.fill();
+      }
+    } else if (type === "drone") {
+      ctx.fillStyle = "#6fe8d8";
+      ctx.strokeStyle = "#2a8a7a";
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.arc(20, 0, 5 * s, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+      ctx.strokeStyle = "#2a8a7a";
+      ctx.lineWidth = 1.2;
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * TAU + 0.78;
+        ctx.beginPath();
+        ctx.moveTo(20 + Math.cos(a) * 5, Math.sin(a) * 5);
+        ctx.lineTo(20 + Math.cos(a) * 10, Math.sin(a) * 10);
+        ctx.stroke();
+      }
+    } else if (type === "gravity") {
+      ctx.fillStyle = "#d88cff";
+      ctx.strokeStyle = "#6a3a9a";
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.arc(18, 0, 7 * s, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+      ctx.strokeStyle = "#b46add";
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.arc(18, 0, 11, 0, TAU);
+      ctx.stroke();
+    } else if (type === "sword") {
+      // 飞剑：手持时剑光微闪
+      ctx.globalCompositeOperation = "lighter";
+      const sg = ctx.createRadialGradient(18, 0, 0, 18, 0, 18);
+      sg.addColorStop(0, "rgba(168,216,255,.3)");
+      sg.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = sg;
+      ctx.beginPath();
+      ctx.arc(18, 0, 18, 0, TAU);
+      ctx.fill();
+      ctx.globalCompositeOperation = "source-over";
+      ctx.fillStyle = "#e8f4ff";
+      ctx.shadowColor = "#a8d8ff";
+      ctx.shadowBlur = 10;
+      ctx.beginPath();
+      ctx.moveTo(18, -14);
+      ctx.lineTo(21, 8);
+      ctx.lineTo(18, 12);
+      ctx.lineTo(15, 8);
+      ctx.closePath();
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = "rgba(255,255,255,.7)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(18, -12);
+      ctx.lineTo(18, 10);
+      ctx.stroke();
+      ctx.strokeStyle = "#8ab8d8";
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(12, 8);
+      ctx.lineTo(24, 8);
+      ctx.stroke();
+    } else if (type === "fireball") {
+      // 火球术：手持时火焰跳动
+      ctx.globalCompositeOperation = "lighter";
+      const fg = ctx.createRadialGradient(20, 0, 0, 20, 0, 20);
+      fg.addColorStop(0, "rgba(255,106,58,.35)");
+      fg.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = fg;
+      ctx.beginPath();
+      ctx.arc(20, 0, 20, 0, TAU);
+      ctx.fill();
+      ctx.globalCompositeOperation = "source-over";
+      ctx.fillStyle = "#ff6a3a";
+      ctx.shadowColor = "#ff6a3a";
+      ctx.shadowBlur = 12;
+      ctx.beginPath();
+      ctx.arc(20, 0, 8 * s, 0, TAU);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = "#ffb04a";
+      ctx.beginPath();
+      ctx.arc(20, 0, 4 * s, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = "#fff4c8";
+      ctx.beginPath();
+      ctx.arc(20, 0, 2 * s, 0, TAU);
+      ctx.fill();
+    } else if (type === "thunder") {
+      // 雷符：手持时电弧微闪
+      ctx.globalCompositeOperation = "lighter";
+      const tg = ctx.createRadialGradient(18, 0, 0, 18, 0, 18);
+      tg.addColorStop(0, "rgba(255,233,92,.35)");
+      tg.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = tg;
+      ctx.beginPath();
+      ctx.arc(18, 0, 18, 0, TAU);
+      ctx.fill();
+      ctx.globalCompositeOperation = "source-over";
+      ctx.fillStyle = "#ffe95c";
+      ctx.strokeStyle = "#b8a020";
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.arc(18, 0, 7 * s, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "#fff8c8";
+      ctx.beginPath();
+      ctx.moveTo(20, -9);
+      ctx.lineTo(15, 1);
+      ctx.lineTo(19, 1);
+      ctx.lineTo(16, 9);
+      ctx.lineTo(22, -1);
+      ctx.lineTo(18, -1);
+      ctx.closePath();
+      ctx.fill();
+    } else if (type === "swordarray") {
+      // 万剑归宗：手持时小剑环绕
+      ctx.globalCompositeOperation = "lighter";
+      const sg = ctx.createRadialGradient(18, 0, 0, 18, 0, 22);
+      sg.addColorStop(0, "rgba(168,216,255,.25)");
+      sg.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = sg;
+      ctx.beginPath();
+      ctx.arc(18, 0, 22, 0, TAU);
+      ctx.fill();
+      ctx.globalCompositeOperation = "source-over";
+      ctx.fillStyle = "#a8d8ff";
+      ctx.shadowColor = "#a8d8ff";
+      ctx.shadowBlur = 6;
+      const spin = performance.now() / 300;
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * TAU + spin;
+        ctx.save();
+        ctx.translate(18 + Math.cos(a) * 10, Math.sin(a) * 10);
+        ctx.rotate(a + Math.PI / 2);
+        ctx.beginPath();
+        ctx.moveTo(0, -7);
+        ctx.lineTo(2, 4);
+        ctx.lineTo(0, 7);
+        ctx.lineTo(-2, 4);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
+      ctx.shadowBlur = 0;
+    } else if (type === "dragonpalm") {
+      // 降龙十八掌：手持时龙气缠绕
+      ctx.globalCompositeOperation = "lighter";
+      const dg = ctx.createRadialGradient(20, 0, 0, 20, 0, 22);
+      dg.addColorStop(0, "rgba(255,138,90,.35)");
+      dg.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = dg;
+      ctx.beginPath();
+      ctx.arc(20, 0, 22, 0, TAU);
+      ctx.fill();
+      ctx.globalCompositeOperation = "source-over";
+      ctx.fillStyle = "#ff8a5a";
+      ctx.shadowColor = "#ff8a5a";
+      ctx.shadowBlur = 14;
+      ctx.beginPath();
+      ctx.arc(20, 0, 10 * s, 0, TAU);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = "#ffd25e";
+      ctx.beginPath();
+      ctx.arc(20, 0, 5 * s, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = "#fff4c8";
+      ctx.beginPath();
+      ctx.arc(20, 0, 2 * s, 0, TAU);
+      ctx.fill();
+    } else if (type === "shieldcharm") {
+      // 护体符：手持时金光环绕
+      ctx.globalCompositeOperation = "lighter";
+      const hg = ctx.createRadialGradient(18, 0, 0, 18, 0, 20);
+      hg.addColorStop(0, "rgba(255,210,94,.3)");
+      hg.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = hg;
+      ctx.beginPath();
+      ctx.arc(18, 0, 20, 0, TAU);
+      ctx.fill();
+      ctx.globalCompositeOperation = "source-over";
+      ctx.fillStyle = "#ffd25e";
+      ctx.shadowColor = "#ffd25e";
+      ctx.shadowBlur = 10;
+      ctx.beginPath();
+      ctx.moveTo(18, -9);
+      ctx.lineTo(26, -3);
+      ctx.lineTo(26, 3);
+      ctx.lineTo(18, 9);
+      ctx.lineTo(10, 3);
+      ctx.lineTo(10, -3);
+      ctx.closePath();
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = "#fff8c8";
+      ctx.beginPath();
+      ctx.arc(18, 0, 3, 0, TAU);
+      ctx.fill();
+    } else if (type === "soulchain") {
+      // 锁魂链：手持时魂火微闪
+      ctx.globalCompositeOperation = "lighter";
+      const cg = ctx.createRadialGradient(18, 0, 0, 18, 0, 18);
+      cg.addColorStop(0, "rgba(180,140,232,.3)");
+      cg.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = cg;
+      ctx.beginPath();
+      ctx.arc(18, 0, 18, 0, TAU);
+      ctx.fill();
+      ctx.globalCompositeOperation = "source-over";
+      ctx.strokeStyle = "#b48ce8";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(18, 0, 7 * s, 0, TAU);
+      ctx.stroke();
+      ctx.strokeStyle = "#8a5ab8";
+      ctx.lineWidth = 1.4;
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * TAU + performance.now() / 500;
+        ctx.beginPath();
+        ctx.moveTo(18 + Math.cos(a) * 5, Math.sin(a) * 5);
+        ctx.lineTo(18 + Math.cos(a) * 10, Math.sin(a) * 10);
+        ctx.stroke();
+      }
+      ctx.fillStyle = "#d8b8ff";
+      ctx.beginPath();
+      ctx.arc(18, 0, 2.5, 0, TAU);
+      ctx.fill();
     } else {
       // 默认木棒
       ctx.strokeStyle = "#7c5330";

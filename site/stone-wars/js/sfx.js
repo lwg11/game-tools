@@ -75,6 +75,49 @@ export class Sfx {
       this.tone(220, 0.14, "square", 0.05, 420);
     } else if (type === "banana") {
       this.tone(520, 0.12, "triangle", 0.07, 300);
+    } else if (type === "watermelon") {
+      this.tone(380, 0.1, "triangle", 0.07, 200);
+      this.noise(0.08, 0.04, 1200);
+    } else if (type === "durian") {
+      this.noise(0.12, 0.08, 800);
+      this.tone(160, 0.12, "triangle", 0.06, 90);
+    } else if (type === "poisonshroom") {
+      this.tone(280, 0.16, "sine", 0.06, 140);
+    } else if (type === "flail") {
+      this.noise(0.1, 0.06, 2000);
+      this.tone(240, 0.1, "triangle", 0.05, 120);
+    } else if (type === "flare") {
+      this.tone(900, 0.08, "sine", 0.05, 1400);
+    } else if (type === "molotov") {
+      this.noise(0.14, 0.09, 1000);
+      this.tone(200, 0.12, "sawtooth", 0.05, 80);
+    } else if (type === "cluster") {
+      this.tone(440, 0.1, "triangle", 0.06, 220);
+    } else if (type === "drone") {
+      this.tone(680, 0.12, "sine", 0.05, 900);
+      this.noise(0.08, 0.03, 3000);
+    } else if (type === "gravity") {
+      this.tone(120, 0.2, "sine", 0.08, 60);
+    } else if (type === "sword") {
+      this.tone(1200, 0.08, "sine", 0.06, 2400);
+      this.noise(0.06, 0.03, 4000);
+    } else if (type === "fireball") {
+      this.noise(0.14, 0.08, 900);
+      this.tone(300, 0.12, "sawtooth", 0.05, 150);
+    } else if (type === "thunder") {
+      this.noise(0.2, 0.12, 3000);
+      this.tone(180, 0.18, "square", 0.06, 60);
+    } else if (type === "swordarray") {
+      this.tone(800, 0.12, "sine", 0.06, 1600);
+      this.tone(1000, 0.1, "sine", 0.04, 2000);
+    } else if (type === "dragonpalm") {
+      this.noise(0.16, 0.1, 700);
+      this.tone(140, 0.16, "triangle", 0.08, 70);
+    } else if (type === "shieldcharm") {
+      this.tone(700, 0.1, "sine", 0.05, 1000);
+    } else if (type === "soulchain") {
+      this.noise(0.1, 0.06, 1500);
+      this.tone(220, 0.12, "triangle", 0.05, 110);
     } else {
       this.noise(0.16, 0.07, 1600);
       this.tone(180, 0.1, "sawtooth", 0.05, 90);

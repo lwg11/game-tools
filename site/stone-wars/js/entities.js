@@ -35,7 +35,7 @@ export class Unit {
     this.visor = Boolean(cfg.visor);
     if (team === 0) {
       this.skin = "#e2a06b";
-      this.cloth = { stone: "#e8892c", iron: "#8c99a6", gun: "#b5533a", mech: "#2f7f8c" }[this.era] || "#e8892c";
+      this.cloth = { stone: "#e8892c", iron: "#8c99a6", gun: "#b5533a", mech: "#2f7f8c", cultivation: "#7a5ac8" }[this.era] || "#e8892c";
       this.band = "#ffcf7a";
       this.scale = 1;
     } else {
@@ -583,6 +583,13 @@ export class Projectile {
     this.fuse = this.kind === "grenade" ? this.weapon.fuse
       : type === "bananaSmall" ? 0.9 : null;
     this.r = this.kind === "boulder" ? 8 : this.kind === "spike" ? 9 : this.kind === "spear" ? 4 : 6;
+    // 修仙武器：飞行时散发灵气粒子
+    this.auraT = 0;
+    this.auraColor = {
+      sword: "#a8d8ff", fireball: "#ff8a4a", thunder: "#ffe95c",
+      swordarray: "#a8d8ff", dragonpalm: "#ff8a5a", shieldcharm: "#ffd25e",
+      soulchain: "#b48ce8",
+    }[type] || null;
   }
 
   update(dt) {
@@ -673,7 +680,23 @@ export class Projectile {
       this.rotation = Math.atan2(this.vy, this.vx);
       this.trail.push({ x: nx, y: ny });
       if (this.trail.length > (this.kind === "laser" ? 8 : 14)) this.trail.shift();
-      // 火箭 / 陨石留下烟尾，强化“重火力”观感
+      // 修仙武器：飞行灵气粒子
+      if (this.auraColor) {
+        this.auraT -= h;
+        if (this.auraT <= 0) {
+          this.auraT = 0.025;
+          const a = rand(0, TAU);
+          const sp = rand(20, 80);
+          this.game.particles.push({
+            x: nx + rand(-4, 4), y: ny + rand(-4, 4),
+            vx: Math.cos(a) * sp - this.vx * 0.08,
+            vy: Math.sin(a) * sp - this.vy * 0.08,
+            life: rand(0.3, 0.7), maxLife: 0.7, size: rand(1.5, 3.5),
+            color: this.auraColor, kind: "spark", gravity: -20,
+          });
+        }
+      }
+      // 火箭 / 陨石留下烟尾，强化"重火力"观感
       if (this.kind === "rocket" || this.type === "meteor" || this.weapon.id === "cannon") {
         this.smokeT -= h;
         if (this.smokeT <= 0) {
@@ -791,10 +814,22 @@ export class Projectile {
         p.damageMul = this.damageMul;
         g.projectiles.push(p);
       }
+    } else if (this.kind === "split") {
+      // 西瓜 / 集束弹：分裂成多个小弹
+      const count = this.type === "cluster" ? 5 : 4;
+      g.explode(this.x, this.y, blast * 0.4, dmg * 0.3, this.team, "blast");
+      for (let i = 0; i < count; i++) {
+        const angle = (i / count) * TAU + rand(-0.3, 0.3);
+        const spd = rand(180, 320);
+        const p = new Projectile(g, "bananaSmall", this.x, this.y, Math.cos(angle) * spd, Math.sin(angle) * spd - 120, this.team);
+        p.weapon = { ...this.weapon, damage: dmg * 0.7, blast: blast * 0.5, gravity: 900 };
+        p.damageMul = this.damageMul;
+        g.projectiles.push(p);
+      }
     } else if (this.kind === "spear") {
-      g.explode(this.x, this.y, 22 * (this.blastMul || 1), dmg, this.team, "spear");
+      g.explode(this.x, this.y, 22 * (this.blastMul || 1), dmg, this.team, "spear", this.type);
     } else {
-      g.explode(this.x, this.y, blast, dmg, this.team, this.kind);
+      g.explode(this.x, this.y, blast, dmg, this.team, this.kind, this.type);
     }
   }
 
@@ -1050,6 +1085,508 @@ export class Projectile {
       ctx.fill();
       ctx.shadowBlur = 0;
       ctx.globalCompositeOperation = "source-over";
+    } else if (type === "watermelon") {
+      ctx.rotate(this.rotation);
+      ctx.fillStyle = "#4a8c3f";
+      ctx.strokeStyle = "#2c5c26";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, 9, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+      ctx.strokeStyle = "#7ed957";
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(-5, -6);
+      ctx.quadraticCurveTo(0, -2, 5, -6);
+      ctx.moveTo(-6, 0);
+      ctx.quadraticCurveTo(0, 4, 6, 0);
+      ctx.moveTo(-5, 6);
+      ctx.quadraticCurveTo(0, 10, 5, 6);
+      ctx.stroke();
+    } else if (type === "durian") {
+      ctx.rotate(this.rotation);
+      ctx.fillStyle = "#c8b45a";
+      ctx.strokeStyle = "#6a5a2a";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, 8, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+      ctx.strokeStyle = "#8a7a3a";
+      ctx.lineWidth = 2;
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * TAU;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(a) * 6, Math.sin(a) * 6);
+        ctx.lineTo(Math.cos(a) * 11, Math.sin(a) * 11);
+        ctx.stroke();
+      }
+    } else if (type === "poisonshroom") {
+      ctx.rotate(this.rotation);
+      ctx.fillStyle = "#b48ce8";
+      ctx.strokeStyle = "#5c3a8a";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, -2, 8, Math.PI, 0);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "#e8dff0";
+      ctx.fillRect(-3, -2, 6, 8);
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath();
+      ctx.arc(-3, -5, 1.5, 0, TAU);
+      ctx.arc(3, -6, 1.5, 0, TAU);
+      ctx.fill();
+    } else if (type === "flail") {
+      ctx.rotate(this.rotation);
+      ctx.strokeStyle = "#a8b0ba";
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      ctx.moveTo(-10, 0);
+      ctx.lineTo(4, 0);
+      ctx.stroke();
+      ctx.fillStyle = "#7d8a96";
+      ctx.strokeStyle = "#3d4550";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(10, 0, 7, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+      ctx.strokeStyle = "#c7d3dd";
+      ctx.lineWidth = 1.6;
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * TAU;
+        ctx.beginPath();
+        ctx.moveTo(10 + Math.cos(a) * 6, Math.sin(a) * 6);
+        ctx.lineTo(10 + Math.cos(a) * 10, Math.sin(a) * 10);
+        ctx.stroke();
+      }
+    } else if (type === "flare") {
+      ctx.rotate(this.rotation);
+      ctx.fillStyle = "#ffd25e";
+      ctx.shadowColor = "#ffd25e";
+      ctx.shadowBlur = 10;
+      ctx.beginPath();
+      ctx.moveTo(0, -10);
+      ctx.lineTo(4, 0);
+      ctx.lineTo(0, 10);
+      ctx.lineTo(-4, 0);
+      ctx.closePath();
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    } else if (type === "molotov") {
+      ctx.rotate(this.rotation);
+      ctx.fillStyle = "#ff6a3a";
+      ctx.strokeStyle = "#8a2a1a";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, 7, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "#ffb04a";
+      ctx.globalCompositeOperation = "lighter";
+      ctx.beginPath();
+      ctx.arc(0, -10, 4 + Math.random() * 2, 0, TAU);
+      ctx.fill();
+      ctx.globalCompositeOperation = "source-over";
+    } else if (type === "cluster") {
+      ctx.rotate(this.rotation);
+      ctx.fillStyle = "#e8a0ff";
+      ctx.strokeStyle = "#8a4a9a";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, 6, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "#c87add";
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * TAU + 0.4;
+        ctx.beginPath();
+        ctx.arc(Math.cos(a) * 9, Math.sin(a) * 9, 2.5, 0, TAU);
+        ctx.fill();
+      }
+    } else if (type === "drone") {
+      ctx.rotate(this.rotation);
+      ctx.fillStyle = "#6fe8d8";
+      ctx.strokeStyle = "#2a8a7a";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, 5, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+      ctx.strokeStyle = "#2a8a7a";
+      ctx.lineWidth = 1.6;
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * TAU + 0.78;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(a) * 5, Math.sin(a) * 5);
+        ctx.lineTo(Math.cos(a) * 11, Math.sin(a) * 11);
+        ctx.stroke();
+      }
+    } else if (type === "gravity") {
+      ctx.rotate(this.rotation);
+      ctx.fillStyle = "#d88cff";
+      ctx.strokeStyle = "#6a3a9a";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, 7, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+      ctx.strokeStyle = "#b46add";
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.arc(0, 0, 11, 0, TAU);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(0, 0, 14, 0, TAU);
+      ctx.globalAlpha = 0.4;
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    } else if (type === "sword") {
+      // 飞剑：剑光拖尾 + 寒芒剑刃 + 灵气光晕
+      ctx.rotate(this.rotation);
+      ctx.globalCompositeOperation = "lighter";
+      // 外层光晕
+      const glow = ctx.createRadialGradient(0, 0, 0, 0, 0, 22);
+      glow.addColorStop(0, "rgba(168,216,255,.55)");
+      glow.addColorStop(0.5, "rgba(120,180,255,.18)");
+      glow.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(0, 0, 22, 0, TAU);
+      ctx.fill();
+      // 剑光拖尾（三层渐变）
+      for (let i = 0; i < 3; i++) {
+        const alpha = 0.28 - i * 0.08;
+        const w = 4 - i * 1.2;
+        ctx.strokeStyle = `rgba(168,216,255,${alpha})`;
+        ctx.lineWidth = w;
+        ctx.beginPath();
+        ctx.moveTo(-14 - i * 6, 0);
+        ctx.quadraticCurveTo(-28 - i * 8, rand(-2, 2), -42 - i * 10, rand(-3, 3));
+        ctx.stroke();
+      }
+      ctx.globalCompositeOperation = "source-over";
+      // 剑刃
+      ctx.fillStyle = "#e8f4ff";
+      ctx.shadowColor = "#a8d8ff";
+      ctx.shadowBlur = 14;
+      ctx.beginPath();
+      ctx.moveTo(0, -16);
+      ctx.lineTo(3.5, 8);
+      ctx.lineTo(0, 14);
+      ctx.lineTo(-3.5, 8);
+      ctx.closePath();
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      // 剑脊寒芒
+      ctx.strokeStyle = "rgba(255,255,255,.85)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, -14);
+      ctx.lineTo(0, 10);
+      ctx.stroke();
+      // 剑格
+      ctx.strokeStyle = "#8ab8d8";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(-7, 8);
+      ctx.lineTo(7, 8);
+      ctx.stroke();
+      // 剑柄
+      ctx.strokeStyle = "#5a7a9a";
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      ctx.moveTo(0, 8);
+      ctx.lineTo(0, 14);
+      ctx.stroke();
+    } else if (type === "fireball") {
+      // 火球术：多层火焰 + 火舌拖尾 + 核心白炽
+      ctx.rotate(this.rotation);
+      ctx.globalCompositeOperation = "lighter";
+      // 外层光晕
+      const fg = ctx.createRadialGradient(0, 0, 0, 0, 0, 26);
+      fg.addColorStop(0, "rgba(255,106,58,.5)");
+      fg.addColorStop(0.5, "rgba(255,80,30,.15)");
+      fg.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = fg;
+      ctx.beginPath();
+      ctx.arc(0, 0, 26, 0, TAU);
+      ctx.fill();
+      // 火舌拖尾
+      for (let i = 0; i < 4; i++) {
+        const a = 0.22 - i * 0.05;
+        ctx.strokeStyle = `rgba(255,${120 + i * 30},40,${a})`;
+        ctx.lineWidth = 5 - i;
+        ctx.beginPath();
+        ctx.moveTo(-8 - i * 4, 0);
+        ctx.quadraticCurveTo(-20 - i * 6, rand(-6, 6), -34 - i * 8, rand(-8, 8));
+        ctx.stroke();
+      }
+      ctx.globalCompositeOperation = "source-over";
+      // 外焰
+      ctx.fillStyle = "#ff6a3a";
+      ctx.shadowColor = "#ff6a3a";
+      ctx.shadowBlur = 16;
+      ctx.beginPath();
+      ctx.arc(0, 0, 9, 0, TAU);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      // 内焰
+      ctx.fillStyle = "#ffb04a";
+      ctx.beginPath();
+      ctx.arc(0, 0, 5, 0, TAU);
+      ctx.fill();
+      // 白炽核心
+      ctx.fillStyle = "#fff4c8";
+      ctx.beginPath();
+      ctx.arc(0, 0, 2.5, 0, TAU);
+      ctx.fill();
+    } else if (type === "thunder") {
+      // 雷符：电弧缠绕 + 雷光闪烁 + 符纸
+      ctx.rotate(this.rotation);
+      ctx.globalCompositeOperation = "lighter";
+      // 雷光光晕
+      const tg = ctx.createRadialGradient(0, 0, 0, 0, 0, 24);
+      tg.addColorStop(0, "rgba(255,233,92,.6)");
+      tg.addColorStop(0.5, "rgba(255,220,60,.2)");
+      tg.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = tg;
+      ctx.beginPath();
+      ctx.arc(0, 0, 24, 0, TAU);
+      ctx.fill();
+      // 电弧（随机分叉闪电）
+      ctx.strokeStyle = "rgba(255,248,200,.8)";
+      ctx.lineWidth = 1.2;
+      for (let i = 0; i < 3; i++) {
+        const a = rand(0, TAU);
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(a) * 4, Math.sin(a) * 4);
+        const mid = rand(8, 14);
+        ctx.lineTo(Math.cos(a) * mid + rand(-4, 4), Math.sin(a) * mid + rand(-4, 4));
+        ctx.lineTo(Math.cos(a) * (mid + 6) + rand(-6, 6), Math.sin(a) * (mid + 6) + rand(-6, 6));
+        ctx.stroke();
+      }
+      ctx.globalCompositeOperation = "source-over";
+      // 符纸
+      ctx.fillStyle = "#ffe95c";
+      ctx.strokeStyle = "#b8a020";
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.arc(0, 0, 7, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+      // 雷纹
+      ctx.fillStyle = "#fff8c8";
+      ctx.beginPath();
+      ctx.moveTo(2, -10);
+      ctx.lineTo(-3, 1);
+      ctx.lineTo(1, 1);
+      ctx.lineTo(-2, 10);
+      ctx.lineTo(4, -2);
+      ctx.lineTo(0, -2);
+      ctx.closePath();
+      ctx.fill();
+    } else if (type === "swordarray") {
+      // 万剑归宗：旋转剑阵 + 剑影残像 + 中心法阵
+      ctx.rotate(this.rotation);
+      ctx.globalCompositeOperation = "lighter";
+      // 中心法阵光晕
+      const sg = ctx.createRadialGradient(0, 0, 0, 0, 0, 28);
+      sg.addColorStop(0, "rgba(168,216,255,.4)");
+      sg.addColorStop(0.6, "rgba(120,180,255,.12)");
+      sg.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = sg;
+      ctx.beginPath();
+      ctx.arc(0, 0, 28, 0, TAU);
+      ctx.fill();
+      // 旋转的 8 把飞剑
+      const spin = this.age * 6;
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * TAU + spin;
+        const r = 12;
+        ctx.save();
+        ctx.translate(Math.cos(a) * r, Math.sin(a) * r);
+        ctx.rotate(a + Math.PI / 2);
+        // 剑影残像
+        ctx.globalAlpha = 0.25;
+        ctx.fillStyle = "#d8ecff";
+        ctx.beginPath();
+        ctx.moveTo(0, -10);
+        ctx.lineTo(2.5, 5);
+        ctx.lineTo(0, 8);
+        ctx.lineTo(-2.5, 5);
+        ctx.closePath();
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        // 实体剑
+        ctx.fillStyle = "#a8d8ff";
+        ctx.shadowColor = "#a8d8ff";
+        ctx.shadowBlur = 8;
+        ctx.beginPath();
+        ctx.moveTo(0, -8);
+        ctx.lineTo(2, 4);
+        ctx.lineTo(0, 7);
+        ctx.lineTo(-2, 4);
+        ctx.closePath();
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.restore();
+      }
+      // 中心符文
+      ctx.strokeStyle = "rgba(200,230,255,.6)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(0, 0, 5 + Math.sin(this.age * 8) * 1.5, 0, TAU);
+      ctx.stroke();
+      ctx.globalCompositeOperation = "source-over";
+    } else if (type === "dragonpalm") {
+      // 降龙十八掌：龙形虚影 + 火焰漩涡 + 核心龙珠
+      ctx.rotate(this.rotation);
+      ctx.globalCompositeOperation = "lighter";
+      // 龙形虚影（波浪形龙身）
+      ctx.strokeStyle = "rgba(255,138,90,.35)";
+      ctx.lineWidth = 6;
+      ctx.beginPath();
+      for (let i = 0; i <= 20; i++) {
+        const t = i / 20;
+        const px = -30 - t * 20;
+        const py = Math.sin(t * 12 + this.age * 10) * 8;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.stroke();
+      // 龙首
+      ctx.fillStyle = "rgba(255,180,100,.4)";
+      ctx.beginPath();
+      ctx.arc(-34, Math.sin(this.age * 10) * 8, 6, 0, TAU);
+      ctx.fill();
+      // 火焰漩涡光晕
+      const dg = ctx.createRadialGradient(0, 0, 0, 0, 0, 28);
+      dg.addColorStop(0, "rgba(255,138,90,.5)");
+      dg.addColorStop(0.5, "rgba(255,100,50,.18)");
+      dg.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = dg;
+      ctx.beginPath();
+      ctx.arc(0, 0, 28, 0, TAU);
+      ctx.fill();
+      ctx.globalCompositeOperation = "source-over";
+      // 龙珠核心
+      ctx.fillStyle = "#ff8a5a";
+      ctx.shadowColor = "#ff8a5a";
+      ctx.shadowBlur = 18;
+      ctx.beginPath();
+      ctx.arc(0, 0, 10, 0, TAU);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = "#ffd25e";
+      ctx.beginPath();
+      ctx.arc(0, 0, 5, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = "#fff4c8";
+      ctx.beginPath();
+      ctx.arc(0, 0, 2.5, 0, TAU);
+      ctx.fill();
+    } else if (type === "shieldcharm") {
+      // 护体符：金光护盾 + 旋转符文 + 六边形光阵
+      ctx.rotate(this.rotation);
+      ctx.globalCompositeOperation = "lighter";
+      // 金光光晕
+      const hg = ctx.createRadialGradient(0, 0, 0, 0, 0, 24);
+      hg.addColorStop(0, "rgba(255,210,94,.5)");
+      hg.addColorStop(0.5, "rgba(255,200,80,.18)");
+      hg.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = hg;
+      ctx.beginPath();
+      ctx.arc(0, 0, 24, 0, TAU);
+      ctx.fill();
+      // 六边形光阵
+      ctx.strokeStyle = "rgba(255,230,150,.5)";
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * TAU + this.age * 2;
+        const px = Math.cos(a) * 14;
+        const py = Math.sin(a) * 14;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.stroke();
+      // 旋转符文点
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * TAU - this.age * 3;
+        ctx.fillStyle = "rgba(255,240,180,.7)";
+        ctx.beginPath();
+        ctx.arc(Math.cos(a) * 18, Math.sin(a) * 18, 1.5, 0, TAU);
+        ctx.fill();
+      }
+      ctx.globalCompositeOperation = "source-over";
+      // 符纸本体
+      ctx.fillStyle = "#ffd25e";
+      ctx.shadowColor = "#ffd25e";
+      ctx.shadowBlur = 12;
+      ctx.beginPath();
+      ctx.moveTo(0, -10);
+      ctx.lineTo(8, -4);
+      ctx.lineTo(8, 4);
+      ctx.lineTo(0, 10);
+      ctx.lineTo(-8, 4);
+      ctx.lineTo(-8, -4);
+      ctx.closePath();
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = "#fff8c8";
+      ctx.beginPath();
+      ctx.arc(0, 0, 3, 0, TAU);
+      ctx.fill();
+    } else if (type === "soulchain") {
+      // 锁魂链：锁链节段 + 紫色魂火 + 链节拖尾
+      ctx.rotate(this.rotation);
+      ctx.globalCompositeOperation = "lighter";
+      // 魂火光晕
+      const cg = ctx.createRadialGradient(0, 0, 0, 0, 0, 22);
+      cg.addColorStop(0, "rgba(180,140,232,.5)");
+      cg.addColorStop(0.5, "rgba(140,100,200,.18)");
+      cg.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = cg;
+      ctx.beginPath();
+      ctx.arc(0, 0, 22, 0, TAU);
+      ctx.fill();
+      // 锁链拖尾（节段状）
+      for (let i = 0; i < 5; i++) {
+        const a = 0.3 - i * 0.06;
+        ctx.strokeStyle = `rgba(180,140,232,${a})`;
+        ctx.lineWidth = 3 - i * 0.4;
+        ctx.beginPath();
+        ctx.moveTo(-6 - i * 5, 0);
+        ctx.quadraticCurveTo(-14 - i * 6, rand(-4, 4), -22 - i * 7, rand(-5, 5));
+        ctx.stroke();
+      }
+      ctx.globalCompositeOperation = "source-over";
+      // 链环本体
+      ctx.strokeStyle = "#b48ce8";
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      ctx.arc(0, 0, 8, 0, TAU);
+      ctx.stroke();
+      // 链刺
+      ctx.strokeStyle = "#8a5ab8";
+      ctx.lineWidth = 1.6;
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * TAU + this.age * 4;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(a) * 6, Math.sin(a) * 6);
+        ctx.lineTo(Math.cos(a) * 11, Math.sin(a) * 11);
+        ctx.stroke();
+      }
+      // 魂火核心
+      ctx.fillStyle = "#d8b8ff";
+      ctx.beginPath();
+      ctx.arc(0, 0, 3, 0, TAU);
+      ctx.fill();
     }
     ctx.restore();
   }
