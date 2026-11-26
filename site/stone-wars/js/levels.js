@@ -251,7 +251,7 @@ export const ERAS = {
     desc: "激光与电磁炮，能贯穿整条战线",
   },
   cultivation: {
-    id: "cultivation", name: "修仙时代", short: "修仙", range: "21-25 关",
+    id: "cultivation", name: "修仙时代", short: "修仙", range: "29-38 关",
     accent: "#c8a8ff", playerHp: 260,
     desc: "御剑飞行、雷法火术，神通广大",
   },
@@ -361,6 +361,52 @@ export const THEMES = {
     grass: "#5a4a7a", grassLight: "#8a6aaa",
     dirtLine: "rgba(220,190,255,.1)", mote: "rgba(200,170,255,.5)", night: true,
   },
+  // 修仙专属主题
+  immortal: {
+    id: "immortal",
+    sky: ["#0c1a2e", "#1a3a5c", "#2a6a8a", "#4a9ab8"],
+    sun: "#d8f4ff", sunGlow: "rgba(120,220,255,.4)",
+    far: "#1a3048", mid: "#122438", near: "#0a1624",
+    dirt: ["#3a5a6c", "#2a4454", "#1a2e3a"],
+    grass: "#4a8a9a", grassLight: "#6ab8c8",
+    dirtLine: "rgba(160,230,255,.12)", mote: "rgba(140,220,255,.55)", night: true,
+  },
+  swordgrave: {
+    id: "swordgrave",
+    sky: ["#140e1e", "#2a1a3a", "#4a2a5c", "#6a3a7a"],
+    sun: "#e8c8ff", sunGlow: "rgba(200,140,255,.35)",
+    far: "#2a1c38", mid: "#1e1428", near: "#120c1a",
+    dirt: ["#4a3a52", "#362a40", "#201828"],
+    grass: "#6a5a7a", grassLight: "#9a7aaa",
+    dirtLine: "rgba(220,180,255,.1)", mote: "rgba(200,160,255,.5)", night: true,
+  },
+  spirit: {
+    id: "spirit",
+    sky: ["#0a1a14", "#143a2a", "#1e5c3a", "#2a8a4a"],
+    sun: "#d8ffd8", sunGlow: "rgba(100,255,150,.35)",
+    far: "#1a3828", mid: "#122a1e", near: "#0a1a12",
+    dirt: ["#3a5a42", "#2a4432", "#1a2e22"],
+    grass: "#4a9a5a", grassLight: "#6ac87a",
+    dirtLine: "rgba(160,255,180,.1)", mote: "rgba(140,255,170,.5)", night: true,
+  },
+  penglai: {
+    id: "penglai",
+    sky: ["#0a1a2e", "#1a3a5c", "#2a5a8a", "#4a8ab8"],
+    sun: "#fff4d8", sunGlow: "rgba(255,220,150,.4)",
+    far: "#1a3048", mid: "#122438", near: "#0a1624",
+    dirt: ["#4a6a7c", "#3a5464", "#2a3e4a"],
+    grass: "#5a9a8a", grassLight: "#7ac8b8",
+    dirtLine: "rgba(200,240,255,.12)", mote: "rgba(180,230,255,.55)", night: false,
+  },
+  palace: {
+    id: "palace",
+    sky: ["#1a0e2e", "#3a1a5c", "#5a2a8a", "#8a4ab8"],
+    sun: "#ffe8d8", sunGlow: "rgba(255,200,150,.4)",
+    far: "#2a1c40", mid: "#1e1430", near: "#120c1c",
+    dirt: ["#5a4a6c", "#443854", "#2e2438"],
+    grass: "#8a6a9a", grassLight: "#b88aca",
+    dirtLine: "rgba(255,220,200,.1)", mote: "rgba(255,200,180,.5)", night: true,
+  },
 };
 
 function makeLevel(id, era, name, goal, theme, style, seed, players, enemies, ai, par, turnLimit, windMax, hard) {
@@ -445,17 +491,27 @@ export const LEVELS = [
   makeLevel(28, "mech", "终局裂谷", "双领主与电磁卫队，最后决战", "volcano", "volcano", 281,
     [145, 225, 305], [{ x: 900, type: "warlord", hp: 340 }, { x: 985, type: "mech", hp: 260 }, { x: 1070, type: "mech", hp: 260 }, { x: 1155, type: "grenadier" }], 0.88, 9, 18, 8, true),
 
-  // ------------------------------------------------------------ 修仙时代 21-25（与进阶关卡并列）
-  makeLevel(29, "cultivation", "初入仙门", "散修拦路，御剑诀试试手", "cultivation", "hills", 291,
+  // ------------------------------------------------------------ 修仙时代 29-38（10 关）
+  makeLevel(29, "cultivation", "初入仙门", "散修拦路，御剑诀试试手", "cultivation", "floatpeak", 291,
     [150, 235], [{ x: 980, type: "cultivator" }, { x: 1070, type: "cultivator" }], 0.6, 5, 12, 4),
-  makeLevel(30, "cultivation", "剑修对决", "剑修出剑极快，别站直线", "cultivation", "canyon", 301,
+  makeLevel(30, "cultivation", "剑修对决", "剑修出剑极快，别站直线", "immortal", "swordgrave", 301,
     [150, 230, 310], [{ x: 950, type: "swordmaster" }, { x: 1040, type: "cultivator" }, { x: 1120, type: "taoist" }], 0.64, 6, 13, 5),
-  makeLevel(31, "cultivation", "符阵迷踪", "符师远程轰炸，雷符落地快", "cultivation", "fortress", 311,
+  makeLevel(31, "cultivation", "剑冢悟道", "巨剑插地，在剑冢中领悟剑意", "swordgrave", "swordgrave", 311,
     [150, 235], [{ x: 960, type: "taoist" }, { x: 1050, type: "swordmaster" }, { x: 1130, type: "cultivator" }], 0.68, 6, 14, 4.5),
-  makeLevel(32, "cultivation", "万剑归宗", "敌方剑阵密集，用万剑归宗对轰", "cultivation", "bridge", 321,
+  makeLevel(32, "cultivation", "灵脉峡谷", "灵脉涌动，峡谷中灵气充沛", "spirit", "spiritvalley", 321,
     [145, 225, 305], [{ x: 940, type: "swordmaster" }, { x: 1020, type: "swordmaster" }, { x: 1100, type: "taoist" }, { x: 1170, type: "cultivator" }], 0.72, 7, 15, 6),
-  makeLevel(33, "cultivation", "仙人降临", "仙人法力无边，全力一战", "cultivation", "pyramid", 331,
+  makeLevel(33, "cultivation", "蓬莱仙岛", "海上仙岛，灵气缭绕", "penglai", "penglai", 331,
     [145, 225, 305], [{ x: 920, type: "immortal", hp: 320 }, { x: 1000, type: "swordmaster" }, { x: 1080, type: "taoist" }, { x: 1160, type: "cultivator" }], 0.78, 8, 17, 7),
+  makeLevel(34, "cultivation", "天宫台阶", "天宫台阶，层层递进", "palace", "palace", 341,
+    [150, 235], [{ x: 960, type: "cultivator" }, { x: 1040, type: "swordmaster" }, { x: 1120, type: "taoist" }], 0.7, 6, 14, 5),
+  makeLevel(35, "cultivation", "万剑归宗", "敌方剑阵密集，用万剑归宗对轰", "swordgrave", "spiritvalley", 351,
+    [145, 225, 305], [{ x: 940, type: "swordmaster" }, { x: 1020, type: "swordmaster" }, { x: 1100, type: "taoist" }, { x: 1170, type: "cultivator" }], 0.74, 7, 15, 6),
+  makeLevel(36, "cultivation", "雷符天降", "符师引动天雷，小心雷符落地", "immortal", "floatpeak", 361,
+    [150, 230, 310], [{ x: 930, type: "taoist" }, { x: 1010, type: "taoist" }, { x: 1090, type: "swordmaster" }, { x: 1160, type: "cultivator" }], 0.76, 7, 16, 6.5),
+  makeLevel(37, "cultivation", "龙吟九天", "仙人座下护法，龙形掌力惊人", "palace", "palace", 371,
+    [145, 225, 305], [{ x: 920, type: "immortal", hp: 360 }, { x: 1000, type: "swordmaster" }, { x: 1080, type: "taoist" }, { x: 1160, type: "swordmaster" }], 0.82, 8, 17, 7),
+  makeLevel(38, "cultivation", "仙人降临", "仙人法力无边，全力一战", "immortal", "penglai", 381,
+    [145, 225, 305], [{ x: 900, type: "immortal", hp: 400 }, { x: 980, type: "swordmaster" }, { x: 1060, type: "taoist" }, { x: 1140, type: "swordmaster" }, { x: 1190, type: "cultivator" }], 0.88, 9, 18, 8),
 ];
 
 /** 根据关卡与武器栏生成弹药：首个武器无限，其余按关卡递增 */
