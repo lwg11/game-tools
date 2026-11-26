@@ -1555,6 +1555,7 @@ if (!this.players.some((u) => u.alive)) { this.finish(false, "族人全部倒下
 
   _updateEffects(dt) {
     this._updateFires(dt);
+    this._updateSwordRain(dt);
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const p = this.particles[i];
       p.life -= dt;
@@ -1620,162 +1621,200 @@ if (!this.players.some((u) => u.alive)) { this.finish(false, "族人全部倒下
 
   // ------------------------------------------------------------ 爆炸 / 伤害
   /**
-   * 万剑归宗（嬴政大招式）：大量飞剑从施法者处呈扇形腾空而起，
-   * 呈抛物线落向目标区域。每把剑独立命中判定：
-   * - 命中敌人：直接造成伤害 + 小爆炸
-   * - 落地：产生小范围爆炸
+   * 万剑归宗（嬴政大招）：飞剑从施法者身体飞出，呈抛物线剑雨打击目标范围。
+   * 每把剑独立飞行、穿透伤害，落地后插在地上过一会消失。
    */
   spawnSwordRain(x, y, team, damage, blast, weaponType) {
     const caster = team === 0 ? this._activePlayer() : this._activeEnemy();
+    // 起始位置：施法者身体中心
     const srcX = caster ? caster.x : x;
-    const srcY = caster ? caster.y - 40 : y - 100;
-    const count = 18;
-    // 扇形角度：从施法者指向目标区域中心
-    const baseAngle = Math.atan2(y - srcY, x - srcX);
+    const srcY = caster ? caster.y - 30 : y - 60;
+    const count = 15;
+    // 重力加速度（与 _updateSwordRain 一致）
+    const G = 1400;
     for (let i = 0; i < count; i++) {
-      // 落点覆盖目标区域（椭圆形散布）
-      const spread = 110;
+      // 每把剑的落点：目标区域内随机
+      const spread = 120;
       const tx = x + rand(-spread, spread);
-      const ty = y + rand(-50, 50);
-      // 起始位置：施法者周围小范围
-      const startX = srcX + rand(-30, 30);
-      const startY = srcY + rand(-20, 20);
-      // 飞行方向：从起始点指向落点的抛物线
-      const flightAngle = Math.atan2(ty - startY, tx - startX);
-      const flightDist = Math.hypot(tx - startX, ty - startY);
-      // 初速度：水平速度 + 向上初速度（抛物线）
-      const speed = Math.max(600, flightDist * 1.8);
-      const vx = Math.cos(flightAngle) * speed;
-      const vy = Math.sin(flightAngle) * speed - rand(200, 400);
-      // 延迟依次飞出，形成剑雨层次感
-      const delay = i * 0.05 + rand(0, 0.04);
+      const ty = y + rand(-40, 60);
+      // 飞行时间：1.2~2.0 秒（依次飞出，形成剑雨层次）
+      const flightTime = 1.2 + (i / count) * 0.8 + rand(0, 0.2);
+      // 根据抛物线公式计算初速度：
+      // x(t) = srcX + vx * t  =>  vx = (tx - srcX) / flightTime
+      // y(t) = srcY + vy * t + 0.5 * G * t^2  =>  vy = (ty - srcY - 0.5 * G * flightTime^2) / flightTime
+      const vx = (tx - srcX) / flightTime;
+      const vy = (ty - srcY - 0.5 * G * flightTime * flightTime) / flightTime;
+      // 延迟：依次飞出，形成剑雨层次
+      const delay = i * 0.08 + rand(0, 0.05);
       this.swordRain.push({
-        x: startX, y: startY,
-        sx: startX, sy: startY,
+        x: srcX, y: srcY,
+        sx: srcX, sy: srcY,
         tx, ty,
         vx, vy,
         delay,
         age: 0,
-        damage: damage,
-        blast: Math.max(70, blast),
+        damage,
+        blast: Math.max(60, blast),
         team,
         weaponType,
-        dead: false,
         hitSet: new Set(),
+        stuck: false,      // 是否已插地
+        stuckT: 0,         // 插地时间
+        stuckAngle: 0,     // 插地角度
       });
     }
-    // 剑雨启动特效：施法者处剑光冲天
+    // 启动特效：施法者处剑光冲天
     if (caster) {
-      this.rings.push({ x: caster.x, y: caster.y - 40, r: 10, max: 120, t: 0, life: 0.4, color: "rgba(168,216,255,.6)" });
-      this.spawnParticles(caster.x, caster.y - 40, 20, "#a8d8ff", "spark");
+      this.rings.push({ x: caster.x, y: caster.y - 30, r: 8, max: 100, t: 0, life: 0.35, color: "rgba(168,216,255,.7)" });
+      this.spawnParticles(caster.x, caster.y - 30, 24, "#a8d8ff", "spark");
     }
     this.sfx.shoot("swordarray");
   }
 
-  /** 更新剑雨中的飞剑：独立命中判定（敌人 + 地形） */
+  /** 更新剑雨中的飞剑：穿透伤害 + 落地插地 */
   _updateSwordRain(dt) {
     if (!this.swordRain.length) return;
     for (let i = this.swordRain.length - 1; i >= 0; i--) {
       const s = this.swordRain[i];
+      // 已插地：计时消失
+      if (s.stuck) {
+        s.stuckT += dt;
+        if (s.stuckT > 1.6) this.swordRain.splice(i, 1);
+        continue;
+      }
       if (s.delay > 0) { s.delay -= dt; continue; }
       s.age += dt;
       // 重力加速下落
-      s.vy += 1200 * dt;
+      s.vy += 1400 * dt;
       // 子步进防止穿透
-      const steps = clamp(Math.ceil(Math.hypot(s.vx, s.vy) * dt / 8), 1, 6);
-      let destroyed = false;
-      for (let step = 0; step < steps && !destroyed; step++) {
+      const steps = clamp(Math.ceil(Math.hypot(s.vx, s.vy) * dt / 6), 1, 8);
+      let stuck = false;
+      for (let step = 0; step < steps && !stuck; step++) {
         const h = dt / steps;
         s.x += s.vx * h;
         s.y += s.vy * h;
-        // 命中敌人：直接造成伤害 + 小爆炸
+        // 穿透伤害：每把剑可穿透多个敌人
         for (const u of this.units) {
           if (!u.alive || u.team === s.team || s.hitSet.has(u)) continue;
           const dx = s.x - u.x;
-          const dy = s.y - (u.y - 30);
-          const rr = 22 * (u.scale || 1);
+          const dy = s.y - (u.y - 28);
+          const rr = 20 * (u.scale || 1);
           if (dx * dx + dy * dy < rr * rr) {
             s.hitSet.add(u);
-            // 命中敌人：直接伤害 + 小范围爆炸（剑气冲击）
-            this.explode(s.x, s.y, s.blast * 0.7, s.damage, s.team, "blast", "swordarray");
-            this.swordRain.splice(i, 1);
-            destroyed = true;
-            break;
+            u.takeDamage(s.damage, s.team);
+            // 穿透剑气粒子
+            this.spawnParticles(s.x, s.y, 6, "#a8d8ff", "spark");
           }
         }
-        if (destroyed) break;
-        // 命中地形：落地爆炸
-        if (this.terrain && this.terrain.circleHit(s.x, s.y, 3)) {
-          this.explode(s.x, s.y, s.blast * 0.8, s.damage, s.team, "blast", "swordarray");
-          this.rings.push({ x: s.x, y: s.y, r: 6, max: 46, t: 0, life: 0.25, color: "rgba(168,216,255,.7)" });
-          this.swordRain.splice(i, 1);
-          destroyed = true;
-          break;
-        }
-        // 到达目标区域
-        if (s.vy > 0 && s.y >= s.ty) {
-          this.explode(s.x, s.y, s.blast * 0.8, s.damage, s.team, "blast", "swordarray");
-          this.rings.push({ x: s.x, y: s.y, r: 6, max: 46, t: 0, life: 0.25, color: "rgba(168,216,255,.7)" });
-          this.swordRain.splice(i, 1);
-          destroyed = true;
+        // 命中地形：插地
+        if (this.terrain && this.terrain.circleHit(s.x, s.y, 4)) {
+          s.stuck = true;
+          s.stuckT = 0;
+          s.stuckAngle = Math.atan2(s.vy, s.vx);
+          // 插地冲击波
+          this.rings.push({ x: s.x, y: s.y, r: 4, max: 30, t: 0, life: 0.2, color: "rgba(168,216,255,.6)" });
+          this.spawnParticles(s.x, s.y, 8, "#a8d8ff", "spark");
+          this.terrain.carve(s.x, s.y, s.blast * 0.3, s.damage * 0.5);
+          this.terrainDirty = true;
+          stuck = true;
           break;
         }
       }
-      if (destroyed) continue;
+      if (stuck) continue;
       // 剑尾灵气粒子
-      if (Math.random() < 0.6) {
+      if (Math.random() < 0.7) {
         this.particles.push({
-          x: s.x + rand(-2, 2), y: s.y - 10 + rand(-2, 2),
-          vx: rand(-15, 15), vy: rand(-40, -10),
-          life: rand(0.2, 0.4), maxLife: 0.4, size: rand(1.5, 3),
+          x: s.x + rand(-2, 2), y: s.y - 8 + rand(-2, 2),
+          vx: rand(-10, 10), vy: rand(-30, -5),
+          life: rand(0.15, 0.35), maxLife: 0.35, size: rand(1.5, 3),
           color: "#a8d8ff", kind: "spark", gravity: -20,
         });
       }
-      if (s.age > 4 || s.y > H + 60 || s.x < -80 || s.x > W + 80) {
+      if (s.age > 5 || s.y > H + 60 || s.x < -100 || s.x > W + 100) {
         this.swordRain.splice(i, 1);
       }
     }
   }
 
-  /** 绘制剑雨中的飞剑 */
+  /** 绘制剑雨中的飞剑：完整剑形（剑刃 + 剑格 + 剑柄） */
   _drawSwordRain(ctx) {
     if (!this.swordRain.length) return;
     for (const s of this.swordRain) {
       if (s.delay > 0) continue;
       ctx.save();
       ctx.translate(s.x, s.y);
-      // 剑身朝速度方向
-      const ang = Math.atan2(s.vy, s.vx);
-      ctx.rotate(ang);
-      ctx.globalCompositeOperation = "lighter";
-      // 剑芒拖尾
-      ctx.strokeStyle = "rgba(168,216,255,.4)";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(-10, 0);
-      ctx.lineTo(-26 - rand(0, 5), rand(-2, 2));
-      ctx.stroke();
-      // 剑身
-      ctx.fillStyle = "#d8ecff";
-      ctx.shadowColor = "#a8d8ff";
-      ctx.shadowBlur = 10;
-      ctx.beginPath();
-      ctx.moveTo(12, 0);
-      ctx.lineTo(-4, -2.5);
-      ctx.lineTo(-10, 0);
-      ctx.lineTo(-4, 2.5);
-      ctx.closePath();
-      ctx.fill();
-      ctx.shadowBlur = 0;
-      // 剑格
-      ctx.strokeStyle = "#8ab8d8";
-      ctx.lineWidth = 1.6;
-      ctx.beginPath();
-      ctx.moveTo(-4, -4);
-      ctx.lineTo(-4, 4);
-      ctx.stroke();
+      // 插地剑：剑尖朝下，剑柄朝上，微微颤动
+      if (s.stuck) {
+        const fade = s.stuckT > 1.0 ? clamp(1 - (s.stuckT - 1.0) / 0.6, 0, 1) : 1;
+        ctx.globalAlpha = fade;
+        // 插地角度：剑尖朝下
+        ctx.rotate(Math.PI / 2 + Math.sin(s.stuckT * 3) * 0.05);
+        this._drawSwordShape(ctx, 1.2);
+      } else {
+        // 飞行剑：剑身朝速度方向
+        const ang = Math.atan2(s.vy, s.vx);
+        ctx.rotate(ang);
+        // 剑芒拖尾
+        ctx.globalCompositeOperation = "lighter";
+        const grad = ctx.createLinearGradient(-12, 0, -60, 0);
+        grad.addColorStop(0, "rgba(168,216,255,.7)");
+        grad.addColorStop(1, "rgba(168,216,255,0)");
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.moveTo(-12, -3);
+        ctx.lineTo(-55, 0);
+        ctx.lineTo(-12, 3);
+        ctx.closePath();
+        ctx.fill();
+        ctx.globalCompositeOperation = "source-over";
+        this._drawSwordShape(ctx, 1.1);
+      }
       ctx.restore();
     }
+  }
+
+  /** 绘制一把完整的剑（剑刃 + 剑格 + 剑柄） */
+  _drawSwordShape(ctx, scale = 1) {
+    ctx.scale(scale, scale);
+    // 剑刃（菱形，剑尖朝右）
+    ctx.fillStyle = "#f0f8ff";
+    ctx.shadowColor = "#a8d8ff";
+    ctx.shadowBlur = 16;
+    ctx.beginPath();
+    ctx.moveTo(26, 0);       // 剑尖
+    ctx.lineTo(6, -5);        // 刃口上
+    ctx.lineTo(-12, -3);     // 剑根上
+    ctx.lineTo(-12, 3);      // 剑根下
+    ctx.lineTo(6, 5);        // 刃口下
+    ctx.closePath();
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    // 剑脊寒芒
+    ctx.strokeStyle = "rgba(255,255,255,.95)";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(24, 0);
+    ctx.lineTo(-10, 0);
+    ctx.stroke();
+    // 剑格（护手）
+    ctx.strokeStyle = "#8ab8d8";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(-12, -8);
+    ctx.lineTo(-12, 8);
+    ctx.stroke();
+    // 剑柄
+    ctx.strokeStyle = "#5a7a9a";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(-12, 0);
+    ctx.lineTo(-22, 0);
+    ctx.stroke();
+    // 剑柄末端圆珠
+    ctx.fillStyle = "#8ab8d8";
+    ctx.beginPath();
+    ctx.arc(-23, 0, 2.5, 0, TAU);
+    ctx.fill();
   }
 
   explode(x, y, radius, damage, team, kind = "blast", weaponType = null) {

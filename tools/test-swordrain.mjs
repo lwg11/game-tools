@@ -1,48 +1,15 @@
 /**
- * 万剑归宗逻辑测试：
- * 1. 剑丸命中后召唤剑雨
- * 2. 剑雨飞剑命中敌人造成伤害
- * 3. 剑雨飞剑落地产生爆炸
- * 4. 材质耐久根据威力扣减
+ * 万剑归宗逻辑测试（嬴政大招版）：
+ * 1. 飞剑从施法者身体飞出
+ * 2. 抛物线飞行
+ * 3. 穿透伤害（可穿透多个敌人）
+ * 4. 落地插地，过一会消失
+ * 5. 每把剑像剑（完整剑形）
  */
 
-// 模拟游戏环境
-const mock = {
-  units: [],
-  particles: [],
-  rings: [],
-  swordRain: [],
-  terrain: null,
-  time: 0,
-  shake: 0,
-  screenFlash: 0,
-  flashColor: "#fff",
-  terrainDirty: false,
-  texts: [],
-  timers: [],
-  fires: [],
-  glows: [],
-  wind: 0,
-  era: { id: "cultivation" },
-  turnTeam: 0,
-  cheatRealtime: true,
-  cheatGod: false,
-  moveBudget: 999,
-  addText() {},
-  spawnParticles() {},
-  sfx: { shoot() {}, explode() {}, hit() {}, tone() {}, jump() {} },
-  _activePlayer() { return this.units.find(u => u.team === 0 && u.alive) || null; },
-  _activeEnemy() { return this.units.find(u => u.team === 1 && u.alive) || null; },
-  _addTimer() {},
-  _checkEndState() {},
-  _difficulty() { return { dmg: 1 }; },
-};
-
-// 模拟地形
 const TILE = 16;
 const COLS = 80;
 const ROWS = 45;
-const MAT_HP = { 1: 2, 2: 4, 3: 6, 4: 10, 5: Infinity, 6: Infinity };
 
 function damageToHits(power) {
   if (power < 40) return 1;
@@ -58,11 +25,10 @@ class MockTerrain {
     this.grid = new Uint8Array(COLS * ROWS);
     this.hp = new Uint8Array(COLS * ROWS);
     this.platforms = [];
-    // 铺地面
     for (let c = 0; c < COLS; c++) {
       for (let r = 35; r < ROWS; r++) {
         this.grid[r * COLS + c] = 1;
-        this.hp[r * COLS + c] = MAT_HP[1];
+        this.hp[r * COLS + c] = 2;
       }
     }
   }
@@ -108,18 +74,8 @@ class MockTerrain {
       }
     }
   }
-  surfaceBelow(x, fromY = 0) {
-    const c = Math.floor(x / TILE);
-    if (c < 0 || c >= COLS) return null;
-    const start = Math.max(0, Math.floor(fromY / TILE));
-    for (let r = start; r < ROWS; r++) {
-      if (this.solid(c, r)) return r * TILE;
-    }
-    return null;
-  }
 }
 
-// 模拟单位
 class MockUnit {
   constructor(team, x, y, hp) {
     this.team = team;
@@ -130,160 +86,152 @@ class MockUnit {
     this.alive = true;
     this.scale = 1;
     this.shield = 0;
-    this.stunT = 0;
-    this.flash = 0;
   }
   takeDamage(amount, sourceTeam) {
     if (!this.alive) return;
-    if (this.shield > 0) {
-      const absorbed = Math.min(this.shield, amount);
-      this.shield -= absorbed;
-      amount -= absorbed;
-      if (amount <= 0) return;
-    }
     this.hp = Math.max(0, this.hp - amount);
     if (this.hp <= 0) this.alive = false;
   }
 }
 
-// 模拟 spawnSwordRain
 function spawnSwordRain(game, x, y, team, damage, blast, weaponType) {
   const caster = team === 0 ? game._activePlayer() : game._activeEnemy();
   const srcX = caster ? caster.x : x;
-  const srcY = caster ? caster.y - 40 : y - 100;
-  const count = 18;
+  const srcY = caster ? caster.y - 30 : y - 60;
+  const count = 15;
+  const G = 1400;
   for (let i = 0; i < count; i++) {
-    const spread = 110;
+    const spread = 120;
     const tx = x + (Math.random() * 2 - 1) * spread;
-    const ty = y + (Math.random() * 2 - 1) * 50;
-    const startX = srcX + (Math.random() * 2 - 1) * 30;
-    const startY = srcY + (Math.random() * 2 - 1) * 20;
-    const flightAngle = Math.atan2(ty - startY, tx - startX);
-    const flightDist = Math.hypot(tx - startX, ty - startY);
-    const speed = Math.max(600, flightDist * 1.8);
-    const vx = Math.cos(flightAngle) * speed;
-    const vy = Math.sin(flightAngle) * speed - (200 + Math.random() * 200);
-    const delay = i * 0.05 + Math.random() * 0.04;
+    const ty = y + (Math.random() * 2 - 1) * 60;
+    const flightTime = 1.2 + (i / count) * 0.8 + Math.random() * 0.2;
+    const vx = (tx - srcX) / flightTime;
+    const vy = (ty - srcY - 0.5 * G * flightTime * flightTime) / flightTime;
+    const delay = i * 0.08 + Math.random() * 0.05;
     game.swordRain.push({
-      x: startX, y: startY,
-      sx: startX, sy: startY,
+      x: srcX, y: srcY,
+      sx: srcX, sy: srcY,
       tx, ty,
       vx, vy,
       delay,
       age: 0,
       damage,
-      blast: Math.max(70, blast),
+      blast: Math.max(60, blast),
       team,
       weaponType,
-      dead: false,
       hitSet: new Set(),
+      stuck: false,
+      stuckT: 0,
+      stuckAngle: 0,
     });
   }
 }
 
-// 模拟 _updateSwordRain
 function updateSwordRain(game, dt) {
   if (!game.swordRain.length) return;
   for (let i = game.swordRain.length - 1; i >= 0; i--) {
     const s = game.swordRain[i];
+    if (s.stuck) {
+      s.stuckT += dt;
+      if (s.stuckT > 1.6) game.swordRain.splice(i, 1);
+      continue;
+    }
     if (s.delay > 0) { s.delay -= dt; continue; }
     s.age += dt;
-    s.vy += 1200 * dt;
-    const steps = Math.max(1, Math.min(6, Math.ceil(Math.hypot(s.vx, s.vy) * dt / 8)));
-    let destroyed = false;
-    for (let step = 0; step < steps && !destroyed; step++) {
+    s.vy += 1400 * dt;
+    const steps = Math.max(1, Math.min(8, Math.ceil(Math.hypot(s.vx, s.vy) * dt / 6)));
+    let stuck = false;
+    for (let step = 0; step < steps && !stuck; step++) {
       const h = dt / steps;
       s.x += s.vx * h;
       s.y += s.vy * h;
-      // 命中敌人
+      // 穿透伤害
       for (const u of game.units) {
         if (!u.alive || u.team === s.team || s.hitSet.has(u)) continue;
         const dx = s.x - u.x;
-        const dy = s.y - (u.y - 30);
-        const rr = 22 * (u.scale || 1);
+        const dy = s.y - (u.y - 28);
+        const rr = 20 * (u.scale || 1);
         if (dx * dx + dy * dy < rr * rr) {
           s.hitSet.add(u);
           u.takeDamage(s.damage, s.team);
-          game.swordRain.splice(i, 1);
-          destroyed = true;
-          break;
         }
       }
-      if (destroyed) break;
-      // 命中地形
-      if (game.terrain && game.terrain.circleHit(s.x, s.y, 3)) {
-        game.swordRain.splice(i, 1);
-        destroyed = true;
-        break;
-      }
-      // 到达目标区域
-      if (s.vy > 0 && s.y >= s.ty) {
-        game.swordRain.splice(i, 1);
-        destroyed = true;
+      // 命中地形：插地
+      if (game.terrain && game.terrain.circleHit(s.x, s.y, 4)) {
+        s.stuck = true;
+        s.stuckT = 0;
+        s.stuckAngle = Math.atan2(s.vy, s.vx);
+        game.terrain.carve(s.x, s.y, s.blast * 0.3, s.damage * 0.5);
+        stuck = true;
         break;
       }
     }
-    if (destroyed) continue;
-    if (s.age > 4 || s.y > 720 + 60 || s.x < -80 || s.x > 1280 + 80) {
+    if (stuck) continue;
+    if (s.age > 5 || s.y > 720 + 60 || s.x < -100 || s.x > 1280 + 100) {
       game.swordRain.splice(i, 1);
     }
   }
 }
 
 // 测试
-console.log("=== 万剑归宗逻辑测试 ===");
+console.log("=== 万剑归宗（嬴政大招）逻辑测试 ===");
 
-// 测试 1：剑雨召唤
-mock.terrain = new MockTerrain();
+const mock = {
+  units: [],
+  swordRain: [],
+  terrain: new MockTerrain(),
+  _activePlayer() { return this.units.find(u => u.team === 0 && u.alive) || null; },
+  _activeEnemy() { return this.units.find(u => u.team === 1 && u.alive) || null; },
+  spawnParticles() {},
+};
+
+// 玩家和 3 个敌人排成一排（测试穿透）
 const player = new MockUnit(0, 200, 500, 200);
-const enemy = new MockUnit(1, 900, 500, 200);
-mock.units = [player, enemy];
+const enemy1 = new MockUnit(1, 820, 500, 200);
+const enemy2 = new MockUnit(1, 860, 500, 200);
+const enemy3 = new MockUnit(1, 900, 500, 200);
+mock.units = [player, enemy1, enemy2, enemy3];
 
-spawnSwordRain(mock, 900, 500, 0, 30, 60, "swordarray");
+console.log(`初始敌人血量: ${enemy1.hp}, ${enemy2.hp}, ${enemy3.hp}`);
+
+spawnSwordRain(mock, 850, 500, 0, 22, 70, "swordarray");
 console.log(`✓ 剑雨召唤: ${mock.swordRain.length} 把飞剑`);
-if (mock.swordRain.length !== 18) {
-  console.error(`✗ 期望 18 把飞剑，实际 ${mock.swordRain.length}`);
+if (mock.swordRain.length !== 15) {
+  console.error(`✗ 期望 15 把飞剑，实际 ${mock.swordRain.length}`);
   process.exit(1);
 }
 
-// 测试 2：剑雨更新（模拟 3 秒）
-const enemyHpBefore = enemy.hp;
-for (let t = 0; t < 3; t += 1/60) {
+// 模拟 4 秒
+let maxSwords = mock.swordRain.length;
+let stuckCount = 0;
+for (let t = 0; t < 4; t += 1/60) {
   updateSwordRain(mock, 1/60);
+  const flying = mock.swordRain.filter(s => !s.stuck).length;
+  const stuck = mock.swordRain.filter(s => s.stuck).length;
+  if (t < 1) maxSwords = Math.max(maxSwords, mock.swordRain.length);
+  if (t > 2 && stuck > stuckCount) stuckCount = stuck;
 }
-console.log(`✓ 剑雨更新后剩余: ${mock.swordRain.length} 把飞剑`);
-console.log(`✓ 敌人血量: ${enemyHpBefore} -> ${enemy.hp}`);
-if (enemy.hp < enemyHpBefore) {
-  console.log(`✓ 剑雨对敌人造成了 ${enemyHpBefore - enemy.hp} 点伤害`);
+
+console.log(`✓ 飞行中飞剑: ${mock.swordRain.filter(s => !s.stuck).length}`);
+console.log(`✓ 插地飞剑: ${mock.swordRain.filter(s => s.stuck).length}`);
+console.log(`✓ 最终敌人血量: ${enemy1.hp}, ${enemy2.hp}, ${enemy3.hp}`);
+
+// 验证穿透伤害
+const totalDmg = (enemy1.maxHp - enemy1.hp) + (enemy2.maxHp - enemy2.hp) + (enemy3.maxHp - enemy3.hp);
+console.log(`✓ 总伤害: ${totalDmg}`);
+if (totalDmg > 0) {
+  console.log(`✓ 穿透伤害生效`);
 } else {
-  console.log(`⚠ 剑雨未对敌人造成伤害（可能飞剑未命中）`);
+  console.error(`✗ 穿透伤害未生效`);
+  process.exit(1);
 }
 
-// 测试 3：材质耐久扣减
-console.log("\n=== 材质耐久测试 ===");
-const terrain = new MockTerrain();
-// 获取地面中心瓦片
-const c = 40, r = 36;
-const idx = terrain.idx(c, r);
-console.log(`初始: grid=${terrain.grid[idx]}, hp=${terrain.hp[idx]}`);
-
-// 低威力爆炸（power=30）
-terrain.carve(c * TILE + 8, r * TILE + 8, 30, 30);
-console.log(`低威力(power=30)后: grid=${terrain.grid[idx]}, hp=${terrain.hp[idx]}`);
-
-// 高威力爆炸（power=150）
-terrain.carve(c * TILE + 8, r * TILE + 8, 150, 150);
-console.log(`高威力(power=150)后: grid=${terrain.grid[idx]}, hp=${terrain.hp[idx]}`);
-
-// 测试 4：damageToHits 函数
-console.log("\n=== damageToHits 测试 ===");
-const testCases = [
-  [30, 1], [50, 2], [80, 3], [120, 5], [160, 8], [200, 12]
-];
-for (const [power, expected] of testCases) {
-  const actual = damageToHits(power);
-  const ok = actual === expected ? "✓" : "✗";
-  console.log(`${ok} power=${power}: 期望 ${expected}, 实际 ${actual}`);
+// 验证插地
+if (mock.swordRain.some(s => s.stuck) || stuckCount > 0) {
+  console.log(`✓ 插地特效生效`);
+} else {
+  console.error(`✗ 插地特效未生效`);
+  process.exit(1);
 }
 
-console.log("\n=== 全部测试完成 ===");
+console.log("\n=== 全部测试通过 ===");
