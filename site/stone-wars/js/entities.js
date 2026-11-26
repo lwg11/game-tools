@@ -896,8 +896,11 @@ export class Projectile {
     const g = this.game;
     const dmg = this.weapon.damage * (this.damageMul || 1);
     const blast = this.weapon.blast * (this.blastMul || 1);
-    // 万剑归宗：剑丸命中后，召唤剑雨从修仙者处腾空落向目标区域
+    // 万剑归宗：剑丸命中后，先造成一次小爆炸，再召唤剑雨从施法者处腾空落向目标区域
     if (this.kind === "swordrain") {
+      // 剑丸命中点的小爆炸（伤害 + 特效）
+      g.explode(this.x, this.y, blast * 0.6, dmg, this.team, "blast", this.type);
+      // 召唤剑雨
       g.spawnSwordRain(this.x, this.y, this.team, dmg, blast, this.type);
       return;
     }

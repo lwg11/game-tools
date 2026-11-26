@@ -19,7 +19,20 @@ import { WORLD, THEMES } from "./levels.js";
 import { clamp, TAU } from "./common.js";
 
 /** 材质等级对应的初始耐久次数 */
-const MAT_HP = { 1: 1, 2: 2, 3: 3, 4: 4, 5: Infinity, 6: Infinity };
+const MAT_HP = { 1: 2, 2: 4, 3: 6, 4: 10, 5: Infinity, 6: Infinity };
+/**
+ * 根据爆炸威力计算对瓦片的摧毁次数。
+ * power = 爆炸半径（像素），伤害越高、范围越大，摧毁次数越多。
+ * 低威力技能只能蹭掉少量耐久，高威力技能可一次摧毁高等级石块。
+ */
+function damageToHits(power) {
+  if (power < 40) return 1;
+  if (power < 70) return 2;
+  if (power < 100) return 3;
+  if (power < 140) return 5;
+  if (power < 180) return 8;
+  return 12;
+}
 /** 各时代对应的基底材质等级 */
 const ERA_MAT = { stone: 1, iron: 2, gun: 2, mech: 3, cultivation: 4 };
 
@@ -340,9 +353,10 @@ export class Terrain {
     return false;
   }
 
-  /** 爆炸挖洞，返回实际影响的像素半径 */
-  carve(cx, cy, radius) {
+  /** 爆炸挖洞，返回实际影响的像素半径。power 决定摧毁次数（威力越大，摧毁越快） */
+  carve(cx, cy, radius, power = radius) {
     const r2 = radius * radius;
+    const hits = damageToHits(power);
     const c0 = Math.floor((cx - radius) / this.tile);
     const c1 = Math.floor((cx + radius) / this.tile);
     const r0 = Math.floor((cy - radius) / this.tile);
@@ -360,8 +374,8 @@ export class Terrain {
         // 不可破坏材质（5=玄铁岩, 6=基岩）
         if (v === 5 || v === 6) continue;
         if (dx * dx + dy * dy <= r2 * edge) {
-          // 材质耐久递减：高等级材质需要多次打击
-          this.hp[idx] -= 1;
+          // 材质耐久递减：威力越大，一次扣减越多
+          this.hp[idx] = Math.max(0, this.hp[idx] - hits);
           if (this.hp[idx] <= 0) {
             this.grid[idx] = 0;
             this.hp[idx] = 0;
@@ -777,6 +791,7 @@ export class Terrain {
         const n = hash2(c, r, this.level.seed || 1);
         const depth = this._depth(c, r);
         const tileValue = this.grid[this.idx(c, r)];
+        const idx = this.idx(c, r);
         let color;
         if (tileValue === 6) color = "#2b3038"; // 无尽模式基岩
         else if (tileValue === 5) color = "#3c475e"; // 玄铁岩（不可破坏）
@@ -862,6 +877,22 @@ export class Terrain {
         if (!this.solid(c + 1, r)) {
           ctx.fillStyle = "rgba(0,0,0,.14)";
           ctx.fillRect(x + tile - 2, y, 2, tile);
+        }
+        // 损伤裂纹：耐久低于最大值时显示裂纹，耐久越低裂纹越密
+        const maxHp = MAT_HP[tileValue] ?? 1;
+        if (maxHp !== Infinity && this.hp[idx] < maxHp && this.hp[idx] > 0) {
+          const dmgRatio = 1 - this.hp[idx] / maxHp;
+          const cracks = Math.ceil(dmgRatio * 3);
+          ctx.strokeStyle = `rgba(10,8,6,${0.3 + dmgRatio * 0.4})`;
+          ctx.lineWidth = 1;
+          for (let ci = 0; ci < cracks; ci++) {
+            const cn = hash2(c + ci * 7, r + ci * 13, this.level.seed || 1);
+            ctx.beginPath();
+            ctx.moveTo(x + 2 + cn * 8, y + 2);
+            ctx.lineTo(x + 5 + cn * 6, y + 7 + cn * 4);
+            ctx.lineTo(x + 3 + cn * 10, y + 13);
+            ctx.stroke();
+          }
         }
         // 火山主题的岩浆裂缝
         if (t.id === "volcano" && depth > 6 && n > 0.86) {

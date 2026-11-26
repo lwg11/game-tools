@@ -1620,34 +1620,48 @@ if (!this.players.some((u) => u.alive)) { this.finish(false, "族人全部倒下
 
   // ------------------------------------------------------------ 爆炸 / 伤害
   /**
-   * 万剑归宗：在目标区域召唤剑雨。
-   * 12 把飞剑从施法者方向的上空腾空而起，呈抛物线落向目标区域，每把剑落地产生小范围爆炸。
+   * 万剑归宗（嬴政大招式）：大量飞剑从施法者处呈扇形腾空而起，
+   * 呈抛物线落向目标区域。每把剑独立命中判定：
+   * - 命中敌人：直接造成伤害 + 小爆炸
+   * - 落地：产生小范围爆炸
    */
   spawnSwordRain(x, y, team, damage, blast, weaponType) {
     const caster = team === 0 ? this._activePlayer() : this._activeEnemy();
     const srcX = caster ? caster.x : x;
-    const count = 12;
+    const srcY = caster ? caster.y - 40 : y - 100;
+    const count = 18;
+    // 扇形角度：从施法者指向目标区域中心
+    const baseAngle = Math.atan2(y - srcY, x - srcX);
     for (let i = 0; i < count; i++) {
-      // 每把剑从施法者上空不同高度生成，落点覆盖目标区域
-      const spread = 130;
+      // 落点覆盖目标区域（椭圆形散布）
+      const spread = 110;
       const tx = x + rand(-spread, spread);
-      const ty = y + rand(-40, 40);
-      const startX = srcX + rand(-70, 70);
-      const startY = rand(20, 120);
-      // 延迟依次落下，形成剑雨层次感
-      const delay = i * 0.06 + rand(0, 0.05);
+      const ty = y + rand(-50, 50);
+      // 起始位置：施法者周围小范围
+      const startX = srcX + rand(-30, 30);
+      const startY = srcY + rand(-20, 20);
+      // 飞行方向：从起始点指向落点的抛物线
+      const flightAngle = Math.atan2(ty - startY, tx - startX);
+      const flightDist = Math.hypot(tx - startX, ty - startY);
+      // 初速度：水平速度 + 向上初速度（抛物线）
+      const speed = Math.max(600, flightDist * 1.8);
+      const vx = Math.cos(flightAngle) * speed;
+      const vy = Math.sin(flightAngle) * speed - rand(200, 400);
+      // 延迟依次飞出，形成剑雨层次感
+      const delay = i * 0.05 + rand(0, 0.04);
       this.swordRain.push({
         x: startX, y: startY,
         sx: startX, sy: startY,
         tx, ty,
-        vx: (tx - startX) * 0.9,
-        vy: -rand(60, 160),
+        vx, vy,
         delay,
         age: 0,
-        damage, blast,
+        damage: damage,
+        blast: Math.max(70, blast),
         team,
         weaponType,
         dead: false,
+        hitSet: new Set(),
       });
     }
     // 剑雨启动特效：施法者处剑光冲天
@@ -1658,7 +1672,7 @@ if (!this.players.some((u) => u.alive)) { this.finish(false, "族人全部倒下
     this.sfx.shoot("swordarray");
   }
 
-  /** 更新剑雨中的飞剑 */
+  /** 更新剑雨中的飞剑：独立命中判定（敌人 + 地形） */
   _updateSwordRain(dt) {
     if (!this.swordRain.length) return;
     for (let i = this.swordRain.length - 1; i >= 0; i--) {
@@ -1666,27 +1680,58 @@ if (!this.players.some((u) => u.alive)) { this.finish(false, "族人全部倒下
       if (s.delay > 0) { s.delay -= dt; continue; }
       s.age += dt;
       // 重力加速下落
-      s.vy += 1500 * dt;
-      s.x += s.vx * dt;
-      s.y += s.vy * dt;
+      s.vy += 1200 * dt;
+      // 子步进防止穿透
+      const steps = clamp(Math.ceil(Math.hypot(s.vx, s.vy) * dt / 8), 1, 6);
+      let destroyed = false;
+      for (let step = 0; step < steps && !destroyed; step++) {
+        const h = dt / steps;
+        s.x += s.vx * h;
+        s.y += s.vy * h;
+        // 命中敌人：直接造成伤害 + 小爆炸
+        for (const u of this.units) {
+          if (!u.alive || u.team === s.team || s.hitSet.has(u)) continue;
+          const dx = s.x - u.x;
+          const dy = s.y - (u.y - 30);
+          const rr = 22 * (u.scale || 1);
+          if (dx * dx + dy * dy < rr * rr) {
+            s.hitSet.add(u);
+            // 命中敌人：直接伤害 + 小范围爆炸（剑气冲击）
+            this.explode(s.x, s.y, s.blast * 0.7, s.damage, s.team, "blast", "swordarray");
+            this.swordRain.splice(i, 1);
+            destroyed = true;
+            break;
+          }
+        }
+        if (destroyed) break;
+        // 命中地形：落地爆炸
+        if (this.terrain && this.terrain.circleHit(s.x, s.y, 3)) {
+          this.explode(s.x, s.y, s.blast * 0.8, s.damage, s.team, "blast", "swordarray");
+          this.rings.push({ x: s.x, y: s.y, r: 6, max: 46, t: 0, life: 0.25, color: "rgba(168,216,255,.7)" });
+          this.swordRain.splice(i, 1);
+          destroyed = true;
+          break;
+        }
+        // 到达目标区域
+        if (s.vy > 0 && s.y >= s.ty) {
+          this.explode(s.x, s.y, s.blast * 0.8, s.damage, s.team, "blast", "swordarray");
+          this.rings.push({ x: s.x, y: s.y, r: 6, max: 46, t: 0, life: 0.25, color: "rgba(168,216,255,.7)" });
+          this.swordRain.splice(i, 1);
+          destroyed = true;
+          break;
+        }
+      }
+      if (destroyed) continue;
       // 剑尾灵气粒子
-      if (Math.random() < 0.5) {
+      if (Math.random() < 0.6) {
         this.particles.push({
-          x: s.x + rand(-2, 2), y: s.y - 14 + rand(-2, 2),
+          x: s.x + rand(-2, 2), y: s.y - 10 + rand(-2, 2),
           vx: rand(-15, 15), vy: rand(-40, -10),
           life: rand(0.2, 0.4), maxLife: 0.4, size: rand(1.5, 3),
           color: "#a8d8ff", kind: "spark", gravity: -20,
         });
       }
-      // 落地：命中地形或到达目标区域
-      const hitGround = this.terrain && this.terrain.circleHit(s.x, s.y, 3);
-      const reached = s.y >= s.ty && s.vy > 0;
-      if (hitGround || reached) {
-        this.explode(s.x, s.y, s.blast * 0.7, s.damage, s.team, "blast", "swordarray");
-        // 落地剑光
-        this.rings.push({ x: s.x, y: s.y, r: 6, max: 46, t: 0, life: 0.25, color: "rgba(168,216,255,.7)" });
-        this.swordRain.splice(i, 1);
-      } else if (s.age > 3.5 || s.y > H + 60) {
+      if (s.age > 4 || s.y > H + 60 || s.x < -80 || s.x > W + 80) {
         this.swordRain.splice(i, 1);
       }
     }
@@ -1757,7 +1802,9 @@ if (!this.players.some((u) => u.alive)) { this.finish(false, "族人全部倒下
     const weaponSlow = weaponType === "soulchain" ? { dur: 3, mul: 0.35 }
       : weaponType === "storm" ? { dur: 4, mul: 0.3 } : null;
     const weaponPoison = weaponType === "poisonmist" ? { dur: 5, dps: 8 } : null;
-    this.terrain.carve(x, y, radius * 0.8);
+    // 爆炸威力决定摧毁次数：伤害越高，对高等级石块的摧毁越快
+    const power = Math.max(radius * 0.8, damage * 0.8);
+    this.terrain.carve(x, y, radius * 0.8, power);
     this.terrainDirty = true;
     this.shake = Math.max(this.shake, Math.min(26, radius * 0.19));
     // 双层冲击波 + 中心辉光，强武器一眼能看出威力

@@ -202,8 +202,8 @@ export const WEAPONS = {
   // 金丹期：神通初成
   swordarray: {
     id: "swordarray", name: "万剑归宗", short: "万", era: "cultivation", kind: "swordrain",
-    desc: "剑丸飞抵目标后，12 把飞剑从修仙者处腾空而起，呈剑雨落向目标区域，范围伤害",
-    color: "#a8d8ff", speed: 760, gravity: 850, damage: 30, blast: 60,
+    desc: "剑丸飞抵目标后，18 把飞剑从修仙者处腾空而起，呈剑雨落向目标区域，范围伤害",
+    color: "#a8d8ff", speed: 760, gravity: 850, damage: 22, blast: 70,
     cooldown: 3.0, icon: "swordarray", realm: "金丹",
   },
   dragonpalm: {
