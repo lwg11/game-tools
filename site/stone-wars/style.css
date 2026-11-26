@@ -316,27 +316,27 @@ body.normal-mode #hudCheat { display: none; }
     flex-direction: row;
     align-items: center;
     gap: 4px;
-    padding: 4px;
+    padding: 3px;
     border-radius: 10px;
     max-width: calc(100vw - 220px);
     overflow-x: auto;
     overflow-y: hidden;
   }
-  /* 展开时：武器列表在按钮上方弹出，横向排列 */
+  /* 展开时：保持底部居中平齐，列表横向滑动 */
   .weapon-bar.expanded {
-    flex-direction: column-reverse;
+    flex-direction: row;
     align-items: center;
-    bottom: calc(8px + var(--ctrl-size) + 8px);
-    max-width: calc(100vw - 20px);
-    max-height: 120px;
+    bottom: 8px;
+    max-width: calc(100vw - 220px);
     overflow-x: auto;
     overflow-y: hidden;
     flex-wrap: nowrap;
+    -webkit-overflow-scrolling: touch;
   }
   .weapon-bar.expanded .weapon-list {
     flex-direction: row;
     flex-wrap: nowrap;
-    justify-content: center;
+    justify-content: flex-start;
   }
   .weapon-bar.aiming {
     transform: translateX(-50%) translateY(6px);
