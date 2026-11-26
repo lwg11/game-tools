@@ -24,6 +24,18 @@ export class Unit {
     this.flash = 0;
     this.deathT = 0;
     this.radius = 16;
+    // 状态效果：护盾（抵挡伤害）、减速（移动变慢）、定身（无法移动）
+    this.shield = 0;       // 护盾值，抵挡等量伤害
+    this.shieldT = 0;      // 护盾持续时间
+    this.slowT = 0;        // 减速剩余时间
+    this.slowMul = 0.5;    // 减速系数
+    this.stunT = 0;        // 定身剩余时间
+    this.poisonT = 0;      // 中毒剩余时间
+    this.poisonDps = 0;    // 中毒每秒伤害
+    this.regenT = 0;       // 回血剩余时间
+    this.regenRate = 0;    // 回血速率
+    this.flyT = 0;         // 飞行剩余时间（修仙模式）
+    this.hoverH = 0;       // 悬浮高度（修仙模式）
     // 实时模式下的敌方 AI 计时器
     this.aiTimer = rand(0.9, 2.2);
     this.aiMoveTimer = rand(0.6, 1.8);
@@ -53,12 +65,45 @@ export class Unit {
       return;
     }
     this.flash = Math.max(0, this.flash - dt);
+    // 状态效果计时
+    if (this.shieldT > 0) { this.shieldT -= dt; if (this.shieldT <= 0) this.shield = 0; }
+    if (this.slowT > 0) this.slowT -= dt;
+    if (this.stunT > 0) this.stunT -= dt;
+    if (this.poisonT > 0) {
+      this.poisonT -= dt;
+      this.poisonTick = (this.poisonTick || 0) - dt;
+      if (this.poisonTick <= 0) {
+        this.poisonTick = 0.5;
+        this.hp = Math.max(0, this.hp - this.poisonDps * 0.5);
+        if (this.hp <= 0) { this.die(); return; }
+      }
+    }
+    if (this.regenT > 0) {
+      this.regenT -= dt;
+      this.hp = Math.min(this.maxHp, this.hp + this.regenRate * dt);
+    }
+    // 定身时无法移动
+    if (this.stunT > 0) {
+      this.vx = 0;
+      if (!this.onGround) this.vy += 1500 * dt;
+      else this.vy = 0;
+      return;
+    }
+    // 修仙模式：悬浮飞行（hoverH 表示悬浮高度）
+    if (this.era === "cultivation" && this.game.era && this.game.era.id === "cultivation") {
+      this.hoverH = 8 + Math.sin(this.game.time * 2 + this.index) * 3;
+    } else {
+      this.hoverH = 0;
+    }
+    const slow = this.slowT > 0 ? this.slowMul : 1;
     if (this.onGround) {
       const gy = this.game.terrain.surfaceBelow(this.x, this.y - 8);
       if (gy === null || gy > this.y + 6) this.onGround = false;
     }
     if (!this.onGround) {
-      this.vy += 1500 * dt;
+      // 修仙模式：御剑飞行，重力减小，空中可自由移动
+      const isCult = this.era === "cultivation";
+      this.vy += (isCult ? 600 : 1500) * dt;
       const ny = this.y + this.vy * dt;
       // 空中水平移动（斜跳）：直接修改 x，不触发落地逻辑
       if (this.vx !== 0) {
@@ -68,10 +113,12 @@ export class Unit {
         if (!this.game.terrain.solidAt(nx, this.y - 12) && !this.game.terrain.solidAt(nx, this.y - 34)) {
           this.x = nx;
         }
-        // 衰减：空中水平速度缓慢衰减，保证斜跳连贯
-        this.vx *= Math.pow(0.55, dt);
+        // 衰减：空中水平速度缓慢衰减，保证斜跳连贯（修仙模式衰减更慢）
+        this.vx *= Math.pow(isCult ? 0.85 : 0.55, dt);
         if (Math.abs(this.vx) < 8) this.vx = 0;
       }
+      // 修仙模式：飞行时不会坠落太快，可以悬浮
+      if (isCult && this.vy > 200) this.vy = 200;
       if (this.vy > 0) {
         const gy = this.game.terrain.surfaceBelow(this.x, this.y + 1);
         if (gy !== null && ny >= gy) {
@@ -97,6 +144,8 @@ export class Unit {
   /** 行走：可自动跨上一格台阶，遇到高墙停下 */
   tryMove(dx) {
     if (!this.alive) return false;
+    const slow = this.slowT > 0 ? this.slowMul : 1;
+    dx *= slow;
     const nx = clamp(this.x + dx, 14, W - 14);
     if (this.game.terrain.solidAt(nx, this.y - 12) || this.game.terrain.solidAt(nx, this.y - 34)) {
       return false;
@@ -119,11 +168,13 @@ export class Unit {
    */
   jump(dir = 0) {
     if (!this.alive || !this.onGround) return false;
-    this.vy = -470;
+    // 修仙模式：跳跃更高（御剑飞行）
+    const isCult = this.era === "cultivation";
+    this.vy = isCult ? -620 : -470;
     this.onGround = false;
     // 斜跳：给一个水平初速度
     if (dir !== 0) {
-      this.vx = dir * 220;
+      this.vx = dir * (isCult ? 320 : 220);
       this.facing = dir;
     }
     this.game.sfx.jump();
@@ -133,6 +184,18 @@ export class Unit {
   takeDamage(amount, sourceTeam) {
     if (!this.alive) return;
     if (this.team === 0 && this.game.cheatGod) return;
+    // 护盾抵挡：优先消耗护盾值
+    if (this.shield > 0) {
+      const absorbed = Math.min(this.shield, amount);
+      this.shield -= absorbed;
+      amount -= absorbed;
+      if (this.shield <= 0) this.shieldT = 0;
+      if (amount <= 0) {
+        this.game.addText(this.x, this.y - 72, "格挡", "#ffd25e");
+        this.game.sfx.hit();
+        return;
+      }
+    }
     this.hp = Math.max(0, this.hp - amount);
     this.flash = 0.22;
     this.game.addText(this.x, this.y - 72, "-" + Math.round(amount), sourceTeam === 0 ? "#ffe08a" : "#ff9f93");
@@ -163,14 +226,14 @@ export class Unit {
 
     ctx.save();
     ctx.globalAlpha = fade;
-    // 脚下阴影
+    // 脚下阴影（飞行时阴影留在地面）
     const mounted = this.mount && this.alive;
     ctx.fillStyle = "rgba(0,0,0,.28)";
     ctx.beginPath();
     ctx.ellipse(this.x, this.y + 1, (mounted ? 25 : 17) * this.scale, 5, 0, 0, TAU);
     ctx.fill();
 
-    ctx.translate(this.x, this.y);
+    ctx.translate(this.x, this.y - this.hoverH);
     if (!this.alive) {
       ctx.translate(0, 6);
       ctx.rotate(face * 1.25);
@@ -588,7 +651,9 @@ export class Projectile {
     this.auraColor = {
       sword: "#a8d8ff", fireball: "#ff8a4a", thunder: "#ffe95c",
       swordarray: "#a8d8ff", dragonpalm: "#ff8a5a", shieldcharm: "#ffd25e",
-      soulchain: "#b48ce8",
+      soulchain: "#b48ce8", teleport: "#6fe8ff", poisonmist: "#8aff6a",
+      heal: "#6affa8", storm: "#6ac8ff", skylightning: "#fff8c8",
+      formation: "#ff6a9a",
     }[type] || null;
   }
 
@@ -1663,6 +1728,176 @@ export class Projectile {
       ctx.beginPath();
       ctx.arc(0, 0, 3, 0, TAU);
       ctx.fill();
+    } else if (type === "teleport") {
+      // 瞬移：蓝色空间裂缝 + 粒子流
+      ctx.globalCompositeOperation = "lighter";
+      const tg = ctx.createRadialGradient(0, 0, 0, 0, 0, 20);
+      tg.addColorStop(0, "rgba(111,232,255,.6)");
+      tg.addColorStop(0.5, "rgba(80,180,255,.2)");
+      tg.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = tg;
+      ctx.beginPath();
+      ctx.arc(0, 0, 20, 0, TAU);
+      ctx.fill();
+      // 空间裂缝（菱形）
+      ctx.strokeStyle = "rgba(200,240,255,.7)";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(0, -10);
+      ctx.lineTo(6, 0);
+      ctx.lineTo(0, 10);
+      ctx.lineTo(-6, 0);
+      ctx.closePath();
+      ctx.stroke();
+      // 粒子流
+      for (let i = 0; i < 6; i++) {
+        const a = rand(0, TAU);
+        ctx.fillStyle = "rgba(180,240,255,.5)";
+        ctx.beginPath();
+        ctx.arc(Math.cos(a) * rand(8, 16), Math.sin(a) * rand(8, 16), 1.5, 0, TAU);
+        ctx.fill();
+      }
+      ctx.globalCompositeOperation = "source-over";
+    } else if (type === "poisonmist") {
+      // 毒雾术：绿色毒雾球 + 气泡
+      ctx.globalCompositeOperation = "lighter";
+      const pg = ctx.createRadialGradient(0, 0, 0, 0, 0, 24);
+      pg.addColorStop(0, "rgba(138,255,106,.5)");
+      pg.addColorStop(0.5, "rgba(100,200,80,.2)");
+      pg.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = pg;
+      ctx.beginPath();
+      ctx.arc(0, 0, 24, 0, TAU);
+      ctx.fill();
+      // 毒雾核心
+      ctx.fillStyle = "#8aff6a";
+      ctx.beginPath();
+      ctx.arc(0, 0, 8, 0, TAU);
+      ctx.fill();
+      // 气泡
+      for (let i = 0; i < 5; i++) {
+        const a = rand(0, TAU);
+        const r = rand(4, 12);
+        ctx.fillStyle = "rgba(180,255,150,.4)";
+        ctx.beginPath();
+        ctx.arc(Math.cos(a) * r, Math.sin(a) * r, 2, 0, TAU);
+        ctx.fill();
+      }
+      ctx.globalCompositeOperation = "source-over";
+    } else if (type === "heal") {
+      // 回春术：绿色生命之光 + 叶子
+      ctx.globalCompositeOperation = "lighter";
+      const hg = ctx.createRadialGradient(0, 0, 0, 0, 0, 22);
+      hg.addColorStop(0, "rgba(106,255,168,.55)");
+      hg.addColorStop(0.5, "rgba(80,220,130,.2)");
+      hg.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = hg;
+      ctx.beginPath();
+      ctx.arc(0, 0, 22, 0, TAU);
+      ctx.fill();
+      // 生命十字
+      ctx.fillStyle = "#6affa8";
+      ctx.fillRect(-2, -8, 4, 16);
+      ctx.fillRect(-8, -2, 16, 4);
+      // 环绕叶子
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * TAU + this.age * 2;
+        ctx.fillStyle = "rgba(150,255,190,.6)";
+        ctx.beginPath();
+        ctx.ellipse(Math.cos(a) * 12, Math.sin(a) * 12, 3, 1.5, a, 0, TAU);
+        ctx.fill();
+      }
+      ctx.globalCompositeOperation = "source-over";
+    } else if (type === "storm") {
+      // 呼风唤雨：蓝色风暴漩涡
+      ctx.globalCompositeOperation = "lighter";
+      const sg = ctx.createRadialGradient(0, 0, 0, 0, 0, 26);
+      sg.addColorStop(0, "rgba(106,200,255,.5)");
+      sg.addColorStop(0.5, "rgba(80,150,220,.2)");
+      sg.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = sg;
+      ctx.beginPath();
+      ctx.arc(0, 0, 26, 0, TAU);
+      ctx.fill();
+      // 风暴漩涡（螺旋线）
+      ctx.strokeStyle = "rgba(180,230,255,.6)";
+      ctx.lineWidth = 2;
+      for (let i = 0; i < 3; i++) {
+        ctx.beginPath();
+        for (let t = 0; t <= 1; t += 0.1) {
+          const a = t * TAU * 2 + this.age * 5 + i * 2;
+          const r = 4 + t * 12;
+          const px = Math.cos(a) * r;
+          const py = Math.sin(a) * r;
+          if (t === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.stroke();
+      }
+      ctx.globalCompositeOperation = "source-over";
+    } else if (type === "skylightning") {
+      // 天雷灭世：白色雷球 + 闪电
+      ctx.globalCompositeOperation = "lighter";
+      const lg = ctx.createRadialGradient(0, 0, 0, 0, 0, 30);
+      lg.addColorStop(0, "rgba(255,255,255,.7)");
+      lg.addColorStop(0.4, "rgba(255,248,200,.3)");
+      lg.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = lg;
+      ctx.beginPath();
+      ctx.arc(0, 0, 30, 0, TAU);
+      ctx.fill();
+      // 核心
+      ctx.fillStyle = "#fff";
+      ctx.beginPath();
+      ctx.arc(0, 0, 6, 0, TAU);
+      ctx.fill();
+      // 闪电分叉
+      ctx.strokeStyle = "rgba(255,255,255,.8)";
+      ctx.lineWidth = 1.5;
+      for (let i = 0; i < 4; i++) {
+        const a = rand(0, TAU);
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(Math.cos(a) * rand(10, 20), Math.sin(a) * rand(10, 20));
+        ctx.stroke();
+      }
+      ctx.globalCompositeOperation = "source-over";
+    } else if (type === "formation") {
+      // 诛仙阵：红色剑阵 + 符文
+      ctx.globalCompositeOperation = "lighter";
+      const fg = ctx.createRadialGradient(0, 0, 0, 0, 0, 28);
+      fg.addColorStop(0, "rgba(255,106,154,.5)");
+      fg.addColorStop(0.5, "rgba(200,60,100,.2)");
+      fg.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = fg;
+      ctx.beginPath();
+      ctx.arc(0, 0, 28, 0, TAU);
+      ctx.fill();
+      // 四把红色巨剑（十字排列）
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * TAU + this.age * 3;
+        ctx.save();
+        ctx.rotate(a);
+        ctx.fillStyle = "#ff6a9a";
+        ctx.shadowColor = "#ff6a9a";
+        ctx.shadowBlur = 8;
+        ctx.beginPath();
+        ctx.moveTo(0, -14);
+        ctx.lineTo(3, 8);
+        ctx.lineTo(0, 12);
+        ctx.lineTo(-3, 8);
+        ctx.closePath();
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.restore();
+      }
+      // 中心符文
+      ctx.strokeStyle = "rgba(255,200,220,.7)";
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.arc(0, 0, 6 + Math.sin(this.age * 6) * 2, 0, TAU);
+      ctx.stroke();
+      ctx.globalCompositeOperation = "source-over";
     }
     ctx.restore();
   }

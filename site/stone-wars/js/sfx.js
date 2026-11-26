@@ -118,6 +118,25 @@ export class Sfx {
     } else if (type === "soulchain") {
       this.noise(0.1, 0.06, 1500);
       this.tone(220, 0.12, "triangle", 0.05, 110);
+    } else if (type === "teleport") {
+      this.tone(900, 0.08, "sine", 0.05, 1800);
+      this.noise(0.06, 0.03, 5000);
+    } else if (type === "poisonmist") {
+      this.noise(0.16, 0.07, 600);
+      this.tone(160, 0.14, "sine", 0.05, 80);
+    } else if (type === "heal") {
+      this.tone(520, 0.12, "sine", 0.05, 780);
+      this.tone(660, 0.1, "sine", 0.04, 990);
+    } else if (type === "storm") {
+      this.noise(0.22, 0.1, 1200);
+      this.tone(200, 0.18, "triangle", 0.06, 100);
+    } else if (type === "skylightning") {
+      this.noise(0.28, 0.14, 4000);
+      this.tone(120, 0.24, "square", 0.08, 40);
+    } else if (type === "formation") {
+      this.tone(600, 0.14, "sine", 0.06, 1200);
+      this.tone(800, 0.12, "sine", 0.05, 1600);
+      this.noise(0.1, 0.04, 3000);
     } else {
       this.noise(0.16, 0.07, 1600);
       this.tone(180, 0.1, "sawtooth", 0.05, 90);

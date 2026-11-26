@@ -662,6 +662,18 @@ if (u) u.jump(this._moveDir());
     }
     // 疯狂模式：射速翻倍、双发齐射、伤害与爆炸范围暴涨
     this.weaponReadyAt[id] = this.time + (w.cooldown || 1) * (crazy ? 0.42 : 1);
+    // buff 类技能：直接生效，不发射投射物
+    if (w.kind === "buff") {
+      this._applyBuff(w, u);
+      this.aim.active = false;
+      this.aim.locked = false;
+      this.shotReadyT = 0.55;
+      this.phase = "flying";
+      this.turnTeam = 0;
+      this.resolveT = null;
+      this._addTimer(0.5, () => this._finishShot());
+      return true;
+    }
     const speed = w.speed * (0.5 + 0.5 * power);
     const ox = u.x;
     const oy = u.y - 44;
@@ -725,6 +737,50 @@ if (u) u.jump(this._moveDir());
 
   _fallbackWeapon() {
     return this.weaponIds.find((k) => (this.ammo[k] || 0) > 0) || this.weaponIds[0] || "spear";
+  }
+
+  /** 应用 buff 类技能效果 */
+  _applyBuff(w, caster) {
+    const allies = this.units.filter((u) => u.alive && u.team === caster.team);
+    if (w.buffType === "shield") {
+      // 护体符：为全体友军施加护盾
+      for (const u of allies) {
+        u.shield = Math.max(u.shield, w.buffVal);
+        u.shieldT = w.buffDur;
+        this.spawnParticles(u.x, u.y - 40, 12, "#ffd25e", "spark");
+        this.addText(u.x, u.y - 80, "护体", "#ffd25e");
+      }
+      this.sfx.shoot("shieldcharm");
+      this._showBanner("护体符", `全体友军获得 ${w.buffVal} 点护盾`, true);
+    } else if (w.buffType === "heal") {
+      // 回春术：持续回血
+      for (const u of allies) {
+        u.regenT = w.buffDur;
+        u.regenRate = w.buffVal;
+        this.spawnParticles(u.x, u.y - 40, 10, "#6affa8", "spark");
+        this.addText(u.x, u.y - 80, "回春", "#6affa8");
+      }
+      this.sfx.shoot("heal");
+      this._showBanner("回春术", `全体友军持续回血 ${w.buffDur} 秒`, true);
+    } else if (w.buffType === "teleport") {
+      // 瞬移：向瞄准方向瞬移一段距离
+      const dir = caster.facing;
+      const tx = clamp(caster.x + dir * 200, 40, W - 40);
+      const gy = this.terrain.surfaceBelow(tx, 0);
+      if (gy !== null) {
+        this.spawnParticles(caster.x, caster.y - 30, 16, "#6fe8ff", "spark");
+        caster.x = tx;
+        caster.y = gy;
+        caster.vy = 0;
+        caster.onGround = true;
+        this.spawnParticles(caster.x, caster.y - 30, 16, "#6fe8ff", "spark");
+        this.addText(caster.x, caster.y - 80, "瞬移", "#6fe8ff");
+      }
+      this.sfx.shoot("teleport");
+    }
+    this._refreshWeaponBar();
+    this._refreshFireButton();
+    this._updateHUD();
   }
 
   // ------------------------------------------------------------ 难度 / 实时模式
@@ -962,6 +1018,17 @@ if (u) u.jump(this._moveDir());
     const u = this._activeEnemy();
     if (!u) return;
     const { angle, power, weapon } = this.enemyAim;
+    // buff 类技能：直接生效
+    if (weapon.kind === "buff") {
+      this._applyBuff(weapon, u);
+      this.phase = "flying";
+      this.turnTeam = 1;
+      this.enemyAim = null;
+      this.resolveT = null;
+      this.shotReadyT = 0.55;
+      this._addTimer(0.5, () => this._finishShot());
+      return;
+    }
     const speed = weapon.speed * (0.5 + 0.5 * power);
     const ox = u.x + Math.cos(angle) * 26;
     const oy = u.y - 44 + Math.sin(angle) * 26;
@@ -985,13 +1052,62 @@ if (u) u.jump(this._moveDir());
     const era = this.era.id;
     const roll = Math.random();
     if (era === "cultivation") {
-      if (roll < 0.08) return WEAPONS.dragonpalm;
-      if (roll < 0.18) return WEAPONS.swordarray;
-      if (roll < 0.28) return WEAPONS.thunder;
-      if (dist > 500 && roll < 0.45) return WEAPONS.fireball;
-      if (dist < 260 && roll < 0.45) return WEAPONS.soulchain;
-      if (roll < 0.62) return WEAPONS.sword;
-      if (roll < 0.72) return WEAPONS.shieldcharm;
+      // 根据境界选择技能：低境界用基础技能，高境界用神通
+      const lv = this.level.id;
+      if (lv >= 56) {
+        // 渡劫期：天雷灭世、诛仙阵
+        if (roll < 0.12) return WEAPONS.skylightning;
+        if (roll < 0.24) return WEAPONS.formation;
+        if (roll < 0.36) return WEAPONS.dragonpalm;
+        if (roll < 0.48) return WEAPONS.swordarray;
+        if (roll < 0.6) return WEAPONS.thunder;
+        if (dist > 500 && roll < 0.75) return WEAPONS.fireball;
+        if (roll < 0.85) return WEAPONS.sword;
+        return WEAPONS.fireball;
+      }
+      if (lv >= 50) {
+        // 化神期：呼风唤雨、回春术
+        if (roll < 0.12) return WEAPONS.storm;
+        if (roll < 0.22) return WEAPONS.dragonpalm;
+        if (roll < 0.34) return WEAPONS.swordarray;
+        if (roll < 0.46) return WEAPONS.thunder;
+        if (dist > 500 && roll < 0.62) return WEAPONS.fireball;
+        if (roll < 0.78) return WEAPONS.sword;
+        return WEAPONS.fireball;
+      }
+      if (lv >= 45) {
+        // 元婴期：瞬移、毒雾
+        if (roll < 0.1) return WEAPONS.dragonpalm;
+        if (roll < 0.2) return WEAPONS.swordarray;
+        if (roll < 0.32) return WEAPONS.poisonmist;
+        if (roll < 0.44) return WEAPONS.thunder;
+        if (dist > 500 && roll < 0.6) return WEAPONS.fireball;
+        if (dist < 260 && roll < 0.6) return WEAPONS.soulchain;
+        if (roll < 0.78) return WEAPONS.sword;
+        return WEAPONS.fireball;
+      }
+      if (lv >= 40) {
+        // 金丹期：万剑归宗、降龙十八掌
+        if (roll < 0.12) return WEAPONS.dragonpalm;
+        if (roll < 0.26) return WEAPONS.swordarray;
+        if (roll < 0.38) return WEAPONS.thunder;
+        if (dist > 500 && roll < 0.55) return WEAPONS.fireball;
+        if (dist < 260 && roll < 0.55) return WEAPONS.soulchain;
+        if (roll < 0.75) return WEAPONS.sword;
+        return WEAPONS.fireball;
+      }
+      if (lv >= 36) {
+        // 筑基期：护体符、锁魂链
+        if (roll < 0.1) return WEAPONS.thunder;
+        if (roll < 0.22) return WEAPONS.soulchain;
+        if (dist > 500 && roll < 0.42) return WEAPONS.fireball;
+        if (roll < 0.62) return WEAPONS.sword;
+        return WEAPONS.fireball;
+      }
+      // 炼气期：基础攻击
+      if (roll < 0.15) return WEAPONS.thunder;
+      if (dist > 500 && roll < 0.4) return WEAPONS.fireball;
+      if (roll < 0.7) return WEAPONS.sword;
       return WEAPONS.fireball;
     }
     if (era === "mech") {
@@ -1145,6 +1261,13 @@ if (u) u.jump(this._moveDir());
     if (!u.alive || !u.aiAim) return;
     const { angle, power, weapon } = u.aiAim;
     u.aiAim = null;
+    // buff 类技能：直接生效
+    if (weapon.kind === "buff") {
+      this._applyBuff(weapon, u);
+      const baseGap = rand(2.0, 3.4) * this._difficulty().rate;
+      u.aiTimer = baseGap * (this.level.endless ? Math.max(0.65, 1 - this.endlessWave * 0.015) : 1);
+      return;
+    }
     const speed = weapon.speed * (0.5 + 0.5 * power);
     const ox = u.x + Math.cos(angle) * 26;
     const oy = u.y - 44 + Math.sin(angle) * 26;
@@ -1464,7 +1587,17 @@ if (!this.players.some((u) => u.alive)) { this.finish(false, "族人全部倒下
       dragonpalm: { ring: "#ff8a5a", glow: "rgba(255,138,90,.8)",   flash: "#ff8a5a", spark: "#ffd25e" },
       shieldcharm:{ ring: "#ffd25e", glow: "rgba(255,210,94,.75)",  flash: "#ffd25e", spark: "#fff8c8" },
       soulchain:  { ring: "#b48ce8", glow: "rgba(180,140,232,.75)", flash: "#b48ce8", spark: "#d8b8ff" },
+      teleport:   { ring: "#6fe8ff", glow: "rgba(111,232,255,.75)", flash: "#6fe8ff", spark: "#d8f4ff" },
+      poisonmist: { ring: "#8aff6a", glow: "rgba(138,255,106,.7)",  flash: "#8aff6a", spark: "#d8ffc8" },
+      heal:       { ring: "#6affa8", glow: "rgba(106,255,168,.7)",  flash: "#6affa8", spark: "#d8ffe8" },
+      storm:      { ring: "#6ac8ff", glow: "rgba(106,200,255,.75)", flash: "#6ac8ff", spark: "#d8ecff" },
+      skylightning:{ ring: "#fff8c8", glow: "rgba(255,248,200,.8)", flash: "#fff8c8", spark: "#ffffff" },
+      formation:  { ring: "#ff6a9a", glow: "rgba(255,106,154,.75)", flash: "#ff6a9a", spark: "#ffd8e8" },
     }[weaponType];
+    // 减速/中毒效果配置
+    const weaponSlow = weaponType === "soulchain" ? { dur: 3, mul: 0.35 }
+      : weaponType === "storm" ? { dur: 4, mul: 0.3 } : null;
+    const weaponPoison = weaponType === "poisonmist" ? { dur: 5, dps: 8 } : null;
     this.terrain.carve(x, y, radius * 0.8);
     this.terrainDirty = true;
     this.shake = Math.max(this.shake, Math.min(26, radius * 0.19));
@@ -1663,6 +1796,18 @@ if (!this.players.some((u) => u.alive)) { this.finish(false, "族人全部倒下
           u.vy = -Math.min(360, 70 + f * damage * 2.4);
           u.onGround = false;
           u.vx += Math.sign(dx || 1) * f * 60;
+        }
+        // 减速效果（锁魂链、呼风唤雨）
+        if (weaponSlow && u.alive) {
+          u.slowT = Math.max(u.slowT, weaponSlow.dur);
+          u.slowMul = weaponSlow.mul;
+          this.addText(u.x, u.y - 92, "减速", "#b48ce8");
+        }
+        // 中毒效果（毒雾术）
+        if (weaponPoison && u.alive) {
+          u.poisonT = Math.max(u.poisonT, weaponPoison.dur);
+          u.poisonDps = weaponPoison.dps;
+          this.addText(u.x, u.y - 92, "中毒", "#8aff6a");
         }
       }
     }
@@ -3114,6 +3259,137 @@ document.getElementById("hudLevel").textContent = this.level.endless
       ctx.beginPath();
       ctx.arc(18, 0, 2.5, 0, TAU);
       ctx.fill();
+    } else if (type === "teleport") {
+      // 瞬移：手持时空间裂缝微光
+      ctx.globalCompositeOperation = "lighter";
+      const tg = ctx.createRadialGradient(18, 0, 0, 18, 0, 16);
+      tg.addColorStop(0, "rgba(111,232,255,.35)");
+      tg.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = tg;
+      ctx.beginPath();
+      ctx.arc(18, 0, 16, 0, TAU);
+      ctx.fill();
+      ctx.globalCompositeOperation = "source-over";
+      ctx.strokeStyle = "rgba(200,240,255,.8)";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(18, -8);
+      ctx.lineTo(24, 0);
+      ctx.lineTo(18, 8);
+      ctx.lineTo(12, 0);
+      ctx.closePath();
+      ctx.stroke();
+    } else if (type === "poisonmist") {
+      // 毒雾术：手持时毒雾缭绕
+      ctx.globalCompositeOperation = "lighter";
+      const pg = ctx.createRadialGradient(18, 0, 0, 18, 0, 18);
+      pg.addColorStop(0, "rgba(138,255,106,.3)");
+      pg.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = pg;
+      ctx.beginPath();
+      ctx.arc(18, 0, 18, 0, TAU);
+      ctx.fill();
+      ctx.globalCompositeOperation = "source-over";
+      ctx.fillStyle = "#8aff6a";
+      ctx.beginPath();
+      ctx.arc(18, 0, 6, 0, TAU);
+      ctx.fill();
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * TAU + performance.now() / 600;
+        ctx.fillStyle = "rgba(180,255,150,.5)";
+        ctx.beginPath();
+        ctx.arc(18 + Math.cos(a) * 10, Math.sin(a) * 10, 1.5, 0, TAU);
+        ctx.fill();
+      }
+    } else if (type === "heal") {
+      // 回春术：手持时生命之光
+      ctx.globalCompositeOperation = "lighter";
+      const hg = ctx.createRadialGradient(18, 0, 0, 18, 0, 18);
+      hg.addColorStop(0, "rgba(106,255,168,.35)");
+      hg.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = hg;
+      ctx.beginPath();
+      ctx.arc(18, 0, 18, 0, TAU);
+      ctx.fill();
+      ctx.globalCompositeOperation = "source-over";
+      ctx.fillStyle = "#6affa8";
+      ctx.fillRect(16, -6, 4, 12);
+      ctx.fillRect(12, -2, 12, 4);
+    } else if (type === "storm") {
+      // 呼风唤雨：手持时风暴漩涡
+      ctx.globalCompositeOperation = "lighter";
+      const sg = ctx.createRadialGradient(18, 0, 0, 18, 0, 20);
+      sg.addColorStop(0, "rgba(106,200,255,.3)");
+      sg.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = sg;
+      ctx.beginPath();
+      ctx.arc(18, 0, 20, 0, TAU);
+      ctx.fill();
+      ctx.globalCompositeOperation = "source-over";
+      ctx.strokeStyle = "rgba(180,230,255,.7)";
+      ctx.lineWidth = 1.5;
+      for (let i = 0; i < 2; i++) {
+        ctx.beginPath();
+        for (let t = 0; t <= 1; t += 0.15) {
+          const a = t * TAU + performance.now() / 400 + i * 1.5;
+          const r = 3 + t * 9;
+          const px = 18 + Math.cos(a) * r;
+          const py = Math.sin(a) * r;
+          if (t === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.stroke();
+      }
+    } else if (type === "skylightning") {
+      // 天雷灭世：手持时雷光闪烁
+      ctx.globalCompositeOperation = "lighter";
+      const lg = ctx.createRadialGradient(18, 0, 0, 18, 0, 22);
+      lg.addColorStop(0, "rgba(255,255,255,.4)");
+      lg.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = lg;
+      ctx.beginPath();
+      ctx.arc(18, 0, 22, 0, TAU);
+      ctx.fill();
+      ctx.globalCompositeOperation = "source-over";
+      ctx.fillStyle = "#fff";
+      ctx.beginPath();
+      ctx.arc(18, 0, 5, 0, TAU);
+      ctx.fill();
+      ctx.strokeStyle = "rgba(255,255,255,.7)";
+      ctx.lineWidth = 1.2;
+      for (let i = 0; i < 3; i++) {
+        const a = rand(0, TAU);
+        ctx.beginPath();
+        ctx.moveTo(18, 0);
+        ctx.lineTo(18 + Math.cos(a) * rand(8, 14), Math.sin(a) * rand(8, 14));
+        ctx.stroke();
+      }
+    } else if (type === "formation") {
+      // 诛仙阵：手持时剑阵旋转
+      ctx.globalCompositeOperation = "lighter";
+      const fg = ctx.createRadialGradient(18, 0, 0, 18, 0, 20);
+      fg.addColorStop(0, "rgba(255,106,154,.3)");
+      fg.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = fg;
+      ctx.beginPath();
+      ctx.arc(18, 0, 20, 0, TAU);
+      ctx.fill();
+      ctx.globalCompositeOperation = "source-over";
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * TAU + performance.now() / 500;
+        ctx.save();
+        ctx.translate(18, 0);
+        ctx.rotate(a);
+        ctx.fillStyle = "#ff6a9a";
+        ctx.beginPath();
+        ctx.moveTo(0, -10);
+        ctx.lineTo(2.5, 6);
+        ctx.lineTo(0, 9);
+        ctx.lineTo(-2.5, 6);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
     } else {
       // 默认木棒
       ctx.strokeStyle = "#7c5330";
