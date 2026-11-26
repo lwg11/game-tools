@@ -1502,35 +1502,55 @@ if (!this.players.some((u) => u.alive)) { this.finish(false, "族人全部倒下
           color: "rgba(255,248,200,.6)", kind: "fire", gravity: 0,
         });
       }
-      // 降龙十八掌：龙形冲击波（多层扩散环）
+      // 降龙十八掌：龙形冲击波（多层扩散环 + 龙形粒子波浪）
       if (weaponType === "dragonpalm") {
-        for (let i = 0; i < 3; i++) {
-          this.rings.push({ x, y, r: radius * (0.2 + i * 0.15), max: radius * (1.2 + i * 0.5), t: 0, life: 0.4 + i * 0.12, color: `rgba(255,${140 + i * 30},80,${0.6 - i * 0.15})` });
+        for (let i = 0; i < 4; i++) {
+          this.rings.push({ x, y, r: radius * (0.15 + i * 0.12), max: radius * (1.0 + i * 0.45), t: 0, life: 0.38 + i * 0.1, color: `rgba(255,${160 + i * 25},${70 + i * 20},${0.65 - i * 0.12})` });
         }
-        // 龙形粒子（波浪排列）
-        for (let i = 0; i < 20; i++) {
-          const t = i / 20;
-          const a = t * TAU * 2;
-          const r = radius * (0.3 + t * 0.7);
+        // 龙形粒子（沿波浪线排列，模拟龙身冲撞）
+        for (let i = 0; i < 24; i++) {
+          const t = i / 24;
+          const a = t * TAU * 2.5;
+          const r = radius * (0.2 + t * 0.8);
           this.particles.push({
-            x: x + Math.cos(a) * r, y: y + Math.sin(a) * r * 0.6,
-            vx: Math.cos(a) * 180, vy: Math.sin(a) * 120 - 40,
-            life: rand(0.3, 0.7), maxLife: 0.7, size: rand(2, 5),
-            color: "#ff8a5a", kind: "fire", gravity: -40,
+            x: x + Math.cos(a) * r, y: y + Math.sin(a) * r * 0.5,
+            vx: Math.cos(a) * 200, vy: Math.sin(a) * 140 - 50,
+            life: rand(0.3, 0.8), maxLife: 0.8, size: rand(2, 6),
+            color: Math.random() < 0.4 ? "#ffd25e" : "#ff8a5a", kind: "fire", gravity: -50,
+          });
+        }
+        // 龙首冲击粒子（前方高速）
+        for (let i = 0; i < 8; i++) {
+          const a = rand(-0.5, 0.5);
+          const sp = rand(300, 600);
+          this.particles.push({
+            x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+            life: rand(0.15, 0.35), maxLife: 0.35, size: rand(2, 4),
+            color: "#ffd25e", kind: "spark", gravity: 100,
           });
         }
       }
-      // 万剑归宗：剑气四散
+      // 万剑归宗：多把飞剑从空中俯冲插地（剑形粒子 + 剑气环）
       if (weaponType === "swordarray") {
+        // 剑气旋涡环
+        this.rings.push({ x, y, r: radius * 0.3, max: radius * 1.8, t: 0, life: 0.3, color: "rgba(168,216,255,.6)" });
+        this.rings.push({ x, y, r: radius * 0.15, max: radius * 1.3, t: 0, life: 0.45, color: "rgba(200,230,255,.5)" });
+        // 12 把飞剑（剑形粒子，朝下插入地面）
         for (let i = 0; i < 12; i++) {
-          const a = (i / 12) * TAU + rand(-0.2, 0.2);
-          const sp = rand(200, 500);
+          const a = (i / 12) * TAU + rand(-0.15, 0.15);
+          const sp = rand(250, 550);
           this.particles.push({
-            x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
-            life: rand(0.2, 0.45), maxLife: 0.45, size: rand(1.5, 3),
-            color: "#a8d8ff", kind: "spark", gravity: 100,
+            x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 80,
+            life: rand(0.25, 0.5), maxLife: 0.5, size: rand(2, 4),
+            color: Math.random() < 0.5 ? "#a8d8ff" : "#d8ecff", kind: "spark", gravity: 300,
           });
         }
+        // 中心剑光柱
+        this.particles.push({
+          x, y: y - 60, vx: 0, vy: 600,
+          life: 0.2, maxLife: 0.2, size: radius * 0.6,
+          color: "rgba(168,216,255,.5)", kind: "fire", gravity: 0,
+        });
       }
       // 护体符：金色符文扩散
       if (weaponType === "shieldcharm") {
@@ -2950,46 +2970,78 @@ document.getElementById("hudLevel").textContent = this.level.endless
       ctx.closePath();
       ctx.fill();
     } else if (type === "swordarray") {
-      // 万剑归宗：手持时小剑环绕
+      // 万剑归宗：手持时多把飞剑环绕，剑尖朝前
       ctx.globalCompositeOperation = "lighter";
-      const sg = ctx.createRadialGradient(18, 0, 0, 18, 0, 22);
-      sg.addColorStop(0, "rgba(168,216,255,.25)");
+      const sg = ctx.createRadialGradient(18, 0, 0, 18, 0, 26);
+      sg.addColorStop(0, "rgba(168,216,255,.3)");
       sg.addColorStop(1, "rgba(0,0,0,0)");
       ctx.fillStyle = sg;
       ctx.beginPath();
-      ctx.arc(18, 0, 22, 0, TAU);
+      ctx.arc(18, 0, 26, 0, TAU);
       ctx.fill();
       ctx.globalCompositeOperation = "source-over";
-      ctx.fillStyle = "#a8d8ff";
-      ctx.shadowColor = "#a8d8ff";
-      ctx.shadowBlur = 6;
-      const spin = performance.now() / 300;
+      const spin = performance.now() / 250;
+      // 4 把环绕小剑（剑尖朝前）
       for (let i = 0; i < 4; i++) {
         const a = (i / 4) * TAU + spin;
         ctx.save();
-        ctx.translate(18 + Math.cos(a) * 10, Math.sin(a) * 10);
-        ctx.rotate(a + Math.PI / 2);
+        ctx.translate(18 + Math.cos(a) * 12, Math.sin(a) * 8);
+        ctx.rotate(Math.sin(performance.now() / 400 + i) * 0.2);
+        ctx.fillStyle = "#a8d8ff";
+        ctx.shadowColor = "#a8d8ff";
+        ctx.shadowBlur = 6;
         ctx.beginPath();
-        ctx.moveTo(0, -7);
-        ctx.lineTo(2, 4);
-        ctx.lineTo(0, 7);
-        ctx.lineTo(-2, 4);
+        ctx.moveTo(8, 0);
+        ctx.lineTo(-2, -2);
+        ctx.lineTo(-6, 0);
+        ctx.lineTo(-2, 2);
         ctx.closePath();
         ctx.fill();
+        ctx.shadowBlur = 0;
         ctx.restore();
       }
+      // 中心主剑
+      ctx.fillStyle = "#e8f4ff";
+      ctx.shadowColor = "#a8d8ff";
+      ctx.shadowBlur = 10;
+      ctx.beginPath();
+      ctx.moveTo(26, 0);
+      ctx.lineTo(14, -3.5);
+      ctx.lineTo(8, 0);
+      ctx.lineTo(14, 3.5);
+      ctx.closePath();
+      ctx.fill();
       ctx.shadowBlur = 0;
+      ctx.strokeStyle = "#8ab8d8";
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(14, -4.5);
+      ctx.lineTo(14, 4.5);
+      ctx.stroke();
     } else if (type === "dragonpalm") {
-      // 降龙十八掌：手持时龙气缠绕
+      // 降龙十八掌：手持时龙形虚影缠绕
       ctx.globalCompositeOperation = "lighter";
-      const dg = ctx.createRadialGradient(20, 0, 0, 20, 0, 22);
-      dg.addColorStop(0, "rgba(255,138,90,.35)");
+      const dg = ctx.createRadialGradient(20, 0, 0, 20, 0, 28);
+      dg.addColorStop(0, "rgba(255,160,80,.35)");
       dg.addColorStop(1, "rgba(0,0,0,0)");
       ctx.fillStyle = dg;
       ctx.beginPath();
-      ctx.arc(20, 0, 22, 0, TAU);
+      ctx.arc(20, 0, 28, 0, TAU);
       ctx.fill();
+      // 龙形虚影（小波浪）
+      ctx.strokeStyle = "rgba(255,160,80,.4)";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      for (let i = 0; i <= 12; i++) {
+        const t = i / 12;
+        const px = 2 + t * 30;
+        const py = Math.sin(t * 8 + performance.now() / 300) * 5;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.stroke();
       ctx.globalCompositeOperation = "source-over";
+      // 龙首能量球
       ctx.fillStyle = "#ff8a5a";
       ctx.shadowColor = "#ff8a5a";
       ctx.shadowBlur = 14;
