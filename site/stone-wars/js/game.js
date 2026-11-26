@@ -233,11 +233,13 @@ class StoneWars {
       btn.addEventListener("pointerleave", () => set(false));
       btn.addEventListener("pointercancel", () => set(false));
     });
-document.querySelector("[data-jump]").addEventListener("click", () => {
-if (this.phase !== "aim" || this.paused) return;
-const u = this._activePlayer();
-if (u) u.jump(this._moveDir());
-});
+    // 跳跃按钮：用 pointerdown 即时响应，支持按住移动键的同时斜跳
+    document.querySelector("[data-jump]").addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      if (this.phase !== "aim" || this.paused) return;
+      const u = this._activePlayer();
+      if (u) u.jump(this._moveDir());
+    });
 
     // 键盘
     window.addEventListener("keydown", (e) => {

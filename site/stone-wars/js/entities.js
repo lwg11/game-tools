@@ -64,13 +64,12 @@ export class Unit {
       if (this.vx !== 0) {
         const dx = this.vx * dt;
         const nx = clamp(this.x + dx, 14, W - 14);
-        // 检查是否被墙挡住
+        // 检查是否被墙挡住：挡住时只阻止位移，不立即清零 vx，让斜跳惯性保留
         if (!this.game.terrain.solidAt(nx, this.y - 12) && !this.game.terrain.solidAt(nx, this.y - 34)) {
           this.x = nx;
-        } else {
-          this.vx = 0;
         }
-        this.vx *= Math.pow(0.3, dt);
+        // 衰减：空中水平速度缓慢衰减，保证斜跳连贯
+        this.vx *= Math.pow(0.55, dt);
         if (Math.abs(this.vx) < 8) this.vx = 0;
       }
       if (this.vy > 0) {
