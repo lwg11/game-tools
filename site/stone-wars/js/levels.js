@@ -57,6 +57,24 @@ export const WEAPONS = {
     color: "#ff8a5a", speed: 700, gravity: 1150, damage: 88, blast: 150,
     cooldown: 4.5, icon: "meteor",
   },
+  watermelon: {
+    id: "watermelon", name: "西瓜", short: "瓜", era: "stone", kind: "split",
+    desc: "命中后分裂成 4 瓣，每瓣小范围伤害",
+    color: "#7ed957", speed: 820, gravity: 940, damage: 26, blast: 52,
+    cooldown: 2.0, icon: "watermelon",
+  },
+  durian: {
+    id: "durian", name: "榴莲", short: "榴", era: "stone", kind: "spike",
+    desc: "贴地滚动，碰到敌人爆炸并弹跳一次",
+    color: "#c8b45a", speed: 760, gravity: 1180, damage: 48, blast: 78,
+    cooldown: 1.8, icon: "durian",
+  },
+  poisonshroom: {
+    id: "poisonshroom", name: "毒蘑菇", short: "毒", era: "stone", kind: "grenade",
+    desc: "爆炸后留下毒雾，持续掉血",
+    color: "#b48ce8", speed: 800, gravity: 1000, damage: 30, blast: 66,
+    fuse: 2.0, bounce: 0.4, cooldown: 2.2, icon: "poisonshroom",
+  },
 
   // ------------------------------------------------------------ 铁骑时代
   crossbow: {
@@ -76,6 +94,18 @@ export const WEAPONS = {
     desc: "陶罐火油，反弹后爆出大片火海",
     color: "#ff8a3a", speed: 820, gravity: 1000, damage: 64, blast: 108,
     fuse: 2.1, bounce: 0.42, cooldown: 1.7, icon: "firebomb",
+  },
+  flail: {
+    id: "flail", name: "链锤", short: "锤", era: "iron", kind: "boulder",
+    desc: "命中后弹跳 2 次，专打掩体后目标",
+    color: "#a8b0ba", speed: 880, gravity: 1050, damage: 62, blast: 88,
+    cooldown: 2.0, icon: "flail",
+  },
+  flare: {
+    id: "flare", name: "信号弹", short: "信", era: "iron", kind: "spear",
+    desc: "标记目标，下次命中伤害翻倍",
+    color: "#ffd25e", speed: 1400, gravity: 300, damage: 18, blast: 20,
+    cooldown: 1.0, icon: "flare",
   },
 
   // ------------------------------------------------------------ 火器时代
@@ -97,6 +127,18 @@ export const WEAPONS = {
     color: "#ff7a4a", speed: 1080, gravity: 260, damage: 100, blast: 138,
     cooldown: 3.0, icon: "rocket",
   },
+  molotov: {
+    id: "molotov", name: "燃烧瓶", short: "燃", era: "gun", kind: "grenade",
+    desc: "爆炸后留下火海，持续灼烧敌人",
+    color: "#ff6a3a", speed: 800, gravity: 980, damage: 40, blast: 80,
+    fuse: 1.6, bounce: 0.35, cooldown: 1.8, icon: "molotov",
+  },
+  cluster: {
+    id: "cluster", name: "集束弹", short: "集", era: "gun", kind: "split",
+    desc: "空中分裂成 5 个小弹，覆盖大片区域",
+    color: "#e8a0ff", speed: 780, gravity: 900, damage: 22, blast: 48,
+    cooldown: 2.6, icon: "cluster",
+  },
 
   // ------------------------------------------------------------ 机械时代
   laser: {
@@ -111,19 +153,80 @@ export const WEAPONS = {
     color: "#b48cff", speed: 3200, gravity: 0, damage: 150, blast: 66,
     cooldown: 3.6, pierce: true, icon: "railgun",
   },
+  drone: {
+    id: "drone", name: "无人机", short: "机", era: "mech", kind: "rocket",
+    desc: "命中前可微调方向，自动追踪目标",
+    color: "#6fe8d8", speed: 900, gravity: 200, damage: 70, blast: 90,
+    cooldown: 2.4, icon: "drone",
+  },
+  gravity: {
+    id: "gravity", name: "引力弹", short: "引", era: "mech", kind: "boulder",
+    desc: "命中后把敌人拉向爆心，再爆炸",
+    color: "#d88cff", speed: 700, gravity: 800, damage: 60, blast: 110,
+    cooldown: 3.2, icon: "gravity",
+  },
+
+  // ------------------------------------------------------------ 修仙时代
+  sword: {
+    id: "sword", name: "飞剑", short: "剑", era: "cultivation", kind: "spear",
+    desc: "御剑飞行，直线穿透敌人",
+    color: "#e8f4ff", speed: 1800, gravity: 0, damage: 42, blast: 24,
+    cooldown: 0.45, pierce: true, icon: "sword",
+  },
+  fireball: {
+    id: "fireball", name: "火球术", short: "火", era: "cultivation", kind: "boulder",
+    desc: "抛射火球，爆炸后留下火海",
+    color: "#ff6a3a", speed: 860, gravity: 900, damage: 58, blast: 92,
+    cooldown: 1.6, icon: "fireball",
+  },
+  thunder: {
+    id: "thunder", name: "雷符", short: "雷", era: "cultivation", kind: "grenade",
+    desc: "落地后召唤天雷，大范围高伤害",
+    color: "#ffe95c", speed: 780, gravity: 950, damage: 72, blast: 120,
+    fuse: 1.8, bounce: 0.3, cooldown: 2.4, icon: "thunder",
+  },
+  swordarray: {
+    id: "swordarray", name: "万剑归宗", short: "万", era: "cultivation", kind: "split",
+    desc: "召唤 8 把飞剑，覆盖大片区域",
+    color: "#a8d8ff", speed: 700, gravity: 850, damage: 28, blast: 56,
+    cooldown: 3.0, icon: "swordarray",
+  },
+  dragonpalm: {
+    id: "dragonpalm", name: "降龙十八掌", short: "龙", era: "cultivation", kind: "boulder",
+    desc: "掌力化龙，命中后剧烈爆炸",
+    color: "#ff8a5a", speed: 920, gravity: 880, damage: 80, blast: 130,
+    cooldown: 2.8, icon: "dragonpalm",
+  },
+  shieldcharm: {
+    id: "shieldcharm", name: "护体符", short: "护", era: "cultivation", kind: "spear",
+    desc: "短距离护体金光，可弹开敌人",
+    color: "#ffd25e", speed: 1200, gravity: 200, damage: 25, blast: 40,
+    cooldown: 1.2, icon: "shieldcharm",
+  },
+  soulchain: {
+    id: "soulchain", name: "锁魂链", short: "锁", era: "cultivation", kind: "spike",
+    desc: "贴地锁链，碰到敌人爆炸并减速",
+    color: "#b48ce8", speed: 700, gravity: 1100, damage: 45, blast: 70,
+    cooldown: 2.0, icon: "soulchain",
+  },
 };
 
 export const WEAPON_ORDER = [
   "spear", "boulder", "grenade", "banana", "spike", "boomerang", "meteor",
-  "crossbow", "cannon", "firebomb", "rifle", "mortar", "rocket", "laser", "railgun",
+  "watermelon", "durian", "poisonshroom",
+  "crossbow", "cannon", "firebomb", "flail", "flare",
+  "rifle", "mortar", "rocket", "molotov", "cluster",
+  "laser", "railgun", "drone", "gravity",
+  "sword", "fireball", "thunder", "swordarray", "dragonpalm", "shieldcharm", "soulchain",
 ];
 
 /** 每个时代的默认武器栏（最多 7 格） */
 export const ERA_WEAPONS = {
-  stone: ["spear", "boulder", "grenade", "banana", "spike", "boomerang", "meteor"],
-  iron: ["crossbow", "cannon", "firebomb", "grenade", "boomerang", "spike", "meteor"],
-  gun: ["rifle", "rocket", "mortar", "firebomb", "grenade", "boomerang", "meteor"],
-  mech: ["laser", "railgun", "rocket", "mortar", "cannon", "crossbow", "meteor"],
+  stone: ["spear", "boulder", "grenade", "watermelon", "durian", "boomerang", "meteor"],
+  iron: ["crossbow", "cannon", "firebomb", "flail", "flare", "spike", "meteor"],
+  gun: ["rifle", "rocket", "mortar", "molotov", "cluster", "grenade", "meteor"],
+  mech: ["laser", "railgun", "drone", "gravity", "rocket", "cannon", "meteor"],
+  cultivation: ["sword", "fireball", "thunder", "swordarray", "dragonpalm", "shieldcharm", "soulchain"],
 };
 
 export const ERAS = {
@@ -147,6 +250,11 @@ export const ERAS = {
     accent: "#6fe8ff", playerHp: 220,
     desc: "激光与电磁炮，能贯穿整条战线",
   },
+  cultivation: {
+    id: "cultivation", name: "修仙时代", short: "修仙", range: "21-25 关",
+    accent: "#c8a8ff", playerHp: 260,
+    desc: "御剑飞行、雷法火术，神通广大",
+  },
 };
 
 export const ENEMY_TYPES = {
@@ -164,6 +272,11 @@ export const ENEMY_TYPES = {
   // 机械
   mech: { name: "机甲兵", hp: 250, scale: 1.2, skin: "#8fb8c4", cloth: "#2e6f78", aiBonus: 0.16, visor: true },
   warlord: { name: "战争领主", hp: 340, scale: 1.3, skin: "#a6c6d6", cloth: "#7a2540", aiBonus: 0.2, visor: true },
+  // 修仙
+  cultivator: { name: "散修", hp: 200, scale: 1.05, skin: "#e8d8c8", cloth: "#5a4a8a", aiBonus: 0.18 },
+  swordmaster: { name: "剑修", hp: 240, scale: 1.1, skin: "#d8c8b8", cloth: "#3a6a8a", aiBonus: 0.22 },
+  taoist: { name: "符师", hp: 180, scale: 1.0, skin: "#e0d0c0", cloth: "#8a3a5a", aiBonus: 0.2 },
+  immortal: { name: "仙人", hp: 380, scale: 1.25, skin: "#f0e8d8", cloth: "#c8a8ff", aiBonus: 0.26 },
 };
 
 export const THEMES = {
@@ -238,6 +351,15 @@ export const THEMES = {
     dirt: ["#33424c", "#24313a", "#141d24"],
     grass: "#3d6266", grassLight: "#5e9297",
     dirtLine: "rgba(140,240,255,.1)", mote: "rgba(120,230,255,.5)", night: true,
+  },
+  cultivation: {
+    id: "cultivation",
+    sky: ["#0a0618", "#1c1038", "#3a1c5c", "#6a3a8a"],
+    sun: "#e8d8ff", sunGlow: "rgba(200,160,255,.35)",
+    far: "#2a1c40", mid: "#1c1230", near: "#100a1c",
+    dirt: ["#4a3a5c", "#352845", "#1e1528"],
+    grass: "#5a4a7a", grassLight: "#8a6aaa",
+    dirtLine: "rgba(220,190,255,.1)", mote: "rgba(200,170,255,.5)", night: true,
   },
 };
 
@@ -322,6 +444,18 @@ export const LEVELS = [
     [150, 235, 310], [{ x: 940, type: "mech", hp: 260 }, { x: 1030, type: "mech", hp: 260 }, { x: 1120, type: "warlord", hp: 320 }, { x: 990, type: "gunner" }], 0.82, 8, 16, 5, true),
   makeLevel(28, "mech", "终局裂谷", "双领主与电磁卫队，最后决战", "volcano", "volcano", 281,
     [145, 225, 305], [{ x: 900, type: "warlord", hp: 340 }, { x: 985, type: "mech", hp: 260 }, { x: 1070, type: "mech", hp: 260 }, { x: 1155, type: "grenadier" }], 0.88, 9, 18, 8, true),
+
+  // ------------------------------------------------------------ 修仙时代 21-25（与进阶关卡并列）
+  makeLevel(29, "cultivation", "初入仙门", "散修拦路，御剑诀试试手", "cultivation", "hills", 291,
+    [150, 235], [{ x: 980, type: "cultivator" }, { x: 1070, type: "cultivator" }], 0.6, 5, 12, 4),
+  makeLevel(30, "cultivation", "剑修对决", "剑修出剑极快，别站直线", "cultivation", "canyon", 301,
+    [150, 230, 310], [{ x: 950, type: "swordmaster" }, { x: 1040, type: "cultivator" }, { x: 1120, type: "taoist" }], 0.64, 6, 13, 5),
+  makeLevel(31, "cultivation", "符阵迷踪", "符师远程轰炸，雷符落地快", "cultivation", "fortress", 311,
+    [150, 235], [{ x: 960, type: "taoist" }, { x: 1050, type: "swordmaster" }, { x: 1130, type: "cultivator" }], 0.68, 6, 14, 4.5),
+  makeLevel(32, "cultivation", "万剑归宗", "敌方剑阵密集，用万剑归宗对轰", "cultivation", "bridge", 321,
+    [145, 225, 305], [{ x: 940, type: "swordmaster" }, { x: 1020, type: "swordmaster" }, { x: 1100, type: "taoist" }, { x: 1170, type: "cultivator" }], 0.72, 7, 15, 6),
+  makeLevel(33, "cultivation", "仙人降临", "仙人法力无边，全力一战", "cultivation", "pyramid", 331,
+    [145, 225, 305], [{ x: 920, type: "immortal", hp: 320 }, { x: 1000, type: "swordmaster" }, { x: 1080, type: "taoist" }, { x: 1160, type: "cultivator" }], 0.78, 8, 17, 7),
 ];
 
 /** 根据关卡与武器栏生成弹药：首个武器无限，其余按关卡递增 */
@@ -335,7 +469,8 @@ export function ammoFor(level, ids) {
     }
     if (i === 0) ammo[id] = Infinity;
     else if (id === "meteor" || id === "railgun") ammo[id] = 1 + Math.floor(lv / 7);
-    else if (id === "rocket" || id === "mortar" || id === "cannon") ammo[id] = 2 + Math.floor(lv / 6);
+    else if (id === "rocket" || id === "mortar" || id === "cannon" || id === "gravity" || id === "drone") ammo[id] = 2 + Math.floor(lv / 6);
+    else if (id === "cluster" || id === "molotov" || id === "watermelon") ammo[id] = 2 + Math.floor(lv / 5);
     else ammo[id] = 3 + Math.floor(lv / 4);
   });
   return ammo;
@@ -381,6 +516,7 @@ export const ENDLESS_ERAS = [
   { era: "iron", theme: "day", ai: 0.45, windMax: 4, hpMul: 1.2, enemies: ["raider", "shield", "brute", "chief"] },
   { era: "gun", theme: "dusk", ai: 0.58, windMax: 5, hpMul: 1.45, enemies: ["gunner", "grenadier", "shield", "chief"] },
   { era: "mech", theme: "night", ai: 0.72, windMax: 6, hpMul: 1.7, enemies: ["mech", "gunner", "grenadier", "warlord"] },
+  { era: "cultivation", theme: "cultivation", ai: 0.82, windMax: 7, hpMul: 2.0, enemies: ["cultivator", "swordmaster", "taoist", "immortal"] },
 ];
 
 /** 根据波次获取当前时代配置（每 2 波递进） */

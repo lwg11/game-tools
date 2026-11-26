@@ -729,6 +729,7 @@ html[data-device="desktop"] .jump-btn { display: flex; }
 .level-card.era-iron { border-color: rgba(159, 176, 194, 0.28); }
 .level-card.era-gun { border-color: rgba(255, 161, 92, 0.28); }
 .level-card.era-mech { border-color: rgba(111, 232, 255, 0.3); }
+.level-card.era-cultivation { border-color: rgba(200, 168, 255, 0.32); }
 .level-card .lv-num { font-size: 22px; font-weight: 900; line-height: 1; color: #ffd79a; font-variant-numeric: tabular-nums; }
 .level-card .lv-num small { font-size: 9px; color: #a08870; margin-left: 2px; font-weight: 700; }
 .level-card .lv-name { font-size: 11.5px; font-weight: 700; color: #ddd2c0; margin-top: 4px; line-height: 1.3; }
@@ -749,6 +750,7 @@ html[data-device="desktop"] .jump-btn { display: flex; }
 .level-card.endless-card .lv-num { color: #ffd47a; }
 .level-card.endless-card .lv-stars { color: #cbb8ec; font-weight: 700; }
 .level-card.theme-night { background: linear-gradient(160deg, rgba(32, 44, 62, 0.9), rgba(14, 18, 26, 0.96)); }
+.level-card.theme-cultivation { background: linear-gradient(160deg, rgba(58, 38, 88, 0.9), rgba(18, 10, 32, 0.96)); }
 .level-card.theme-volcano { background: linear-gradient(160deg, rgba(76, 28, 24, 0.92), rgba(24, 14, 14, 0.96)); }
 .level-card.theme-day { background: linear-gradient(160deg, rgba(42, 62, 40, 0.88), rgba(17, 24, 20, 0.96)); }
 .level-card.theme-dusk { background: linear-gradient(160deg, rgba(58, 38, 54, 0.9), rgba(22, 16, 24, 0.96)); }
