@@ -321,8 +321,12 @@ body.normal-mode #hudCheat { display: none; }
     max-width: calc(100vw - 220px);
     overflow-x: auto;
     overflow-y: hidden;
+    /* 收起时去掉黑边背景 */
+    background: transparent;
+    border: none;
+    backdrop-filter: none;
   }
-  /* 展开时：保持底部居中平齐，列表横向滑动 */
+  /* 展开时：保持底部居中平齐，列表横向滑动，半透明背景 */
   .weapon-bar.expanded {
     flex-direction: row;
     align-items: center;
@@ -332,6 +336,9 @@ body.normal-mode #hudCheat { display: none; }
     overflow-y: hidden;
     flex-wrap: nowrap;
     -webkit-overflow-scrolling: touch;
+    background: rgba(10, 12, 16, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(8px);
   }
   .weapon-bar.expanded .weapon-list {
     flex-direction: row;
@@ -397,8 +404,8 @@ body.normal-mode #hudCheat { display: none; }
   width: clamp(52px, 7.2vh, 72px);
   height: clamp(48px, 7.2vh, 62px);
   border-radius: 11px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: linear-gradient(180deg, rgba(48, 40, 32, 0.9), rgba(24, 20, 17, 0.92));
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: linear-gradient(180deg, rgba(48, 40, 32, 0.55), rgba(24, 20, 17, 0.6));
   color: #e8dfd0;
   display: flex;
   flex-direction: column;
