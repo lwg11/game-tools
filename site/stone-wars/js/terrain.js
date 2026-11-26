@@ -143,7 +143,133 @@ export class Terrain {
     else if (style === "dunes") this._dunes(rng);
     else if (style === "fortress") this._fortress(rng);
     else if (style === "trench") this._trench(rng);
+    else if (style === "floatpeak") this._floatpeak(rng);
+    else if (style === "swordgrave") this._swordgrave(rng);
+    else if (style === "spiritvalley") this._spiritvalley(rng);
+    else if (style === "penglai") this._penglai(rng);
+    else if (style === "palace") this._palace(rng);
     else this._hills(rng);
+  }
+
+  // ------------------------------------------------------------ 修仙时代地形
+  /** 仙山浮空：多座浮空仙山平台，底部云海 */
+  _floatpeak(rng) {
+    // 基底地面（较低的平原）
+    for (let c = 0; c < this.cols; c++) {
+      const h = 38 + Math.sin(c * 0.15 + 1) * 1.2;
+      this.fillRect(c, Math.round(h), c, this.rows - 1);
+    }
+    // 浮空仙山平台（5 座，高低错落）
+    const peaks = [
+      { x0: 18, x1: 26, y: 28 },
+      { x0: 34, x1: 42, y: 22 },
+      { x0: 48, x1: 56, y: 26 },
+      { x0: 62, x1: 70, y: 20 },
+      { x0: 38, x1: 48, y: 14 },
+    ];
+    for (const p of peaks) {
+      this.fillRect(p.x0, p.y, p.x1, p.y);
+      // 平台下方的石柱支撑
+      const legX = Math.floor((p.x0 + p.x1) / 2);
+      this.fillRect(legX, p.y + 1, legX, p.y + 3);
+    }
+    // 底部云海（装饰性低洼）
+    this.clearRect(10, 36, 20, 39);
+    this.clearRect(58, 36, 70, 39);
+  }
+
+  /** 剑冢：无数巨剑插地的剑冢地形 */
+  _swordgrave(rng) {
+    for (let c = 0; c < this.cols; c++) {
+      const h = 36 + Math.sin(c * 0.18 + 2) * 1.5;
+      this.fillRect(c, Math.round(h), c, this.rows - 1);
+    }
+    // 巨剑插地（剑柄朝上，剑身插入地面）
+    const swords = [
+      { x: 24, h: 10 }, { x: 32, h: 7 }, { x: 40, h: 12 },
+      { x: 48, h: 8 }, { x: 56, h: 11 }, { x: 64, h: 6 },
+      { x: 36, h: 5 }, { x: 52, h: 9 },
+    ];
+    for (const s of swords) {
+      const ground = this.surfaceTop(s.x * this.tile) ?? (this.rows - 8) * this.tile;
+      const top = Math.floor(ground / this.tile) - s.h;
+      // 剑身
+      this.fillRect(s.x, top, s.x, Math.floor(ground / this.tile) - 1, 3);
+      // 剑格（横档）
+      this.fillRect(s.x - 1, top, s.x + 1, top, 3);
+    }
+    // 中央高台
+    this.fillRect(38, 30, 44, 31);
+  }
+
+  /** 灵脉峡谷：灵脉形成的峡谷，两侧高台，中间深谷 */
+  _spiritvalley(rng) {
+    for (let c = 0; c < this.cols; c++) {
+      let h;
+      if (c < 28) h = 30 - Math.max(0, 5 - Math.abs(c - 14) * 0.3);
+      else if (c > 52) h = 28 - Math.max(0, 5 - Math.abs(c - 66) * 0.3);
+      else h = 42 - Math.round(Math.sin(((c - 28) / 24) * Math.PI) * 2);
+      this.fillRect(c, Math.round(h), c, this.rows - 1);
+    }
+    // 灵脉石柱（峡谷中的灵石柱）
+    this.fillRect(34, 32, 35, 38);
+    this.fillRect(46, 30, 47, 36);
+    // 浮空灵台
+    this.fillRect(38, 24, 42, 25);
+    this.fillRect(30, 20, 33, 21);
+    this.fillRect(50, 18, 53, 19);
+  }
+
+  /** 蓬莱仙岛：海上仙岛，多平台，底部海水 */
+  _penglai(rng) {
+    // 基底海面（较低的地面）
+    for (let c = 0; c < this.cols; c++) {
+      const h = 40 + Math.sin(c * 0.12 + 3) * 1.0;
+      this.fillRect(c, Math.round(h), c, this.rows - 1);
+    }
+    // 仙岛平台（大小不一，错落分布）
+    const islands = [
+      { x0: 16, x1: 24, y: 32 },
+      { x0: 30, x1: 38, y: 26 },
+      { x0: 44, x1: 52, y: 30 },
+      { x0: 58, x1: 66, y: 24 },
+      { x0: 36, x1: 46, y: 18 },
+      { x0: 52, x1: 60, y: 14 },
+    ];
+    for (const p of islands) {
+      this.fillRect(p.x0, p.y, p.x1, p.y);
+      // 岛下石柱
+      const legX = Math.floor((p.x0 + p.x1) / 2);
+      this.fillRect(legX, p.y + 1, legX, p.y + 2 + Math.floor(rng() * 3));
+    }
+    // 中央主岛（最大）
+    this.fillRect(34, 34, 48, 35);
+    this.fillRect(36, 32, 46, 33);
+  }
+
+  /** 天宫台阶：天宫台阶式金字塔，层层递进 */
+  _palace(rng) {
+    for (let c = 0; c < this.cols; c++) {
+      const h = 38 + Math.sin(c * 0.2) * 0.8;
+      this.fillRect(c, Math.round(h), c, this.rows - 1);
+    }
+    // 台阶式金字塔（5 层，逐层收窄）
+    const layers = [
+      { x0: 28, x1: 54, y: 34 },
+      { x0: 31, x1: 51, y: 30 },
+      { x0: 34, x1: 48, y: 26 },
+      { x0: 37, x1: 45, y: 22 },
+      { x0: 40, x1: 42, y: 18 },
+    ];
+    for (const l of layers) {
+      this.fillRect(l.x0, l.y, l.x1, l.y);
+    }
+    // 两侧天柱
+    this.fillRect(24, 26, 25, 34);
+    this.fillRect(57, 26, 58, 34);
+    // 天柱顶部云台
+    this.fillRect(23, 25, 26, 25);
+    this.fillRect(56, 25, 59, 25);
   }
 
   /** 铁骑 / 火器时代的城堡要塞：中央城垛、两侧塔楼 */
