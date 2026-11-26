@@ -159,23 +159,35 @@ export class Terrain {
       const h = 38 + Math.sin(c * 0.15 + 1) * 1.2;
       this.fillRect(c, Math.round(h), c, this.rows - 1);
     }
-    // 浮空仙山平台（5 座，高低错落）
+    // 浮空仙山平台（7 座，高低错落，宏大壮观）
     const peaks = [
-      { x0: 18, x1: 26, y: 28 },
-      { x0: 34, x1: 42, y: 22 },
-      { x0: 48, x1: 56, y: 26 },
-      { x0: 62, x1: 70, y: 20 },
-      { x0: 38, x1: 48, y: 14 },
+      { x0: 14, x1: 22, y: 30 },
+      { x0: 26, x1: 34, y: 24 },
+      { x0: 40, x1: 50, y: 28 },
+      { x0: 54, x1: 62, y: 22 },
+      { x0: 66, x1: 74, y: 26 },
+      { x0: 34, x1: 44, y: 16 },
+      { x0: 58, x1: 68, y: 12 },
     ];
     for (const p of peaks) {
       this.fillRect(p.x0, p.y, p.x1, p.y);
-      // 平台下方的石柱支撑
+      // 平台下方的石柱支撑（更粗更高）
       const legX = Math.floor((p.x0 + p.x1) / 2);
-      this.fillRect(legX, p.y + 1, legX, p.y + 3);
+      this.fillRect(legX, p.y + 1, legX, p.y + 4);
+      // 副支撑柱
+      if (p.x1 - p.x0 > 6) {
+        this.fillRect(p.x0 + 1, p.y + 1, p.x0 + 1, p.y + 2);
+        this.fillRect(p.x1 - 1, p.y + 1, p.x1 - 1, p.y + 2);
+      }
     }
     // 底部云海（装饰性低洼）
-    this.clearRect(10, 36, 20, 39);
-    this.clearRect(58, 36, 70, 39);
+    this.clearRect(6, 36, 16, 39);
+    this.clearRect(28, 37, 38, 39);
+    this.clearRect(52, 36, 62, 39);
+    this.clearRect(70, 37, 78, 39);
+    // 浮空小岛（装饰）
+    this.fillRect(20, 20, 22, 20);
+    this.fillRect(62, 18, 64, 18);
   }
 
   /** 剑冢：无数巨剑插地的剑冢地形 */
