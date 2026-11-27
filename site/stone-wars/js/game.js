@@ -100,6 +100,8 @@ class StoneWars {
     this.result = null;
     this.touch = { left: false, right: false };
     this.keys = {};
+    // 跳跃缓冲计时（修复移动键与跳跃键偶现不同步导致斜跳失效）
+    this.jumpBufferT = 0;
     this.hintTimer = null;
     this.bannerTimer = null;
     this.lastEnemyTarget = null;
@@ -238,13 +240,14 @@ class StoneWars {
       btn.addEventListener("pointerleave", () => set(false));
       btn.addEventListener("pointercancel", () => set(false));
     });
-    // 跳跃按钮：用 pointerdown 即时响应，支持按住移动键的同时斜跳
-    document.querySelector("[data-jump]").addEventListener("pointerdown", (e) => {
-      e.preventDefault();
-      if (this.phase !== "aim" || this.paused) return;
-      const u = this._activePlayer();
-      if (u) u.jump(this._moveDir());
-    });
+// 跳跃按钮：用 pointerdown 即时响应，支持按住移动键的同时斜跳
+document.querySelector("[data-jump]").addEventListener("pointerdown", (e) => {
+e.preventDefault();
+if (this.phase !== "aim" || this.paused) return;
+this._queueJump();
+const u = this._activePlayer();
+if (u) u.jump(this._moveDir());
+});
 
     // 键盘
     window.addEventListener("keydown", (e) => {
@@ -263,6 +266,8 @@ class StoneWars {
         e.preventDefault();
         this.keys[k] = true;
 if ((k === "w" || k === "arrowup" || k === " ") && !e.repeat) {
+// 跳跃缓冲：先记录输入，下一帧按最新方向键起跳，避免移动键与跳跃键不同步导致斜跳失效
+this._queueJump();
 const u = this._activePlayer();
 if (u) u.jump(this._moveDir());
 }
@@ -1448,7 +1453,19 @@ if (!this.players.some((u) => u.alive)) { this.finish(false, "族人全部倒下
     this._updateHUD();
   }
 
+  /** 跳跃缓冲：按下跳跃键后短时间内尝试起跳，方向取当前最新按键 */
+  _queueJump() {
+    this.jumpBufferT = 0.16;
+  }
+
   _updatePlayingMovement(u, dt) {
+    // 缓冲的跳跃在下一帧执行：此时方向键已是最新的，保证斜跳方向正确
+    if (this.jumpBufferT > 0) {
+      this.jumpBufferT -= dt;
+      if (u.onGround && u.alive && this.moveBudget > 0 && u.jump(this._moveDir())) {
+        this.jumpBufferT = 0;
+      }
+    }
     const left = this.keys["a"] || this.keys["arrowleft"] || this.touch.left;
     const right = this.keys["d"] || this.keys["arrowright"] || this.touch.right;
     if (left === right || this.moveBudget <= 0) {
