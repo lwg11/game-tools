@@ -258,9 +258,9 @@ export const WEAPONS = {
   // 渡劫期：补天术（时空锚定：下一次敌方攻击后回溯到本回合状态）
   mend: {
     id: "mend", name: "补天术", short: "补", era: "cultivation", kind: "buff",
-    desc: "锚定本回合时空；下一次敌方攻击后（无论场景毁坏或队友阵亡）回溯恢复",
+    desc: "锚定本回合时空；下一次敌方攻击后（无论场景毁坏或队友阵亡）回溯恢复；用一次后冷却 3 回合",
     color: "#a8ffd8", speed: 0, gravity: 0, damage: 0, blast: 0,
-    cooldown: 14, icon: "mend", realm: "渡劫", buffType: "mend",
+    cooldown: 14, turnCooldown: 3, icon: "mend", realm: "渡劫", buffType: "mend",
   },
   // 渡劫期：搬山术（抛掷石块，落地放置金庚石平台）
   stonewall: {

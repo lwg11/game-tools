@@ -244,9 +244,11 @@ export function mountCultivation(StoneWars) {
       for (const b of this.skyBolts) {
         if (!b.struck || !b.segs) continue;
         const k = clamp(1 - (b.t - b.delay) / b.dur, 0, 1);
+        // 闪电加粗：外层金色光柱 + 内层白芯，看着更有威力
         const layers = [
-          [b.main ? 7 : 4.5, `rgba(255,240,160,${0.35 * k})`],
-          [b.main ? 3 : 2, `rgba(255,255,255,${0.9 * k})`],
+          [b.main ? 12 : 7, `rgba(255,236,140,${0.5 * k})`],
+          [b.main ? 8 : 4.5, `rgba(255,246,200,${0.65 * k})`],
+          [b.main ? 4.5 : 2.6, `rgba(255,255,255,${0.95 * k})`],
         ];
         for (const [lw, col] of layers) {
           ctx.strokeStyle = col;
