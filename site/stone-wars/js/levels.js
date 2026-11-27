@@ -2,13 +2,14 @@
  * 《石器大战》关卡、时代与数值配置
  * ------------------------------------------------------------
  * 游戏路线：
- *   石器时代（1-5 关）  石矛、石弹、火雷，靠蛮力和地形
- *   铁骑时代（6-10 关） 铁弩、加农炮、火油弹，重甲与骑兵登场
- *   火器时代（11-15 关）火枪、迫击炮、火箭弹，射程与爆炸范围升级
- *   机械时代（16-20 关）激光炮、电磁炮，穿透与高伤害
- *   进阶关卡（21-28 关）每个时代再加两关：玄铁岩炸不坏，难度与敌人同步提升
+ *   石器时代（1-8 关）  石矛、石弹、火雷，靠蛮力和地形
+ *   铁骑时代（9-16 关） 铁弩、加农炮、火油弹，重甲与骑兵登场
+ *   火器时代（17-24 关）火枪、迫击炮、火箭弹，射程与爆炸范围升级
+ *   机械时代（25-32 关）激光炮、电磁炮，穿透与高伤害
+ *   修仙时代（33-60 关）炼气→筑基→金丹→元婴→化神→渡劫六大境界
  * 每关目标均为「消灭全部敌人」，par 为三星回合数。
- * 21+ 关引入玄铁岩（炸不坏）与玄铁地基，防止后期战场被炸穿后失去可玩性。
+ * 技能/武器按「阶段 / 境界」从低到高递进解锁：低阶段只开放基础武器，
+ * 进入新阶段（境界）才解锁新的技能，详见 STAGE_WEAPONS / CULTIVATION_STAGES。
  */
 
 export const WORLD = { w: 1280, h: 720, tile: 16, cols: 80, rows: 45 };
@@ -280,15 +281,91 @@ export const WEAPON_ORDER = [
   "heal", "storm", "skylightning", "formation", "mend", "stonewall",
 ];
 
-/** 每个时代的默认武器栏（最多 7 格） */
-export const ERA_WEAPONS = {
-  stone: ["spear", "boulder", "grenade", "watermelon", "durian", "boomerang", "meteor"],
-  iron: ["crossbow", "cannon", "firebomb", "flail", "flare", "spike", "meteor"],
-  gun: ["rifle", "rocket", "mortar", "molotov", "cluster", "grenade", "meteor"],
-  mech: ["laser", "railgun", "drone", "gravity", "rocket", "cannon", "meteor"],
-  cultivation: ["sword", "fireball", "thunder", "shieldcharm", "soulchain", "swordarray", "dragonpalm"],
-  // 高境界关卡会动态解锁更多武器（见 _chooseEnemyWeapon / startLevel）
+/**
+ * 每个时代的阶段递进武器栏（从低到高解锁，最多 9 格）。
+ * 第 1 阶段只给基础武器，第 2 阶段解锁该时代剩余武器。
+ */
+export const STAGE_WEAPONS = {
+  stone: [
+    ["spear", "boulder"],
+    ["spear", "boulder", "grenade", "watermelon", "durian", "boomerang", "meteor"],
+  ],
+  iron: [
+    ["crossbow", "cannon"],
+    ["crossbow", "cannon", "firebomb", "flail", "flare", "spike", "meteor"],
+  ],
+  gun: [
+    ["rifle", "mortar"],
+    ["rifle", "rocket", "mortar", "molotov", "cluster", "grenade", "meteor"],
+  ],
+  mech: [
+    ["laser", "drone"],
+    ["laser", "railgun", "drone", "gravity", "rocket", "cannon", "meteor"],
+  ],
 };
+
+/**
+ * 修仙六大境界的递进技能表：从低到高逐境界解锁新神通。
+ * 每境界武器栏保留核心旧技能 + 新增本境界技能（最多 9 格）。
+ */
+export const CULTIVATION_STAGES = [
+  { name: "炼气", lv: 33, weapons: ["sword", "fireball"] },
+  { name: "筑基", lv: 36, weapons: ["sword", "fireball", "thunder", "shieldcharm", "soulchain"] },
+  { name: "金丹", lv: 40, weapons: ["sword", "fireball", "thunder", "shieldcharm", "soulchain", "swordarray", "dragonpalm"] },
+  { name: "元婴", lv: 45, weapons: ["sword", "fireball", "thunder", "shieldcharm", "soulchain", "swordarray", "dragonpalm", "teleport", "poisonmist"] },
+  { name: "化神", lv: 50, weapons: ["sword", "fireball", "thunder", "swordarray", "dragonpalm", "teleport", "poisonmist", "heal", "storm"] },
+  { name: "渡劫", lv: 56, weapons: ["sword", "fireball", "dragonpalm", "teleport", "heal", "skylightning", "formation", "mend", "stonewall"] },
+];
+// 无限模式进入修仙时代时直接解锁到最高境界的技能池
+STAGE_WEAPONS.cultivation = [CULTIVATION_STAGES[0].weapons, CULTIVATION_STAGES[CULTIVATION_STAGES.length - 1].weapons];
+
+/** 每个时代的全部武器（兼容/全解锁作弊用；正常流程请按阶段解锁） */
+export const ERA_WEAPONS = {
+  stone: STAGE_WEAPONS.stone[1],
+  iron: STAGE_WEAPONS.iron[1],
+  gun: STAGE_WEAPONS.gun[1],
+  mech: STAGE_WEAPONS.mech[1],
+  cultivation: CULTIVATION_STAGES[CULTIVATION_STAGES.length - 1].weapons,
+};
+
+/** 关卡所处的阶段（时代 + 阶段索引 + 阶段名） */
+export function stageIndexOf(level) {
+  if (!level || level.endless) return null;
+  const era = ERAS[level.era] || ERAS.stone;
+  let idx = 0;
+  (era.realms || []).forEach((r, i) => {
+    const first = r.levels && r.levels.length ? r.levels[0] : Infinity;
+    if (level.id >= first) idx = i;
+  });
+  return { era, index: idx, realm: era.realms ? era.realms[idx] : null };
+}
+
+/** 关卡的阶段名（如「部落期」「元婴期」），用于 UI 展示 */
+export function stageNameOf(level) {
+  const st = stageIndexOf(level);
+  if (!st || !st.realm) return "";
+  return st.realm.name;
+}
+
+/**
+ * 根据关卡计算本局可用的递进武器栏：
+ *   - 关卡自带 weapons（无限模式）优先；
+ *   - 修仙时代按境界从低到高解锁；
+ *   - 其他时代按阶段（原始期/部落期…）递进。
+ */
+export function weaponsForLevel(level) {
+  if (!level) return [...ERA_WEAPONS.stone];
+  if (level.weapons) return [...level.weapons];
+  const st = stageIndexOf(level);
+  const eraId = st ? st.era.id : "stone";
+  if (eraId === "cultivation") {
+    let cur = CULTIVATION_STAGES[0];
+    for (const s of CULTIVATION_STAGES) if (level.id >= s.lv) cur = s;
+    return [...cur.weapons];
+  }
+  const stages = STAGE_WEAPONS[eraId] || STAGE_WEAPONS.stone;
+  return [...(stages[st.index] || stages[0])];
+}
 
 export const ERAS = {
   stone: {

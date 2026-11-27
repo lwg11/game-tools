@@ -11,7 +11,7 @@ import { initAccount } from "../../assets/js/account.js";
 import { icon, toast } from "../../assets/js/ui.js";
 import { audio } from "../../assets/js/audio.js";
 import { isCrazy, applyBodyMode } from "../../assets/js/mode.js";
-import { ENEMY_TYPES, ERAS, ERA_WEAPONS, LEVELS, THEMES, WEAPONS, ammoFor, getEndlessLevel, getEndlessEra, getEra, getLevel } from "./levels.js";
+import { ENEMY_TYPES, ERAS, ERA_WEAPONS, LEVELS, THEMES, WEAPONS, WEAPON_ORDER, STAGE_WEAPONS, CULTIVATION_STAGES, ammoFor, getEndlessLevel, getEndlessEra, getEra, getLevel, stageIndexOf, stageNameOf, weaponsForLevel } from "./levels.js";
 import { H, TAU, W, clamp, rand } from "./common.js";
 import { Sfx } from "./sfx.js";
 import { Projectile, Unit } from "./entities.js";
@@ -85,7 +85,10 @@ class StoneWars {
     this.cheatInfiniteAmmo = false;
     this.cheatRealtime = false;
     this.cheatDifficulty = 0;
+    this.cheatAllWeapons = false;   // 金手指：解锁全部技能与武器
+    this.cheatNoCooldown = false;   // 金手指：技能武器无冷却
     this.cheatOpen = false;
+    this.baseWeaponIds = [...ERA_WEAPONS.stone];
     this.muzzleFlashes = [];
     this.glows = [];
     this.fires = [];
@@ -264,7 +267,7 @@ const u = this._activePlayer();
 if (u) u.jump(this._moveDir());
 }
       }
-      if (/^[1-7]$/.test(k)) {
+      if (/^[1-9]$/.test(k)) {
         const id = this.weaponIds[Number(k) - 1];
         if (id && (this.ammo[id] || 0) > 0) {
           this.selectedWeapon = id;
@@ -302,9 +305,10 @@ if (u) u.jump(this._moveDir());
       const s = Number(stars[lv.id]) || 0;
       const themeClass = "theme-" + (lv.theme || "dawn");
       const era = getEra(lv.era);
+      const stageLabel = stageNameOf(lv) || era.short;
       const current = !locked && lv.id === unlocked && !this.store.state.cleared[lv.id];
       return `<button class="level-card ${themeClass} era-${era.id} ${locked ? "locked" : ""} ${current ? "current" : ""}" data-level="${lv.id}" ${locked ? "aria-disabled=\"true\"" : ""}>
-        <div class="lv-top"><span class="lv-num">${String(lv.id).padStart(2, "0")}<small>关</small></span><span class="lv-era" style="--era:${era.accent}">${era.short}</span>${locked ? icon("lock") : ""}</div>
+        <div class="lv-top"><span class="lv-num">${String(lv.id).padStart(2, "0")}<small>关</small></span><span class="lv-era" style="--era:${era.accent}">${stageLabel}</span>${locked ? icon("lock") : ""}</div>
         <div>
           <div class="lv-name">${lv.name}</div>
           <div class="lv-stars">${[1, 2, 3].map((i) => `<span class="${s >= i ? "on" : ""}">★</span>`).join("")}</div>
@@ -419,19 +423,25 @@ if (u) u.jump(this._moveDir());
     this.cheatOpen = false;
     document.getElementById("cheatScreen").classList.remove("show");
 
-    // 修仙高境界关卡动态解锁更多神通（最多 7 格）
-    let baseWeapons = this.level.weapons || ERA_WEAPONS[this.era.id] || ERA_WEAPONS.stone;
-    if (this.era.id === "cultivation" && !this.level.endless) {
-      const lv = this.level.id;
-      const extra = [];
-      if (lv >= 50) extra.push("heal", "storm");
-      if (lv >= 56) extra.push("skylightning", "formation", "mend", "stonewall");
-      // 去重并截断到 7
-      baseWeapons = [...new Set([...baseWeapons, ...extra])].slice(0, 7);
-    }
-    this.weaponIds = baseWeapons;
+    // 技能/武器按阶段与境界从低到高递进解锁；金手指可强制全量解锁
+    this.baseWeaponIds = weaponsForLevel(this.level);
+    this.weaponIds = this.cheatAllWeapons ? [...WEAPON_ORDER] : [...this.baseWeaponIds];
     this.ammo = ammoFor(this.level, this.weaponIds);
     this.selectedWeapon = this.weaponIds.find((k) => (this.ammo[k] || 0) > 0) || this.weaponIds[0];
+    // 进入新阶段/新境界的首关，提示新解锁的技能
+    if (!this.level.endless && !this.cheatAllWeapons) {
+      const st = stageIndexOf(this.level);
+      if (st && st.index > 0 && st.realm && this.level.id === st.realm.levels[0]) {
+        const prevList = st.era.id === "cultivation"
+          ? CULTIVATION_STAGES[st.index - 1].weapons
+          : (STAGE_WEAPONS[st.era.id] || [])[st.index - 1] || [];
+        const curList = this.baseWeaponIds;
+        const fresh = curList.filter((w) => !prevList.includes(w));
+        if (fresh.length) {
+          toast(`【${st.realm.name}】解锁 ${fresh.length} 个新技能：${fresh.map((id) => (WEAPONS[id] ? WEAPONS[id].name : id)).join("、")}`, "ok");
+        }
+      }
+    }
 
     const nameSets = {
       stone: ["阿石", "阿木", "阿火"],
@@ -1502,12 +1512,15 @@ if (!this.players.some((u) => u.alive)) { this.finish(false, "族人全部倒下
       this.level.theme = eraCfg.theme;
       this.level.ai = eraCfg.ai;
       this.level.windMax = eraCfg.windMax;
-      // 解锁新时代武器
-      const newWeapons = ERA_WEAPONS[eraCfg.era] || ERA_WEAPONS.stone;
-      this.weaponIds = newWeapons.slice(0, 7);
-      this.ammo = ammoFor(this.level, this.weaponIds);
-      this.selectedWeapon = this.weaponIds.find((k) => (this.ammo[k] || 0) > 0) || this.weaponIds[0];
-      this._refreshWeaponBar();
+      // 解锁新时代武器（取该时代阶段递进的高阶段；全技能作弊开启时保持全量）
+      if (!this.cheatAllWeapons) {
+        const stages = STAGE_WEAPONS[eraCfg.era];
+        const newWeapons = (stages && stages[stages.length - 1]) || ERA_WEAPONS[eraCfg.era] || ERA_WEAPONS.stone;
+        this.weaponIds = newWeapons.slice(0, 9);
+        this.ammo = ammoFor(this.level, this.weaponIds);
+        this.selectedWeapon = this.weaponIds.find((k) => (this.ammo[k] || 0) > 0) || this.weaponIds[0];
+        this._refreshWeaponBar();
+      }
       this._showBanner(
         `进入${this.era.name}`,
         `第 ${wave} 波 · 敌人更强 · 解锁新武器`,
@@ -2333,9 +2346,10 @@ if (!this.players.some((u) => u.alive)) { this.finish(false, "族人全部倒下
     if (!this.level) return;
     const bar = document.getElementById("weaponBar");
     const list = document.getElementById("weaponList");
-    // 构建武器列表（仅在时代或武器数量变化时重建 DOM）
-    if (list.children.length !== this.weaponIds.length || bar.dataset.era !== this.era.id) {
-      bar.dataset.era = this.era.id;
+    // 构建武器列表（仅在武器栏内容变化时重建 DOM）
+    const fp = this.weaponIds.join(",");
+    if (list.children.length !== this.weaponIds.length || bar.dataset.fp !== fp) {
+      bar.dataset.fp = fp;
       list.innerHTML = this.weaponIds.map((id, i) => {
         const w = WEAPONS[id];
         return `<button class="weapon-card" data-weapon="${id}" type="button"
