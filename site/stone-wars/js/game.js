@@ -676,15 +676,16 @@ if (u) u.jump(this._moveDir());
     const w = WEAPONS[id];
     const crazy = this.crazy;
     const readyAt = this.weaponReadyAt[id] || 0;
-    if (this.time < readyAt) {
+    if (!this.cheatNoCooldown && this.time < readyAt) {
       toast(`${w.name}冷却中`);
       return false;
     }
     if (this.ammo[id] !== Infinity && !this.cheatInfiniteAmmo && !crazy) {
       this.ammo[id] = Math.max(0, this.ammo[id] - 1);
     }
-    // 疯狂模式：射速翻倍、双发齐射、伤害与爆炸范围暴涨
-    this.weaponReadyAt[id] = this.time + (w.cooldown || 1) * (crazy ? 0.42 : 1);
+    // 疯狂模式：射速翻倍、双发齐射、伤害与爆炸范围暴涨；金手指可无冷却
+    const cdMul = crazy ? 0.42 : 1;
+    this.weaponReadyAt[id] = this.time + (this.cheatNoCooldown ? 0 : (w.cooldown || 1) * cdMul);
     // buff 类技能：直接生效，不发射投射物
     if (w.kind === "buff") {
       this._applyBuff(w, u);
@@ -2241,6 +2242,23 @@ if (!this.players.some((u) => u.alive)) { this.finish(false, "族人全部倒下
     if (diff) diff.textContent = `难度：${this._difficulty().name}`;
     const rt = document.getElementById("cheatRealtimeText");
     if (rt) rt.textContent = `实时开火：${this.cheatRealtime ? "开" : "关"}`;
+    const all = document.getElementById("cheatAllText");
+    if (all) all.textContent = `全技能武器：${this.cheatAllWeapons ? "开" : "关"}`;
+    const cd = document.getElementById("cheatCdText");
+    if (cd) cd.textContent = `无冷却：${this.cheatNoCooldown ? "开" : "关"}`;
+  }
+
+  /** 金手指：在本关递进技能池与全部技能/武器之间切换 */
+  _applyAllWeapons(on) {
+    if (!this.level) return;
+    this.weaponIds = on
+      ? [...WEAPON_ORDER]
+      : [...(this.baseWeaponIds || ERA_WEAPONS[this.era.id] || ERA_WEAPONS.stone)];
+    this.ammo = ammoFor(this.level, this.weaponIds);
+    this.selectedWeapon = this.weaponIds.find((k) => (this.ammo[k] || 0) > 0) || this.weaponIds[0];
+    this.weaponReadyAt = {};
+    this._refreshWeaponBar();
+    this._updateHUD();
   }
 
   _handleCheat(action) {
@@ -2275,6 +2293,14 @@ if (!this.players.some((u) => u.alive)) { this.finish(false, "族人全部倒下
       this.store.update((p) => { p.unlocked = LEVELS.length; p.tutorialSeen = true; });
       this._refreshLevelSummary();
       toast("已解锁全部关卡", "ok");
+    } else if (action === "allweapons") {
+      this.cheatAllWeapons = !this.cheatAllWeapons;
+      this._applyAllWeapons(this.cheatAllWeapons);
+      toast(`全技能武器：${this.cheatAllWeapons ? "开" : "关"}`, "ok");
+    } else if (action === "nocd") {
+      this.cheatNoCooldown = !this.cheatNoCooldown;
+      if (this.cheatNoCooldown) this.weaponReadyAt = {};
+      toast(`无冷却：${this.cheatNoCooldown ? "开" : "关"}`, "ok");
     } else if (action === "win") {
       if (this.level.endless) {
         toast("无限模式不能直接过关");
@@ -2381,7 +2407,7 @@ if (!this.players.some((u) => u.alive)) { this.finish(false, "族人全部倒下
       card.classList.toggle("empty", ammo <= 0);
       const w = WEAPONS[id];
       const cd = w.cooldown || 1;
-      const remain = Math.max(0, (this.weaponReadyAt[id] || 0) - this.time);
+      const remain = this.cheatNoCooldown ? 0 : Math.max(0, (this.weaponReadyAt[id] || 0) - this.time);
       const ratio = clamp(remain / cd, 0, 1);
       const cool = card.querySelector(".w-cool");
       if (cool) {
@@ -2446,7 +2472,7 @@ document.getElementById("hudLevel").textContent = this.level.endless
         : "战斗中";
     const w = WEAPONS[this.selectedWeapon];
     const cd = w.cooldown || 1;
-    const remain = Math.max(0, (this.weaponReadyAt[this.selectedWeapon] || 0) - this.time);
+    const remain = this.cheatNoCooldown ? 0 : Math.max(0, (this.weaponReadyAt[this.selectedWeapon] || 0) - this.time);
     document.getElementById("moveBar").style.width = Math.round(clamp(1 - remain / cd, 0, 1) * 100) + "%";
     const info = document.getElementById("weaponInfo");
     if (info && w) {
