@@ -195,10 +195,11 @@ export const WEAPONS = {
     cooldown: 8, icon: "shieldcharm", realm: "筑基", buffType: "shield", buffVal: 80, buffDur: 12,
   },
   soulchain: {
-    id: "soulchain", name: "锁魂链", short: "锁", era: "cultivation", kind: "spike",
-    desc: "贴地锁链，命中后减速敌人 3 秒",
-    color: "#b48ce8", speed: 700, gravity: 1100, damage: 25, blast: 50,
+    id: "soulchain", name: "锁魂链", short: "锁", era: "cultivation", kind: "chain",
+    desc: "甩出锁魂链缠住敌人，使其减速 3 秒",
+    color: "#b48ce8", speed: 900, gravity: 240, damage: 25, blast: 60,
     cooldown: 2.5, icon: "soulchain", realm: "筑基", slowDur: 3, slowMul: 0.35,
+    chainLen: 470,
   },
   // 金丹期：神通初成
   swordarray: {

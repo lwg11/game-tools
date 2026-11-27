@@ -712,6 +712,7 @@ if (u) u.jump(this._moveDir());
       );
       p.damageMul = s.mul;
       p.blastMul = crazy ? 1.4 : 1;
+      p.owner = u;
       this.projectiles.push(p);
     }
     u.facing = Math.cos(angle) >= 0 ? 1 : -1;
@@ -1087,7 +1088,9 @@ if (u) u.jump(this._moveDir());
     const speed = weapon.speed * (0.5 + 0.5 * power);
     const ox = u.x + Math.cos(angle) * 26;
     const oy = u.y - 44 + Math.sin(angle) * 26;
-    this.projectiles.push(new Projectile(this, weapon.id, ox, oy, Math.cos(angle) * speed, Math.sin(angle) * speed, 1));
+    const ep = new Projectile(this, weapon.id, ox, oy, Math.cos(angle) * speed, Math.sin(angle) * speed, 1);
+    ep.owner = u;
+    this.projectiles.push(ep);
     this.muzzleFlashes.push({
       x: ox + Math.cos(angle) * 8, y: oy + Math.sin(angle) * 8,
       angle, t: 0.12, max: 0.12, color: weapon.color, size: 9 + weapon.blast * 0.1,
@@ -1326,7 +1329,9 @@ if (u) u.jump(this._moveDir());
     const speed = weapon.speed * (0.5 + 0.5 * power);
     const ox = u.x + Math.cos(angle) * 26;
     const oy = u.y - 44 + Math.sin(angle) * 26;
-    this.projectiles.push(new Projectile(this, weapon.id, ox, oy, Math.cos(angle) * speed, Math.sin(angle) * speed, 1));
+    const ep = new Projectile(this, weapon.id, ox, oy, Math.cos(angle) * speed, Math.sin(angle) * speed, 1);
+    ep.owner = u;
+    this.projectiles.push(ep);
     this.muzzleFlashes.push({
       x: ox + Math.cos(angle) * 8, y: oy + Math.sin(angle) * 8,
       angle, t: 0.12, max: 0.12, color: weapon.color, size: 9 + weapon.blast * 0.1,
@@ -1956,7 +1961,7 @@ if (!this.players.some((u) => u.alive)) { this.finish(false, "族人全部倒下
           });
         }
       }
-      // 锁魂链：紫色魂火爆裂
+      // 锁魂链：紫色魂火爆裂 + 四散飞出的链环节
       if (weaponType === "soulchain") {
         for (let i = 0; i < 14; i++) {
           const a = rand(0, TAU);
@@ -1965,6 +1970,16 @@ if (!this.players.some((u) => u.alive)) { this.finish(false, "族人全部倒下
             x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 50,
             life: rand(0.3, 0.6), maxLife: 0.6, size: rand(2, 4),
             color: Math.random() < 0.5 ? "#b48ce8" : "#d8b8ff", kind: "spark", gravity: -30,
+          });
+        }
+        // 链环节（小椭圆），断链时向四周甩出
+        for (let i = 0; i < 10; i++) {
+          const a = (i / 10) * TAU + rand(-0.2, 0.2);
+          const sp = rand(180, 420);
+          this.particles.push({
+            x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 80,
+            life: rand(0.35, 0.7), maxLife: 0.7, size: rand(2.5, 4.5),
+            color: i % 2 ? "#8a5ab8" : "#d8b8ff", kind: "chain", gravity: 520,
           });
         }
       }
@@ -2021,8 +2036,8 @@ if (!this.players.some((u) => u.alive)) { this.finish(false, "族人全部倒下
         color: "rgba(60,55,50,.45)", kind: "smoke", gravity: -30,
       });
     }
-    // 火焰残留：爆炸后地面继续燃烧，火舌、余烬与灼烧伤害
-    if (kind !== "spear" && kind !== "laser") {
+    // 火焰残留：爆炸后地面继续燃烧，火舌、余烬与灼烧伤害（锁魂链只爆魂火不留火焰）
+    if (kind !== "spear" && kind !== "laser" && kind !== "chain") {
       const groundY = this.terrain.surfaceBelow(x, Math.min(H - 16, y + radius * 0.9));
       if (groundY !== null) {
         const life = 1.0 + Math.min(1.0, radius / 240);
@@ -2060,6 +2075,7 @@ if (!this.players.some((u) => u.alive)) { this.finish(false, "族人全部倒下
         if (weaponSlow && u.alive) {
           u.slowT = Math.max(u.slowT, weaponSlow.dur);
           u.slowMul = weaponSlow.mul;
+          if (weaponType === "soulchain") u.slowSrc = "soulchain";
           this.addText(u.x, u.y - 92, "减速", "#b48ce8");
         }
         // 中毒效果（毒雾术）
@@ -2448,7 +2464,7 @@ if (id === "thunder") return `<svg ${common}><path d="M13 2L5 14h6l-2 8 8-12h-6z
 if (id === "swordarray") return `<svg ${common}><path d="M12 2v8M12 14v8M2 12h8M14 12h8M5 5l4 4M19 5l-4 4M5 19l4-4M19 19l-4-4"/></svg>`;
 if (id === "dragonpalm") return `<svg ${common}><path d="M4 12c3-4 6-6 8-6s5 2 8 6c-3 4-6 6-8 6s-5-2-8-6z"/><circle cx="12" cy="12" r="2"/></svg>`;
 if (id === "shieldcharm") return `<svg ${common}><path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg>`;
-if (id === "soulchain") return `<svg ${common}><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M6 6l12 12M18 6L6 18"/></svg>`;
+if (id === "soulchain") return `<svg ${common}><path d="M4 20l5-6 5-2 5-6"/><circle cx="5" cy="19" r="2"/><circle cx="10" cy="13" r="2"/><circle cx="15" cy="11" r="2"/><circle cx="19" cy="6" r="2"/></svg>`;
 if (id === "mend") return `<svg ${common}><path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"/><path d="M12 15v6M9 18h6"/></svg>`;
 if (id === "stonewall") return `<svg ${common}><path d="M4 18h16"/><path d="M6 18v-6h5v6"/><path d="M13 18v-9h5v9"/><path d="M8 12h1M15 9h1"/></svg>`;
 return `<svg ${common}><circle cx="12" cy="12" r="5"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l3 3M18 6l-3 3M6 18l3-3M18 18l-3-3"/></svg>`;
@@ -2951,6 +2967,13 @@ document.getElementById("hudLevel").textContent = this.level.endless
         ctx.arc(p.x, p.y, Math.max(0.8, p.size * a), 0, TAU);
         ctx.fill();
         ctx.globalCompositeOperation = "source-over";
+      } else if (p.kind === "chain") {
+        // 锁魂链断链时四散飞出的链环节
+        ctx.strokeStyle = p.color;
+        ctx.lineWidth = 1.8;
+        ctx.beginPath();
+        ctx.ellipse(p.x, p.y, Math.max(1.5, p.size), Math.max(1, p.size * 0.62), 0, 0, TAU);
+        ctx.stroke();
       } else {
         ctx.fillStyle = p.color;
         ctx.fillRect(p.x, p.y, p.size, p.size);
@@ -3521,33 +3544,40 @@ document.getElementById("hudLevel").textContent = this.level.endless
       ctx.arc(18, 0, 3, 0, TAU);
       ctx.fill();
     } else if (type === "soulchain") {
-      // 锁魂链：手持时魂火微闪
+      // 锁魂链：手持一小段锁链，末端鬼火钩爪
       ctx.globalCompositeOperation = "lighter";
-      const cg = ctx.createRadialGradient(18, 0, 0, 18, 0, 18);
+      const cg = ctx.createRadialGradient(22, 0, 0, 22, 0, 18);
       cg.addColorStop(0, "rgba(180,140,232,.3)");
       cg.addColorStop(1, "rgba(0,0,0,0)");
       ctx.fillStyle = cg;
       ctx.beginPath();
-      ctx.arc(18, 0, 18, 0, TAU);
+      ctx.arc(22, 0, 18, 0, TAU);
       ctx.fill();
       ctx.globalCompositeOperation = "source-over";
-      ctx.strokeStyle = "#b48ce8";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(18, 0, 7 * s, 0, TAU);
-      ctx.stroke();
-      ctx.strokeStyle = "#8a5ab8";
-      ctx.lineWidth = 1.4;
-      for (let i = 0; i < 6; i++) {
-        const a = (i / 6) * TAU + performance.now() / 500;
+      // 链条：几个交替方向的椭圆环串在一起
+      for (let i = 0; i < 4; i++) {
+        const px = 6 + i * 5.2;
+        const py = Math.sin(i * 1.4 + performance.now() / 400) * 1.4;
+        ctx.save();
+        ctx.translate(px, py);
+        ctx.rotate(i % 2 ? Math.PI / 2 : 0);
+        ctx.strokeStyle = i % 2 ? "#d8b8ff" : "#b48ce8";
+        ctx.lineWidth = 1.8;
         ctx.beginPath();
-        ctx.moveTo(18 + Math.cos(a) * 5, Math.sin(a) * 5);
-        ctx.lineTo(18 + Math.cos(a) * 10, Math.sin(a) * 10);
+        ctx.ellipse(0, 0, 4.4, 2.7, 0, 0, TAU);
         ctx.stroke();
+        ctx.restore();
       }
+      // 末端钩爪（弯钩）+ 魂火
+      ctx.strokeStyle = "#e0ccff";
+      ctx.lineWidth = 2;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.arc(27, 0, 4, Math.PI * 0.2, Math.PI * 1.25);
+      ctx.stroke();
       ctx.fillStyle = "#d8b8ff";
       ctx.beginPath();
-      ctx.arc(18, 0, 2.5, 0, TAU);
+      ctx.arc(30, 0, 2.2, 0, TAU);
       ctx.fill();
     } else if (type === "teleport") {
       // 瞬移：手持时空间裂缝微光

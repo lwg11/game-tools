@@ -89,7 +89,8 @@ export class Sfx {
     swordarray:   { tone: [800, 0.12, "sine", 0.06, 1600], tone2: [1000, 0.1, "sine", 0.04, 2000] },
     dragonpalm:   { noise: [0.16, 0.1, 700], tone: [140, 0.16, "triangle", 0.08, 70] },
     shieldcharm:  { tone: [700, 0.1, "sine", 0.05, 1000] },
-    soulchain:    { noise: [0.1, 0.06, 1500], tone: [220, 0.12, "triangle", 0.05, 110] },
+    // 锁魂链：金属甩链声 + 下坠低音
+    soulchain:    { noise: [0.16, 0.07, 2800], tone: [720, 0.13, "square", 0.045, 200], tone2: [1080, 0.08, "triangle", 0.035, 320] },
     teleport:     { tone: [900, 0.08, "sine", 0.05, 1800], noise: [0.06, 0.03, 5000] },
     poisonmist:   { noise: [0.16, 0.07, 600], tone: [160, 0.14, "sine", 0.05, 80] },
     heal:         { tone: [520, 0.12, "sine", 0.05, 780], tone2: [660, 0.1, "sine", 0.04, 990] },

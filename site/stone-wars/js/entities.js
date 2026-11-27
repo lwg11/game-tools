@@ -30,6 +30,7 @@ export class Unit {
     this.slowT = 0;        // 减速剩余时间
     this.slowMul = 0.5;    // 减速系数
     this.stunT = 0;        // 定身剩余时间
+    this.slowSrc = null;   // 减速来源（soulchain=锁魂链缠绕）
     this.poisonT = 0;      // 中毒剩余时间
     this.poisonDps = 0;    // 中毒每秒伤害
     this.regenT = 0;       // 回血剩余时间
@@ -68,7 +69,10 @@ export class Unit {
     this.flash = Math.max(0, this.flash - dt);
     // 状态效果计时
     if (this.shieldT > 0) { this.shieldT -= dt; if (this.shieldT <= 0) this.shield = 0; }
-    if (this.slowT > 0) this.slowT -= dt;
+    if (this.slowT > 0) {
+      this.slowT -= dt;
+      if (this.slowT <= 0) this.slowSrc = null;
+    }
     if (this.stunT > 0) this.stunT -= dt;
     if (this.poisonT > 0) {
       this.poisonT -= dt;
@@ -518,6 +522,41 @@ export class Unit {
       ctx.fill();
     }
 
+    // 锁魂链缠绕：被锁魂链命中减速时，紫色锁链捆住躯干
+    if (this.alive && this.slowT > 0 && this.slowSrc === "soulchain") {
+      const pulse = 0.7 + Math.sin(t * 8) * 0.25;
+      ctx.save();
+      ctx.globalAlpha = fade * pulse;
+      for (let r = 0; r < 3; r++) {
+        const yy = -44 + r * 12;
+        const wob = Math.sin(t * 5 + r * 1.7) * 1.6;
+        // 缠绕的一圈锁链
+        ctx.strokeStyle = r % 2 ? "#d8b8ff" : "#8a5ab8";
+        ctx.lineWidth = 2.2;
+        ctx.lineCap = "round";
+        ctx.beginPath();
+        ctx.ellipse(wob * 0.4, yy, 15 - r * 1.5, 5.5, 0, 0.12, Math.PI - 0.12);
+        ctx.stroke();
+        // 链环节点
+        ctx.fillStyle = r % 2 ? "#b48ce8" : "#d8b8ff";
+        for (let k = -2; k <= 2; k++) {
+          ctx.beginPath();
+          ctx.arc(wob * 0.4 + k * 5.2, yy + (Math.abs(k) % 2 ? 2.2 : -2.2), 1.5, 0, TAU);
+          ctx.fill();
+        }
+      }
+      // 末端魂火
+      ctx.globalCompositeOperation = "lighter";
+      const cg = ctx.createRadialGradient(0, -40, 0, 0, -40, 16);
+      cg.addColorStop(0, "rgba(180,140,232,.5)");
+      cg.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = cg;
+      ctx.beginPath();
+      ctx.arc(0, -40, 16, 0, TAU);
+      ctx.fill();
+      ctx.restore();
+    }
+
     ctx.restore();
 
     // 血条（不随角色翻转）
@@ -670,6 +709,13 @@ export class Projectile {
     this.fuse = this.kind === "grenade" ? this.weapon.fuse
       : type === "bananaSmall" ? 0.9 : null;
     this.r = this.kind === "boulder" ? 8 : this.kind === "spike" ? 9 : this.kind === "spear" ? 4 : 6;
+    // 锁魂链：链条一端锚定在施法者手上，钩爪飞出
+    this.owner = null;
+    if (this.kind === "chain") {
+      this.maxLen = this.weapon.chainLen || 460;
+      this.ox = x;
+      this.oy = y;
+    }
     // 修仙武器：飞行时散发灵气粒子
     this.auraT = 0;
     this.auraColor = {
@@ -690,6 +736,10 @@ export class Projectile {
     }
     if (this.kind === "boomerang") {
       this.updateBoomerang(dt);
+      return;
+    }
+    if (this.kind === "chain") {
+      this.updateChain(dt);
       return;
     }
     const w = this.weapon;
@@ -873,6 +923,72 @@ export class Projectile {
     if (this.age > 2.6) this.dead = true;
   }
 
+  /**
+   * 锁魂链：钩爪沿弹道飞出，链条实时从施法者手上延伸出去；
+   * 命中敌人、撞墙/落地或链条被拉到最大长度时，在钩爪末端爆开魂火。
+   */
+  updateChain(dt) {
+    const g = this.game;
+    const w = this.weapon;
+    // 钩爪命中判定（比球状武器判定略大，方便缠住目标）
+    for (const u of g.units) {
+      if (!u.alive || u.team === this.team) continue;
+      if (this.hitsUnit(u, this.x, this.y, 7)) {
+        this.explode();
+        return;
+      }
+    }
+    const speed = Math.hypot(this.vx, this.vy);
+    const steps = clamp(Math.ceil((speed * dt) / 6), 1, 8);
+    const h = dt / steps;
+    for (let i = 0; i < steps && !this.dead; i++) {
+      this.vy += w.gravity * h;
+      this.vx += g.wind * 12 * h;
+      const nx = this.x + this.vx * h;
+      const ny = this.y + this.vy * h;
+      if (nx < -80 || nx > W + 80 || ny > H + 80) {
+        this.explode();
+        return;
+      }
+      if (g.terrain.circleHit(nx, ny, 4)) {
+        this.x = nx;
+        this.y = ny;
+        this.explode();
+        return;
+      }
+      this.x = nx;
+      this.y = ny;
+    }
+    // 链条长度从施法者手上算起，被拉直后在末端爆开
+    let ox = this.ox;
+    let oy = this.oy;
+    if (this.owner && this.owner.alive) {
+      ox = this.owner.x;
+      oy = this.owner.y - 44;
+    }
+    if (Math.hypot(this.x - ox, this.y - oy) >= this.maxLen || this.age > 3.2) {
+      this.explode();
+      return;
+    }
+    this.rotation = Math.atan2(this.vy, this.vx);
+    // 钩爪魂火粒子
+    if (this.auraColor) {
+      this.auraT -= dt;
+      if (this.auraT <= 0) {
+        this.auraT = 0.03;
+        const a = rand(0, TAU);
+        const sp = rand(30, 110);
+        g.particles.push({
+          x: this.x + rand(-4, 4), y: this.y + rand(-4, 4),
+          vx: Math.cos(a) * sp - this.vx * 0.1,
+          vy: Math.sin(a) * sp - this.vy * 0.1,
+          life: rand(0.2, 0.5), maxLife: 0.5, size: rand(1.5, 3),
+          color: this.auraColor, kind: "spark", gravity: -20,
+        });
+      }
+    }
+  }
+
   /** 命中判定：头、躯干、坐骑分开算，避免打头时从身体上方穿过去 */
   hitsUnit(u, px, py, pad = 0) {
     const s = u.scale || 1;
@@ -934,6 +1050,9 @@ export class Projectile {
       }
     } else if (this.kind === "spear") {
       g.explode(this.x, this.y, 22 * (this.blastMul || 1), dmg, this.team, "spear", this.type);
+    } else if (this.kind === "chain") {
+      // 锁魂链：不留火焰残留，只爆紫色魂火
+      g.explode(this.x, this.y, blast, dmg, this.team, "chain", this.type);
     } else {
       g.explode(this.x, this.y, blast, dmg, this.team, this.kind, this.type);
     }
@@ -1761,50 +1880,108 @@ export class Projectile {
       ctx.arc(0, 0, 3, 0, TAU);
       ctx.fill();
     } else if (type === "soulchain") {
-      // 锁魂链：锁链节段 + 紫色魂火 + 链节拖尾
-      ctx.rotate(this.rotation);
-      ctx.globalCompositeOperation = "lighter";
-      // 魂火光晕
-      const cg = ctx.createRadialGradient(0, 0, 0, 0, 0, 22);
-      cg.addColorStop(0, "rgba(180,140,232,.5)");
-      cg.addColorStop(0.5, "rgba(140,100,200,.18)");
-      cg.addColorStop(1, "rgba(0,0,0,0)");
-      ctx.fillStyle = cg;
-      ctx.beginPath();
-      ctx.arc(0, 0, 22, 0, TAU);
-      ctx.fill();
-      // 锁链拖尾（节段状）
-      for (let i = 0; i < 5; i++) {
-        const a = 0.3 - i * 0.06;
-        ctx.strokeStyle = `rgba(180,140,232,${a})`;
-        ctx.lineWidth = 3 - i * 0.4;
-        ctx.beginPath();
-        ctx.moveTo(-6 - i * 5, 0);
-        ctx.quadraticCurveTo(-14 - i * 6, rand(-4, 4), -22 - i * 7, rand(-5, 5));
-        ctx.stroke();
+      // 锁魂链：从施法者手上甩出的一节节链环，末端是鬼火钩爪
+      let ox = this.ox;
+      let oy = this.oy;
+      if (this.owner && this.owner.alive) {
+        ox = this.owner.x;
+        oy = this.owner.y - 44;
       }
-      ctx.globalCompositeOperation = "source-over";
-      // 链环本体
-      ctx.strokeStyle = "#b48ce8";
-      ctx.lineWidth = 2.4;
-      ctx.beginPath();
-      ctx.arc(0, 0, 8, 0, TAU);
-      ctx.stroke();
-      // 链刺
+      const ex = this.x;
+      const ey = this.y;
+      const dist = Math.hypot(ex - ox, ey - oy);
+      if (dist > 6) {
+        const sag = Math.min(14, dist * 0.07);
+        const cx = (ox + ex) / 2;
+        const cy = (oy + ey) / 2 + sag;
+        const qp = (t) => {
+          const u = 1 - t;
+          return {
+            x: u * u * ox + 2 * u * t * cx + t * t * ex,
+            y: u * u * oy + 2 * u * t * cy + t * t * ey,
+          };
+        };
+        const segs = Math.max(3, Math.min(20, Math.round(dist / 13)));
+        ctx.save();
+        ctx.lineCap = "round";
+        // 链节之间的连接段
+        for (let i = 0; i < segs; i++) {
+          const p0 = qp(i / segs);
+          const p1 = qp((i + 1) / segs);
+          ctx.strokeStyle = "rgba(140,100,200,.45)";
+          ctx.lineWidth = 1.4;
+          ctx.beginPath();
+          ctx.moveTo(p0.x, p0.y);
+          ctx.lineTo(p1.x, p1.y);
+          ctx.stroke();
+        }
+        // 交替方向的椭圆链环（一环扣一环）
+        for (let i = 0; i <= segs; i++) {
+          const p = qp(i / segs);
+          const pn = qp(Math.min(1, (i + 0.5) / segs));
+          const ang = Math.atan2(pn.y - p.y, pn.x - p.x);
+          ctx.save();
+          ctx.translate(p.x, p.y);
+          ctx.rotate(ang + (i % 2 ? Math.PI / 2 : 0));
+          ctx.strokeStyle = i % 2 ? "#b48ce8" : "#d8b8ff";
+          ctx.lineWidth = 2.1;
+          ctx.beginPath();
+          ctx.ellipse(0, 0, 5.6, 3.2, 0, 0, TAU);
+          ctx.stroke();
+          ctx.restore();
+        }
+        ctx.restore();
+      }
+      // 手端固定环（链条从施法者手上长出）
+      ctx.save();
+      ctx.translate(ox, oy);
       ctx.strokeStyle = "#8a5ab8";
-      ctx.lineWidth = 1.6;
-      for (let i = 0; i < 6; i++) {
-        const a = (i / 6) * TAU + this.age * 4;
-        ctx.beginPath();
-        ctx.moveTo(Math.cos(a) * 6, Math.sin(a) * 6);
-        ctx.lineTo(Math.cos(a) * 11, Math.sin(a) * 11);
-        ctx.stroke();
-      }
-      // 魂火核心
-      ctx.fillStyle = "#d8b8ff";
+      ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(0, 0, 3, 0, TAU);
+      ctx.arc(0, 0, 4, 0, TAU);
+      ctx.stroke();
+      ctx.restore();
+      // 末端鬼火钩爪
+      ctx.save();
+      ctx.translate(ex, ey);
+      ctx.rotate(this.rotation + Math.sin(this.age * 9) * 0.25);
+      ctx.globalCompositeOperation = "lighter";
+      const hg = ctx.createRadialGradient(0, 0, 0, 0, 0, 20);
+      hg.addColorStop(0, "rgba(180,140,232,.55)");
+      hg.addColorStop(0.5, "rgba(140,100,200,.18)");
+      hg.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = hg;
+      ctx.beginPath();
+      ctx.arc(0, 0, 20, 0, TAU);
       ctx.fill();
+      ctx.globalCompositeOperation = "source-over";
+      // 锚形双钩
+      ctx.strokeStyle = "#e0ccff";
+      ctx.lineWidth = 2.6;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(-3, 0);
+      ctx.lineTo(8, 0);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(8, -4.5, 4.5, Math.PI * 0.15, Math.PI * 1.05);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(8, 4.5, 4.5, -Math.PI * 1.05, -Math.PI * 0.15);
+      ctx.stroke();
+      // 魂火核心
+      ctx.fillStyle = "#b48ce8";
+      ctx.shadowColor = "#b48ce8";
+      ctx.shadowBlur = 12;
+      ctx.beginPath();
+      ctx.arc(0, 0, 4.5, 0, TAU);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = "#f0e0ff";
+      ctx.beginPath();
+      ctx.arc(0, 0, 2, 0, TAU);
+      ctx.fill();
+      ctx.restore();
     } else if (type === "teleport") {
       // 瞬移：蓝色空间裂缝 + 粒子流
       ctx.globalCompositeOperation = "lighter";
