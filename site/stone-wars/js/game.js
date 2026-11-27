@@ -57,6 +57,8 @@ class StoneWars {
     this.fires = [];
     // 万剑归宗：剑雨中的飞剑列表
     this.swordRain = [];
+    // 补天术：时空锚点（下一次敌方攻击后回溯）
+    this.mendRewind = null;
     this.weaponIds = [...ERA_WEAPONS.stone];
     this.selectedWeapon = "spear";
     this.ammo = {};
@@ -808,37 +810,84 @@ if (u) u.jump(this._moveDir());
       }
       this.sfx.shoot("teleport");
     } else if (w.buffType === "mend") {
-      // 补天术：全体友军恢复至上回合血量，并修复被破坏的地形
+      // 补天术：锚定本回合的时空。下一次敌方攻击结算后，
+      // 无论场景被毁坏、队友或自己阵亡，都回溯恢复到此前的状态与场景。
+      this.mendRewind = {
+        turnNo: this.turnNo,
+        activePlayerIndex: this.activePlayerIndex,
+        terrain: this.terrain ? this.terrain.snapshot() : null,
+        units: this.units.map((u) => ({
+          u,
+          x: u.x, y: u.y, vx: u.vx, vy: u.vy,
+          hp: u.hp, maxHp: u.maxHp, alive: u.alive, deathT: u.deathT,
+          onGround: u.onGround, facing: u.facing,
+          shield: u.shield, shieldT: u.shieldT,
+          slowT: u.slowT, slowMul: u.slowMul, slowSrc: u.slowSrc,
+          stunT: u.stunT, flash: u.flash, moveSpeed: u.moveSpeed,
+          walkPhase: u.walkPhase,
+          poisonT: u.poisonT, poisonDps: u.poisonDps,
+          regenT: u.regenT, regenRate: u.regenRate,
+        })),
+      };
+      // 锚定特效：青绿光柱 + 符文光环
       for (const u of allies) {
-        if (!u.alive) continue;
-        const healed = Math.max(0, u.prevHp - u.hp);
-        u.hp = Math.min(u.maxHp, u.prevHp);
-        this.spawnParticles(u.x, u.y - 40, 14, "#a8ffd8", "spark");
-        this.addText(u.x, u.y - 80, healed > 0 ? `补天 +${Math.round(healed)}` : "补天", "#a8ffd8");
+        this.spawnParticles(u.x, u.y - 40, 12, "#a8ffd8", "spark");
+        this.addText(u.x, u.y - 80, "补天锚定", "#a8ffd8");
       }
-      // 恢复地形到上一回合快照
-      if (this.terrainSnapshot) {
-        this.terrain.restore(this.terrainSnapshot);
-        this.terrainDirty = true;
-        // 地形恢复时的绿色光柱特效
-        for (let i = 0; i < 20; i++) {
-          const a = rand(0, TAU);
-          const r = rand(40, 200);
-          this.particles.push({
-            x: caster.x + Math.cos(a) * r, y: caster.y - 40 + Math.sin(a) * r * 0.4,
-            vx: Math.cos(a) * 40, vy: rand(-120, -40),
-            life: rand(0.5, 1.0), maxLife: 1.0, size: rand(2, 5),
-            color: "#a8ffd8", kind: "spark", gravity: -60,
-          });
-        }
-        this.rings.push({ x: caster.x, y: caster.y - 40, r: 20, max: 260, t: 0, life: 0.6, color: "rgba(168,255,216,.6)" });
-      }
+      this.rings.push({ x: caster.x, y: caster.y - 40, r: 20, max: 280, t: 0, life: 0.7, color: "rgba(168,255,216,.6)" });
+      this.screenFlash = Math.max(this.screenFlash, 0.18);
+      this.flashColor = "#a8ffd8";
       this.sfx.shoot("mend");
-      this._showBanner("补天术", "全体友军恢复至上回合血量 · 地形修复", true);
+      this._showBanner("补天术 · 时空锚定", "下一次敌方攻击后回溯到本回合的状态与场景", true);
     }
     this._refreshWeaponBar();
     this._refreshFireButton();
     this._updateHUD();
+  }
+
+  /**
+   * 补天术：回溯到锚定回合的状态。
+   * 复活阵亡单位、恢复血量/位置/状态，并还原地形场景。
+   */
+  _rewindMend() {
+    const snap = this.mendRewind;
+    if (!snap) return false;
+    this.mendRewind = null;
+    for (const s of snap.units) {
+      Object.assign(s.u, {
+        x: s.x, y: s.y, vx: s.vx, vy: s.vy,
+        hp: s.hp, maxHp: s.maxHp, alive: s.alive, deathT: s.deathT,
+        onGround: s.onGround, facing: s.facing,
+        shield: s.shield, shieldT: s.shieldT,
+        slowT: s.slowT, slowMul: s.slowMul, slowSrc: s.slowSrc,
+        stunT: s.stunT, flash: s.flash, moveSpeed: s.moveSpeed,
+        walkPhase: s.walkPhase,
+        poisonT: s.poisonT, poisonDps: s.poisonDps,
+        regenT: s.regenT, regenRate: s.regenRate,
+      });
+      if (!this.units.includes(s.u)) this.units.push(s.u);
+      if (s.u.team === 1 && !this.enemies.includes(s.u)) this.enemies.push(s.u);
+      if (s.u.alive) this.spawnParticles(s.u.x, s.u.y - 40, 10, "#a8ffd8", "spark");
+    }
+    if (this.terrain && snap.terrain) {
+      this.terrain.restore(snap.terrain);
+      this.terrainDirty = true;
+    }
+    // 清掉飞行中的弹药与火焰，避免回溯后继续造成残留伤害
+    this.projectiles.length = 0;
+    this.fires.length = 0;
+    if (this.players.length) {
+      this.activePlayerIndex = clamp(snap.activePlayerIndex, 0, this.players.length - 1);
+    }
+    const px = this.players[this.activePlayerIndex] ? this.players[this.activePlayerIndex].x : W / 2;
+    const py = this.players[this.activePlayerIndex] ? this.players[this.activePlayerIndex].y - 40 : H / 2;
+    this.rings.push({ x: px, y: py, r: 30, max: 340, t: 0, life: 0.8, color: "rgba(168,255,216,.7)" });
+    this.screenFlash = Math.max(this.screenFlash, 0.32);
+    this.flashColor = "#a8ffd8";
+    this.sfx.shoot("mend");
+    this._showBanner("补天术 · 时光回溯", "已恢复到施放补天术时的状态与场景", true);
+    this._updateHUD();
+    return true;
   }
 
   // ------------------------------------------------------------ 难度 / 实时模式
@@ -931,6 +980,8 @@ if (u) u.jump(this._moveDir());
     // 补天术快照：记录本回合开始时的血量与地形，供补天术回溯
     for (const u of this.units) u.prevHp = u.hp;
     this.terrainSnapshot = this.terrain ? this.terrain.snapshot() : null;
+    // 补天术锚点若在上个敌方阶段未被消耗（敌方未出手），则失效
+    this.mendRewind = null;
     this._activePlayer();
     if ((this.ammo[this.selectedWeapon] || 0) <= 0) this.selectedWeapon = this._fallbackWeapon();
     this._updateHUD();
@@ -1347,9 +1398,11 @@ if (u) u.jump(this._moveDir());
   }
 
   // ------------------------------------------------------------ 弹道结算
-_finishShot() {
-if (this.phase !== "flying") return;
-if (!this.enemies.some((u) => u.alive)) {
+  _finishShot() {
+    if (this.phase !== "flying") return;
+    // 补天术：下一次敌方攻击结算后，回溯到锚定回合
+    if (this.turnTeam === 1 && this.mendRewind) this._rewindMend();
+    if (!this.enemies.some((u) => u.alive)) {
 if (this.level.endless) { this._updateEndless(0); return; }
 this.finish(true); return;
 }
@@ -1438,6 +1491,7 @@ if (!this.players.some((u) => u.alive)) { this.finish(false, "族人全部倒下
       }
     }
     if (!this.players.some((p) => p.alive)) {
+      if (this._rewindMend()) return;
       this.finish(false, "族人全部倒下");
       return;
     }
@@ -2131,7 +2185,11 @@ if (!this.players.some((u) => u.alive)) { this.finish(false, "族人全部倒下
 
   _checkEndState() {
     if (this.phase === "over" || this.phase === "menu") return;
-    if (!this.players.some((u) => u.alive)) { this.finish(false, "族人全部倒下"); return; }
+    if (!this.players.some((u) => u.alive)) {
+      if (this._rewindMend()) return;
+      this.finish(false, "族人全部倒下");
+      return;
+    }
     if (!this.enemies.some((u) => u.alive)) {
       if (this.level.endless) { this._updateEndless(0); return; }
       this.finish(true);

@@ -255,10 +255,10 @@ export const WEAPONS = {
     color: "#ff6a9a", speed: 600, gravity: 800, damage: 45, blast: 80,
     cooldown: 4.5, icon: "formation", realm: "渡劫",
   },
-  // 渡劫期：补天术（群体回血 + 场景恢复）
+  // 渡劫期：补天术（时空锚定：下一次敌方攻击后回溯到本回合状态）
   mend: {
     id: "mend", name: "补天术", short: "补", era: "cultivation", kind: "buff",
-    desc: "补天造人，全体友军恢复至上回合血量，并修复被破坏的地形",
+    desc: "锚定本回合时空；下一次敌方攻击后（无论场景毁坏或队友阵亡）回溯恢复",
     color: "#a8ffd8", speed: 0, gravity: 0, damage: 0, blast: 0,
     cooldown: 14, icon: "mend", realm: "渡劫", buffType: "mend",
   },
