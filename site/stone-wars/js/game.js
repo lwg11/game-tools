@@ -17,8 +17,11 @@ import { Sfx } from "./sfx.js";
 import { Projectile, Unit } from "./entities.js";
 import { Terrain, mulberry32 } from "./terrain.js";
 import { preventBrowserGestures } from "../../assets/js/gestures.js";
+import { mountCultivation } from "./cultivation.js";
+import { weaponIcon } from "./icons.js";
 
 preventBrowserGestures();
+
 
 // ---------------------------------------------------------------- 游戏主体
 class StoneWars {
@@ -69,6 +72,8 @@ class StoneWars {
     this.selectedWeapon = "spear";
     this.ammo = {};
     this.weaponReadyAt = {};
+    // 神通回合冷却：weaponId -> 可再次使用的回合号（turnNo）
+    this.weaponTurnLock = {};
     this.weaponBarExpanded = false;
     this.endlessWave = 0;
     this.endlessWaveTimer = 0;
@@ -430,6 +435,7 @@ if (u) u.jump(this._moveDir());
     this.activeEnemyIndex = 0;
     this.lastEnemyTarget = null;
     this.weaponReadyAt = {};
+    this.weaponTurnLock = {};
     this.windTimer = rand(6, 9);
     this.endlessWave = 0;
     this.endlessWaveTimer = this.level.endless ? 3 : 0;
@@ -695,12 +701,21 @@ if (u) u.jump(this._moveDir());
       toast(`${w.name}冷却中`);
       return false;
     }
+    // 高威神通：使用后进入回合冷却（金手指无冷却/实时模式除外）
+    if (this._weaponTurnLocked(id)) {
+      toast(`${w.name}需 ${this.weaponTurnLock[id] - this.turnNo} 回合后才能再用`);
+      return false;
+    }
     if (this.ammo[id] !== Infinity && !this.cheatInfiniteAmmo && !crazy) {
       this.ammo[id] = Math.max(0, this.ammo[id] - 1);
     }
     // 疯狂模式：射速翻倍、双发齐射、伤害与爆炸范围暴涨；金手指可无冷却
     const cdMul = crazy ? 0.42 : 1;
     this.weaponReadyAt[id] = this.time + (this.cheatNoCooldown ? 0 : (w.cooldown || 1) * cdMul);
+    // 神通回合冷却：用完后 N 个回合内不可再用（金手指无冷却/实时模式除外）
+    if (w.turnCooldown && !this.cheatNoCooldown && !this.cheatRealtime) {
+      this.weaponTurnLock[id] = this.turnNo + w.turnCooldown + 1;
+    }
     // buff 类技能：直接生效，不发射投射物
     if (w.kind === "buff") {
       this._applyBuff(w, u);
@@ -777,6 +792,17 @@ if (u) u.jump(this._moveDir());
 
   _fallbackWeapon() {
     return this.weaponIds.find((k) => (this.ammo[k] || 0) > 0) || this.weaponIds[0] || "spear";
+  }
+
+  /** 神通回合冷却判定：使用后 N 个回合内不可再用（金手指无冷却/实时模式豁免） */
+  _weaponTurnLocked(id) {
+    return !this.cheatNoCooldown && !this.cheatRealtime && this.turnNo < (this.weaponTurnLock[id] || 0);
+  }
+
+  /** 神通剩余回合冷却（UI 用），0 表示可用 */
+  _weaponTurnCooldown(id) {
+    if (this.cheatNoCooldown || this.cheatRealtime) return 0;
+    return Math.max(0, (this.weaponTurnLock[id] || 0) - this.turnNo);
   }
 
   /** 应用 buff 类技能效果 */
@@ -1156,6 +1182,10 @@ if (u) u.jump(this._moveDir());
     const speed = weapon.speed * (0.5 + 0.5 * power);
     const ox = u.x + Math.cos(angle) * 26;
     const oy = u.y - 44 + Math.sin(angle) * 26;
+    // 高威神通对敌方同样进入回合冷却
+    if (weapon.turnCooldown) {
+      this.weaponTurnLock[weapon.id] = this.turnNo + weapon.turnCooldown + 1;
+    }
     const ep = new Projectile(this, weapon.id, ox, oy, Math.cos(angle) * speed, Math.sin(angle) * speed, 1);
     ep.owner = u;
     this.projectiles.push(ep);
@@ -1172,7 +1202,16 @@ if (u) u.jump(this._moveDir());
     this._updateHUD();
   }
 
+  /** AI 选武器：避开处于回合冷却的神通（双方同规则，公平） */
   _chooseEnemyWeapon(u, target) {
+    for (let i = 0; i < 10; i++) {
+      const w = this._chooseEnemyWeaponRaw(u, target);
+      if (!this.weaponTurnLock[w.id] || this.turnNo >= this.weaponTurnLock[w.id]) return w;
+    }
+    return WEAPONS.sword;
+  }
+
+  _chooseEnemyWeaponRaw(u, target) {
     const dist = Math.abs(target.x - u.x);
     const lv = this.level.endless ? 20 : this.level.id;
     const era = this.era.id;
@@ -1724,491 +1763,6 @@ if (!this.players.some((u) => u.alive)) { this.finish(false, "族人全部倒下
   }
 
   // ------------------------------------------------------------ 爆炸 / 伤害
-  /**
-   * 万剑归宗（嬴政大招）：飞剑从施法者身体飞出，呈抛物线剑雨打击目标范围。
-   * 每把剑独立飞行、穿透伤害，落地后插在地上过一会消失。
-   */
-  spawnSwordRain(x, y, team, damage, blast, weaponType) {
-    const caster = team === 0 ? this._activePlayer() : this._activeEnemy();
-    // 起始位置：施法者身体中心
-    const srcX = caster ? caster.x : x;
-    const srcY = caster ? caster.y - 30 : y - 60;
-    const count = 15;
-    // 重力加速度（与 _updateSwordRain 一致）
-    const G = 1400;
-    for (let i = 0; i < count; i++) {
-      // 每把剑的落点：目标区域内随机
-      const spread = 120;
-      const tx = x + rand(-spread, spread);
-      const ty = y + rand(-40, 60);
-      // 飞行时间：1.2~2.0 秒（依次飞出，形成剑雨层次）
-      const flightTime = 1.2 + (i / count) * 0.8 + rand(0, 0.2);
-      // 根据抛物线公式计算初速度：
-      // x(t) = srcX + vx * t  =>  vx = (tx - srcX) / flightTime
-      // y(t) = srcY + vy * t + 0.5 * G * t^2  =>  vy = (ty - srcY - 0.5 * G * flightTime^2) / flightTime
-      const vx = (tx - srcX) / flightTime;
-      const vy = (ty - srcY - 0.5 * G * flightTime * flightTime) / flightTime;
-      // 延迟：依次飞出，形成剑雨层次
-      const delay = i * 0.08 + rand(0, 0.05);
-      this.swordRain.push({
-        x: srcX, y: srcY,
-        sx: srcX, sy: srcY,
-        tx, ty,
-        vx, vy,
-        delay,
-        age: 0,
-        damage,
-        blast: Math.max(60, blast),
-        team,
-        weaponType,
-        hitSet: new Set(),
-        stuck: false,      // 是否已插地
-        stuckT: 0,         // 插地时间
-        stuckAngle: 0,     // 插地角度
-      });
-    }
-    // 启动特效：施法者处剑光冲天
-    if (caster) {
-      this.rings.push({ x: caster.x, y: caster.y - 30, r: 8, max: 100, t: 0, life: 0.35, color: "rgba(168,216,255,.7)" });
-      this.spawnParticles(caster.x, caster.y - 30, 24, "#a8d8ff", "spark");
-    }
-    this.sfx.shoot("swordarray");
-  }
-
-  /** 更新剑雨中的飞剑：穿透伤害 + 落地插地 */
-  _updateSwordRain(dt) {
-    if (!this.swordRain.length) return;
-    for (let i = this.swordRain.length - 1; i >= 0; i--) {
-      const s = this.swordRain[i];
-      // 已插地：计时消失
-      if (s.stuck) {
-        s.stuckT += dt;
-        if (s.stuckT > 1.6) this.swordRain.splice(i, 1);
-        continue;
-      }
-      if (s.delay > 0) { s.delay -= dt; continue; }
-      s.age += dt;
-      // 重力加速下落
-      s.vy += 1400 * dt;
-      // 子步进防止穿透
-      const steps = clamp(Math.ceil(Math.hypot(s.vx, s.vy) * dt / 6), 1, 8);
-      let stuck = false;
-      for (let step = 0; step < steps && !stuck; step++) {
-        const h = dt / steps;
-        s.x += s.vx * h;
-        s.y += s.vy * h;
-        // 穿透伤害：每把剑可穿透多个敌人
-        for (const u of this.units) {
-          if (!u.alive || u.team === s.team || s.hitSet.has(u)) continue;
-          const dx = s.x - u.x;
-          const dy = s.y - (u.y - 28);
-          const rr = 20 * (u.scale || 1);
-          if (dx * dx + dy * dy < rr * rr) {
-            s.hitSet.add(u);
-            u.takeDamage(s.damage, s.team);
-            // 穿透剑气粒子
-            this.spawnParticles(s.x, s.y, 6, "#a8d8ff", "spark");
-          }
-        }
-        // 命中地形：插地
-        if (this.terrain && this.terrain.circleHit(s.x, s.y, 4)) {
-          s.stuck = true;
-          s.stuckT = 0;
-          s.stuckAngle = Math.atan2(s.vy, s.vx);
-          // 插地冲击波
-          this.rings.push({ x: s.x, y: s.y, r: 4, max: 30, t: 0, life: 0.2, color: "rgba(168,216,255,.6)" });
-          this.spawnParticles(s.x, s.y, 8, "#a8d8ff", "spark");
-          this.terrain.carve(s.x, s.y, s.blast * 0.3, s.damage * 0.5);
-          this.terrainDirty = true;
-          stuck = true;
-          break;
-        }
-      }
-      if (stuck) continue;
-      // 剑尾灵气粒子
-      if (Math.random() < 0.7) {
-        this.particles.push({
-          x: s.x + rand(-2, 2), y: s.y - 8 + rand(-2, 2),
-          vx: rand(-10, 10), vy: rand(-30, -5),
-          life: rand(0.15, 0.35), maxLife: 0.35, size: rand(1.5, 3),
-          color: "#a8d8ff", kind: "spark", gravity: -20,
-        });
-      }
-      if (s.age > 5 || s.y > H + 60 || s.x < -100 || s.x > W + 100) {
-        this.swordRain.splice(i, 1);
-      }
-    }
-  }
-
-  /**
-   * 范围伤害与状态效果（爆炸 / 天雷 / 剑阵 / 毒雾共用）。
-   * opts.slow / opts.poison 为状态配置，opts.knock 控制是否击飞。
-   */
-  _damageUnitsInRadius(x, y, radius, damage, team, opts = {}) {
-    const diff = this._difficulty();
-    for (const u of this.units) {
-      if (!u.alive) continue;
-      // 以单位命中胶囊上离爆点最近的位置计算距离，爆头也能打满伤害
-      const s = u.scale || 1;
-      const topY = u.y - (u.mount ? 76 : 63) * s;
-      const cy = clamp(y, topY, u.y - 6);
-      const dx = u.x - x;
-      const dy = cy - y;
-      const d = Math.hypot(dx, dy);
-      const reach = radius + 16;
-      if (d >= reach) continue;
-      const f = 1 - d / reach;
-      let dmg = Math.max(4, Math.round(damage * (0.35 + 0.65 * f)));
-      if (team === 1 && u.team === 0) dmg = Math.round(dmg * diff.dmg);
-      u.takeDamage(dmg, team);
-      if (u.alive && opts.knock !== false) {
-        u.vy = -Math.min(360, 70 + f * damage * 2.4);
-        u.onGround = false;
-        u.vx += Math.sign(dx || 1) * f * 60;
-      }
-      if (opts.slow && u.alive) {
-        u.slowT = Math.max(u.slowT, opts.slow.dur);
-        u.slowMul = opts.slow.mul;
-        if (opts.slowSrc) u.slowSrc = opts.slowSrc;
-        this.addText(u.x, u.y - 92, "减速", "#b48ce8");
-      }
-      if (opts.poison && u.alive) {
-        u.poisonT = Math.max(u.poisonT, opts.poison.dur);
-        u.poisonDps = opts.poison.dps;
-        this.addText(u.x, u.y - 92, "中毒", "#8aff6a");
-      }
-    }
-  }
-
-  // ------------------------------------------------------------ 天雷灭世：天降雷霆
-  /** 引雷子落点处，大范围内降下多道雷霆（不摧毁地形） */
-  spawnSkyLightning(x, y, team, damage, blast) {
-    if (!this.terrain) return;
-    const R = Math.max(120, blast || 160);
-    const hitSet = new Set();
-    const cx = clamp(x, 30, W - 30);
-    const groundAt = (px) => this.terrain.surfaceBelow(px, 0) ?? (H - 60);
-    // 中心主雷
-    this.skyBolts.push({
-      tx: cx, ty: groundAt(cx), delay: 0, t: 0, dur: 0.32,
-      struck: false, main: true, segs: null,
-      team, damage, radius: Math.max(90, R * 0.62), hitSet,
-    });
-    // 周围随机落雷，形成大范围雷暴
-    const count = 14;
-    for (let i = 0; i < count; i++) {
-      const tx = clamp(cx + rand(-R, R) * rand(0.25, 1), 20, W - 20);
-      this.skyBolts.push({
-        tx, ty: groundAt(tx),
-        delay: 0.06 + i * 0.05 + rand(0, 0.05),
-        t: 0, dur: rand(0.16, 0.24),
-        struck: false, main: false, segs: null,
-        team, damage, radius: Math.max(56, R * 0.34), hitSet,
-      });
-    }
-    this.shake = Math.max(this.shake, 14);
-    this.screenFlash = Math.max(this.screenFlash, 0.4);
-    this.flashColor = "#fff8c8";
-    this.sfx.shoot("skylightning");
-  }
-
-  /** 更新天雷：到点劈落，落点范围伤害 */
-  _updateSkyBolts(dt) {
-    if (!this.skyBolts.length) return;
-    for (let i = this.skyBolts.length - 1; i >= 0; i--) {
-      const b = this.skyBolts[i];
-      b.t += dt;
-      if (!b.struck && b.t >= b.delay) {
-        b.struck = true;
-        b.segs = this._makeBoltSegments(b.tx, b.ty, b.main ? 26 : 14);
-        this.rings.push({ x: b.tx, y: b.ty, r: 6, max: b.radius * 1.6, t: 0, life: 0.22, color: "rgba(255,248,200,.8)" });
-        this.spawnParticles(b.tx, b.ty - 4, b.main ? 22 : 10, "#fff8c8", "spark");
-        this._damageUnitsInRadius(b.tx, b.ty, b.radius, b.damage * (b.main ? 1 : 0.42), b.team, {});
-        this.shake = Math.max(this.shake, b.main ? 10 : 5);
-        if (b.main) {
-          this.screenFlash = Math.max(this.screenFlash, 0.36);
-          this.flashColor = "#ffffff";
-        }
-      }
-      if (b.t > b.delay + b.dur + 0.12) this.skyBolts.splice(i, 1);
-    }
-  }
-
-  /** 生成一道竖直闪电的锯齿折线（顶部在画面外） */
-  _makeBoltSegments(tx, ty, jitter = 14) {
-    const segs = [];
-    const top = -30;
-    const n = Math.max(4, Math.floor((ty - top) / 46));
-    for (let i = 0; i <= n; i++) {
-      const yy = top + ((ty - top) * i) / n;
-      const xx = i === 0 || i === n ? tx : tx + rand(-jitter, jitter);
-      segs.push({ x: xx, y: yy });
-    }
-    return segs;
-  }
-
-  /** 绘制天雷：高亮闪电柱 + 落点辉光 */
-  _drawSkyBolts(ctx) {
-    if (!this.skyBolts.length) return;
-    ctx.save();
-    ctx.globalCompositeOperation = "lighter";
-    for (const b of this.skyBolts) {
-      if (!b.struck || !b.segs) continue;
-      const k = clamp(1 - (b.t - b.delay) / b.dur, 0, 1);
-      const layers = [
-        [b.main ? 7 : 4.5, `rgba(255,240,160,${0.35 * k})`],
-        [b.main ? 3 : 2, `rgba(255,255,255,${0.9 * k})`],
-      ];
-      for (const [lw, col] of layers) {
-        ctx.strokeStyle = col;
-        ctx.lineWidth = lw;
-        ctx.lineJoin = "round";
-        ctx.beginPath();
-        b.segs.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
-        ctx.stroke();
-      }
-      const g = ctx.createRadialGradient(b.tx, b.ty, 0, b.tx, b.ty, b.radius);
-      g.addColorStop(0, `rgba(255,255,230,${0.5 * k})`);
-      g.addColorStop(1, "rgba(255,248,200,0)");
-      ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.arc(b.tx, b.ty, b.radius, 0, TAU);
-      ctx.fill();
-    }
-    ctx.restore();
-  }
-
-  // ------------------------------------------------------------ 诛仙阵：苍穹剑雨
-  /**
-   * 阵图落点处：一柄巨剑从天而降穿透建筑直插地面并缓缓消散，
-   * 周围小剑环绕落下，撞停在建筑表面（不穿透）。
-   */
-  spawnSwordFormation(x, y, team, damage, blast) {
-    if (!this.terrain) return;
-    const R = Math.max(90, (blast || 80) * 0.9);
-    const cx = clamp(x, 40, W - 40);
-    const groundAt = (px) => this.terrain.surfaceBelow(px, 0) ?? (H - 60);
-    const hitSet = new Set();
-    // 主巨剑：自苍穹最高处直插而下，穿透一切建筑直到地面
-    this.swordFormation.push({
-      big: true, scale: 2.8,
-      tx: cx, x: cx, y: -180,
-      vy: 2100, team, damage, blast,
-      gy: groundAt(cx), stuck: false, stuckT: 0,
-      fade: 1.8, hitSet, trail: [],
-    });
-    // 环绕小剑
-    const count = 8;
-    for (let i = 0; i < count; i++) {
-      const a = (i / count) * TAU;
-      const tx = clamp(cx + Math.cos(a) * R * rand(0.5, 1), 24, W - 24);
-      this.swordFormation.push({
-        big: false, scale: rand(0.85, 1.15),
-        tx, x: tx, y: -140 - rand(0, 160),
-        vy: rand(1500, 1900), team, damage, blast,
-        gy: groundAt(tx), stuck: false, stuckT: 0,
-        fade: rand(0.9, 1.3), hitSet, trail: [],
-      });
-    }
-    this.shake = Math.max(this.shake, 8);
-    this.sfx.shoot("formation");
-  }
-
-  /** 更新诛仙剑阵：巨剑穿建筑插地，小剑停在建筑表面，落地后慢慢消散 */
-  _updateSwordFormation(dt) {
-    if (!this.swordFormation.length) return;
-    for (let i = this.swordFormation.length - 1; i >= 0; i--) {
-      const s = this.swordFormation[i];
-      if (s.stuck) {
-        s.stuckT += dt;
-        if (s.stuckT > s.fade) this.swordFormation.splice(i, 1);
-        continue;
-      }
-      s.y += s.vy * dt;
-      s.trail.push({ x: s.x, y: s.y });
-      if (s.trail.length > 10) s.trail.shift();
-      if (s.big) {
-        // 巨剑：穿透建筑，贯穿伤害沿途敌人
-        for (const u of this.units) {
-          if (!u.alive || u.team === s.team || s.hitSet.has(u)) continue;
-          const dx = s.x - u.x;
-          const dy = s.y - (u.y - 30);
-          if (dx * dx + dy * dy < 44 * 44) {
-            s.hitSet.add(u);
-            u.takeDamage(s.damage * 0.8, s.team);
-            this.spawnParticles(s.x, s.y, 8, "#ff6a9a", "spark");
-          }
-        }
-        if (s.y >= s.gy - 10) {
-          s.y = s.gy - 10;
-          s.stuck = true;
-          s.stuckT = 0;
-          this.rings.push({ x: s.x, y: s.gy, r: 10, max: s.blast * 1.8, t: 0, life: 0.4, color: "rgba(255,106,154,.75)" });
-          this.spawnParticles(s.x, s.gy, 26, "#ff6a9a", "spark");
-          this.spawnParticles(s.x, s.gy, 12, "#ffd8e8", "fire");
-          this._damageUnitsInRadius(s.x, s.gy, s.blast, s.damage * 1.1, s.team, {});
-          this.shake = Math.max(this.shake, 12);
-          this.screenFlash = Math.max(this.screenFlash, 0.25);
-          this.flashColor = "#ff6a9a";
-        }
-      } else if (this.terrain.circleHit(s.x, s.y, 5) || s.y >= s.gy - 4) {
-        // 小剑：撞停在建筑/平台表面，不穿透
-        s.y = Math.min(s.y, s.gy - 4);
-        s.stuck = true;
-        s.stuckT = 0;
-        this.rings.push({ x: s.x, y: s.y, r: 4, max: s.blast * 0.8, t: 0, life: 0.25, color: "rgba(255,106,154,.6)" });
-        this.spawnParticles(s.x, s.y, 8, "#ff6a9a", "spark");
-        this._damageUnitsInRadius(s.x, s.y + 10, s.blast * 0.55, s.damage * 0.55, s.team, {});
-      }
-    }
-  }
-
-  /** 绘制诛仙剑阵：巨剑大且亮、小剑环绕，插地后淡出消散 */
-  _drawSwordFormation(ctx) {
-    if (!this.swordFormation.length) return;
-    for (const s of this.swordFormation) {
-      ctx.save();
-      ctx.translate(s.x, s.y);
-      let alpha = 1;
-      if (s.stuck) alpha = clamp(1 - s.stuckT / s.fade, 0, 1);
-      ctx.globalAlpha = alpha;
-      if (s.big) {
-        ctx.shadowColor = "#ff6a9a";
-        ctx.shadowBlur = 26;
-      }
-      // 剑尖朝下
-      ctx.rotate(Math.PI / 2);
-      this._drawSwordShape(ctx, s.scale);
-      ctx.restore();
-      if (!s.stuck && s.trail.length > 1) {
-        ctx.save();
-        ctx.globalCompositeOperation = "lighter";
-        ctx.strokeStyle = s.big ? "rgba(255,106,154,.5)" : "rgba(255,150,180,.35)";
-        ctx.lineWidth = s.big ? 5 : 2.5;
-        ctx.beginPath();
-        s.trail.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
-        ctx.stroke();
-        ctx.restore();
-      }
-    }
-  }
-
-  // ------------------------------------------------------------ 毒雾术：浓雾爆发
-  /** 毒雾爆发：一片浓雾，只伤害单位、不破坏建筑与地形；中毒持续一个回合 */
-  poisonCloudBurst(x, y, radius, damage, team) {
-    if (!this.terrain) return;
-    const R = Math.max(60, radius || 80);
-    // 浓雾气体（大面积半透明绿雾，缓慢扩散上升）
-    for (let i = 0; i < 26; i++) {
-      const a = rand(0, TAU);
-      const rr = rand(0, R * 0.9);
-      this.particles.push({
-        x: x + Math.cos(a) * rr, y: y + Math.sin(a) * rr * 0.45,
-        vx: rand(-18, 18), vy: rand(-26, -6),
-        life: rand(1.2, 2.4), maxLife: 2.4, size: rand(16, 34),
-        color: "gas", kind: "gas", gravity: -6,
-      });
-    }
-    // 爆发气泡
-    for (let i = 0; i < 12; i++) {
-      this.particles.push({
-        x: x + rand(-14, 14), y: y + rand(-14, 14),
-        vx: rand(-90, 90), vy: rand(-140, -40),
-        life: rand(0.4, 0.9), maxLife: 0.9, size: rand(2.5, 6),
-        color: "#8aff6a", kind: "spark", gravity: -30,
-      });
-    }
-    this.rings.push({ x, y, r: R * 0.2, max: R * 1.3, t: 0, life: 0.4, color: "rgba(138,255,106,.55)" });
-    this.glows.push({ x, y, r: R * 1.1, life: 0.4, max: 0.4, color: "rgba(138,255,106,.5)" });
-    // 只伤害单位，不 carve 地形
-    this._damageUnitsInRadius(x, y, R, damage, team, {
-      poison: { dur: 9999, dps: WEAPONS.poisonmist.poisonDps },
-    });
-    this.shake = Math.max(this.shake, 4);
-    this.sfx.shoot("poisonmist");
-  }
-
-  /** 绘制剑雨中的飞剑：完整剑形（剑刃 + 剑格 + 剑柄） */
-  _drawSwordRain(ctx) {
-    if (!this.swordRain.length) return;
-    for (const s of this.swordRain) {
-      if (s.delay > 0) continue;
-      ctx.save();
-      ctx.translate(s.x, s.y);
-      // 插地剑：剑尖朝下，剑柄朝上，微微颤动
-      if (s.stuck) {
-        const fade = s.stuckT > 1.0 ? clamp(1 - (s.stuckT - 1.0) / 0.6, 0, 1) : 1;
-        ctx.globalAlpha = fade;
-        // 插地角度：剑尖朝下
-        ctx.rotate(Math.PI / 2 + Math.sin(s.stuckT * 3) * 0.05);
-        this._drawSwordShape(ctx, 1.2);
-      } else {
-        // 飞行剑：剑身朝速度方向
-        const ang = Math.atan2(s.vy, s.vx);
-        ctx.rotate(ang);
-        // 剑芒拖尾
-        ctx.globalCompositeOperation = "lighter";
-        const grad = ctx.createLinearGradient(-12, 0, -60, 0);
-        grad.addColorStop(0, "rgba(168,216,255,.7)");
-        grad.addColorStop(1, "rgba(168,216,255,0)");
-        ctx.fillStyle = grad;
-        ctx.beginPath();
-        ctx.moveTo(-12, -3);
-        ctx.lineTo(-55, 0);
-        ctx.lineTo(-12, 3);
-        ctx.closePath();
-        ctx.fill();
-        ctx.globalCompositeOperation = "source-over";
-        this._drawSwordShape(ctx, 1.1);
-      }
-      ctx.restore();
-    }
-  }
-
-  /** 绘制一把完整的剑（剑刃 + 剑格 + 剑柄） */
-  _drawSwordShape(ctx, scale = 1) {
-    ctx.scale(scale, scale);
-    // 剑刃（菱形，剑尖朝右）
-    ctx.fillStyle = "#f0f8ff";
-    ctx.shadowColor = "#a8d8ff";
-    ctx.shadowBlur = 16;
-    ctx.beginPath();
-    ctx.moveTo(26, 0);       // 剑尖
-    ctx.lineTo(6, -5);        // 刃口上
-    ctx.lineTo(-12, -3);     // 剑根上
-    ctx.lineTo(-12, 3);      // 剑根下
-    ctx.lineTo(6, 5);        // 刃口下
-    ctx.closePath();
-    ctx.fill();
-    ctx.shadowBlur = 0;
-    // 剑脊寒芒
-    ctx.strokeStyle = "rgba(255,255,255,.95)";
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(24, 0);
-    ctx.lineTo(-10, 0);
-    ctx.stroke();
-    // 剑格（护手）
-    ctx.strokeStyle = "#8ab8d8";
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo(-12, -8);
-    ctx.lineTo(-12, 8);
-    ctx.stroke();
-    // 剑柄
-    ctx.strokeStyle = "#5a7a9a";
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.moveTo(-12, 0);
-    ctx.lineTo(-22, 0);
-    ctx.stroke();
-    // 剑柄末端圆珠
-    ctx.fillStyle = "#8ab8d8";
-    ctx.beginPath();
-    ctx.arc(-23, 0, 2.5, 0, TAU);
-    ctx.fill();
-  }
-
   explode(x, y, radius, damage, team, kind = "blast", weaponType = null) {
     if (!this.terrain) return;
     const beam = kind === "laser";
@@ -2217,7 +1771,7 @@ if (!this.players.some((u) => u.alive)) { this.finish(false, "族人全部倒下
       sword:      { ring: "#a8d8ff", glow: "rgba(168,216,255,.75)", flash: "#a8d8ff", spark: "#d8ecff" },
       fireball:   { ring: "#ff8a4a", glow: "rgba(255,138,74,.75)",  flash: "#ff8a4a", spark: "#ffd15c" },
       thunder:    { ring: "#ffe95c", glow: "rgba(255,233,92,.8)",   flash: "#ffe95c", spark: "#fff8c8" },
-      swordarray: { ring: "#a8d8ff", glow: "rgba(168,216,255,.7)",  flash: "#a8d8ff", spark: "#d8ecff" },
+      swordarray: { ring: "#ffd25e", glow: "rgba(255,210,94,.7)",  flash: "#ffd25e", spark: "#fff0b8" },
       dragonpalm: { ring: "#ff8a5a", glow: "rgba(255,138,90,.8)",   flash: "#ff8a5a", spark: "#ffd25e" },
       shieldcharm:{ ring: "#ffd25e", glow: "rgba(255,210,94,.75)",  flash: "#ffd25e", spark: "#fff8c8" },
       soulchain:  { ring: "#b48ce8", glow: "rgba(180,140,232,.75)", flash: "#b48ce8", spark: "#d8b8ff" },
@@ -2619,6 +2173,7 @@ if (!this.players.some((u) => u.alive)) { this.finish(false, "族人全部倒下
     this.ammo = ammoFor(this.level, this.weaponIds);
     this.selectedWeapon = this.weaponIds.find((k) => (this.ammo[k] || 0) > 0) || this.weaponIds[0];
     this.weaponReadyAt = {};
+    this.weaponTurnLock = {};
     this._refreshWeaponBar();
     this._updateHUD();
   }
@@ -2661,7 +2216,7 @@ if (!this.players.some((u) => u.alive)) { this.finish(false, "族人全部倒下
       toast(`全技能武器：${this.cheatAllWeapons ? "开" : "关"}`, "ok");
     } else if (action === "nocd") {
       this.cheatNoCooldown = !this.cheatNoCooldown;
-      if (this.cheatNoCooldown) this.weaponReadyAt = {};
+      if (this.cheatNoCooldown) { this.weaponReadyAt = {}; this.weaponTurnLock = {}; }
       toast(`无冷却：${this.cheatNoCooldown ? "开" : "关"}`, "ok");
     } else if (action === "win") {
       if (this.level.endless) {
@@ -2745,7 +2300,8 @@ if (!this.players.some((u) => u.alive)) { this.finish(false, "族人全部倒下
           <span class="w-key">${i + 1}</span>
           <span class="w-ammo" data-ammo="${id}"></span>
           <span class="w-cool"></span>
-          ${this._weaponIcon(id)}
+          <span class="w-tcool"></span>
+          ${weaponIcon(id)}
           <span class="w-name">${w.name}</span>
           <span class="w-power">${w.damage}</span>
         </button>`;
@@ -2754,7 +2310,7 @@ if (!this.players.some((u) => u.alive)) { this.finish(false, "族人全部倒下
     // 更新收起按钮（当前武器图标 + 弹药）
     const curW = WEAPONS[this.selectedWeapon];
     const curAmmo = this.ammo[this.selectedWeapon] ?? 0;
-    document.getElementById("wtIcon").innerHTML = this._weaponIcon(this.selectedWeapon);
+    document.getElementById("wtIcon").innerHTML = weaponIcon(this.selectedWeapon);
     document.getElementById("wtAmmo").textContent = curAmmo === Infinity ? "∞" : String(curAmmo);
     // 展开/收起状态
     bar.classList.toggle("collapsed", !this.weaponBarExpanded);
@@ -2776,45 +2332,15 @@ if (!this.players.some((u) => u.alive)) { this.finish(false, "族人全部倒下
         cool.style.display = ratio > 0.01 ? "block" : "none";
         cool.style.transform = `scaleY(${ratio})`;
       }
+      const tc = this._weaponTurnCooldown(id);
+      const tcool = card.querySelector(".w-tcool");
+      if (tcool) {
+        tcool.textContent = tc > 0 ? `${tc}回合` : "";
+        card.classList.toggle("turn-lock", tc > 0);
+      }
     }
   }
 
-  _weaponIcon(id) {
-    const common = 'viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"';
-    if (id === "spear") return `<svg ${common}><path d="M4 20L18 6"/><path d="M15 4l5 1-1 5z"/></svg>`;
-    if (id === "boulder") return `<svg ${common}><path d="M12 3l7 4 2 8-6 6-8-2-3-7z"/><path d="M9 9l3 3-1 4"/></svg>`;
-    if (id === "grenade") return `<svg ${common}><circle cx="10" cy="14" r="6"/><path d="M14 9l2-3M16 5c2 0 3 1 3 3"/></svg>`;
-    if (id === "banana") return `<svg ${common}><path d="M5 6c1 8 6 12 14 11-3 3-9 4-13 1S3 9 5 6z"/></svg>`;
-    if (id === "boomerang") return `<svg ${common}><path d="M5 8l6 5-6 5"/><path d="M5 8l10 4-10 5" opacity=".55"/></svg>`;
-    if (id === "meteor") return `<svg ${common}><circle cx="15" cy="9" r="5"/><path d="M9 15l-5 5M11 17l-3 3M7 11l-3 3"/></svg>`;
-    if (id === "crossbow") return `<svg ${common}><path d="M3 12h18"/><path d="M8 6l4 6-4 6"/><path d="M17 9l3 3-3 3"/></svg>`;
-    if (id === "cannon") return `<svg ${common}><path d="M3 15l13-5 5 3-3 5-15 2z"/><circle cx="9" cy="18" r="2.6"/><circle cx="16" cy="17" r="2.6"/><path d="M16 10l4-3"/></svg>`;
-    if (id === "firebomb") return `<svg ${common}><circle cx="11" cy="15" r="6"/><path d="M11 3c3 3 2 5 0 6-2-1-2-3 0-6z"/></svg>`;
-    if (id === "rifle") return `<svg ${common}><path d="M2 14l16-4 3 2-1 3-17 3z"/><path d="M8 15v4"/><path d="M14 12l2 4"/></svg>`;
-    if (id === "mortar") return `<svg ${common}><path d="M7 17L15 4l5 3-8 13z"/><path d="M3 20l6-3"/><path d="M9 19l3 2"/></svg>`;
-    if (id === "rocket") return `<svg ${common}><path d="M14 4l6 8-6 8-3-4h-5V8h5z"/><path d="M9 12H3"/><path d="M8 8L4 5M8 16l-4 3"/></svg>`;
-    if (id === "laser") return `<svg ${common}><path d="M3 12h10"/><path d="M13 9l7 3-7 3z"/><path d="M5 8v8M9 9v6"/></svg>`;
-if (id === "railgun") return `<svg ${common}><path d="M2 12h20"/><path d="M4 8v8M9 9v6M14 8v8M19 9v6"/></svg>`;
-if (id === "watermelon") return `<svg ${common}><circle cx="12" cy="13" r="8"/><path d="M8 10c2 1 6 1 8 0M8 14c2 1 6 1 8 0"/></svg>`;
-if (id === "durian") return `<svg ${common}><path d="M12 3l2 3 3-1 1 3 3 1-1 3 2 2-3 1 1 3-3-1-1 3-2-2-3 1-1-3-3-1 2-2-1-3 3 1z"/></svg>`;
-if (id === "poisonshroom") return `<svg ${common}><path d="M4 12a8 6 0 0116 0z"/><path d="M9 12v5a3 3 0 006 0v-5"/><circle cx="9" cy="9" r="1"/><circle cx="15" cy="8" r="1.2"/></svg>`;
-if (id === "flail") return `<svg ${common}><circle cx="7" cy="7" r="3"/><path d="M9 9l6 6"/><circle cx="17" cy="17" r="4"/><path d="M17 13v-2M13 17h-2"/></svg>`;
-if (id === "flare") return `<svg ${common}><path d="M12 3v8"/><path d="M8 8l4 4 4-4"/><path d="M5 17l7-4 7 4"/><path d="M8 21h8"/></svg>`;
-if (id === "molotov") return `<svg ${common}><path d="M9 3h6v4l2 3v9a2 2 0 01-2 2h-6a2 2 0 01-2-2v-9l2-3z"/><path d="M12 3c2 2 1 3 0 4-1-1-1-2 0-4z"/></svg>`;
-if (id === "cluster") return `<svg ${common}><circle cx="12" cy="12" r="3"/><circle cx="5" cy="6" r="2"/><circle cx="19" cy="6" r="2"/><circle cx="5" cy="18" r="2"/><circle cx="19" cy="18" r="2"/></svg>`;
-if (id === "drone") return `<svg ${common}><circle cx="12" cy="12" r="2"/><path d="M12 4v4M12 16v4M4 12h4M16 12h4"/><circle cx="5" cy="5" r="1.5"/><circle cx="19" cy="5" r="1.5"/><circle cx="5" cy="19" r="1.5"/><circle cx="19" cy="19" r="1.5"/></svg>`;
-if (id === "gravity") return `<svg ${common}><circle cx="12" cy="12" r="3"/><path d="M12 3a9 9 0 019 9M12 21a9 9 0 01-9-9"/><path d="M12 7v10M7 12h10"/></svg>`;
-if (id === "sword") return `<svg ${common}><path d="M12 2l2 6-2 12-2-12z"/><path d="M7 14h10"/><circle cx="12" cy="17" r="1.5"/></svg>`;
-if (id === "fireball") return `<svg ${common}><circle cx="12" cy="13" r="6"/><path d="M12 3c2 2 3 4 3 6M9 4c1 1 2 2 2 3"/></svg>`;
-if (id === "thunder") return `<svg ${common}><path d="M13 2L5 14h6l-2 8 8-12h-6z"/></svg>`;
-if (id === "swordarray") return `<svg ${common}><path d="M12 2v8M12 14v8M2 12h8M14 12h8M5 5l4 4M19 5l-4 4M5 19l4-4M19 19l-4-4"/></svg>`;
-if (id === "dragonpalm") return `<svg ${common}><path d="M4 12c3-4 6-6 8-6s5 2 8 6c-3 4-6 6-8 6s-5-2-8-6z"/><circle cx="12" cy="12" r="2"/></svg>`;
-if (id === "shieldcharm") return `<svg ${common}><path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg>`;
-if (id === "soulchain") return `<svg ${common}><path d="M4 20l5-6 5-2 5-6"/><circle cx="5" cy="19" r="2"/><circle cx="10" cy="13" r="2"/><circle cx="15" cy="11" r="2"/><circle cx="19" cy="6" r="2"/></svg>`;
-if (id === "mend") return `<svg ${common}><path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"/><path d="M12 15v6M9 18h6"/></svg>`;
-if (id === "stonewall") return `<svg ${common}><path d="M4 18h16"/><path d="M6 18v-6h5v6"/><path d="M13 18v-9h5v9"/><path d="M8 12h1M15 9h1"/></svg>`;
-return `<svg ${common}><circle cx="12" cy="12" r="5"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l3 3M18 6l-3 3M6 18l3-3M18 18l-3-3"/></svg>`;
-  }
 
   _updateHUD() {
     if (!this.level) return;
@@ -2838,7 +2364,8 @@ document.getElementById("hudLevel").textContent = this.level.endless
     document.getElementById("moveBar").style.width = Math.round(clamp(1 - remain / cd, 0, 1) * 100) + "%";
     const info = document.getElementById("weaponInfo");
     if (info && w) {
-      info.textContent = `${w.name} · 伤害 ${w.damage}${w.blast ? ` · 范围 ${w.blast}` : ""}`;
+      const tc = this._weaponTurnCooldown(this.selectedWeapon);
+      info.textContent = `${w.name} · 伤害 ${w.damage}${w.blast ? ` · 范围 ${w.blast}` : ""}${tc > 0 ? ` · ${tc}回合后可用` : ""}`;
       info.style.setProperty("--w-color", w.color);
       info.classList.toggle("realtime", this.cheatRealtime);
     }
@@ -3789,10 +3316,10 @@ document.getElementById("hudLevel").textContent = this.level.endless
       ctx.closePath();
       ctx.fill();
     } else if (type === "swordarray") {
-      // 万剑归宗：手持时多把飞剑环绕，剑尖朝前
+      // 万剑归宗：手持时多把金色飞剑环绕，剑尖朝前
       ctx.globalCompositeOperation = "lighter";
       const sg = ctx.createRadialGradient(18, 0, 0, 18, 0, 26);
-      sg.addColorStop(0, "rgba(168,216,255,.3)");
+      sg.addColorStop(0, "rgba(255,205,92,.3)");
       sg.addColorStop(1, "rgba(0,0,0,0)");
       ctx.fillStyle = sg;
       ctx.beginPath();
@@ -3806,8 +3333,8 @@ document.getElementById("hudLevel").textContent = this.level.endless
         ctx.save();
         ctx.translate(18 + Math.cos(a) * 12, Math.sin(a) * 8);
         ctx.rotate(Math.sin(performance.now() / 400 + i) * 0.2);
-        ctx.fillStyle = "#a8d8ff";
-        ctx.shadowColor = "#a8d8ff";
+        ctx.fillStyle = "#ffd25e";
+        ctx.shadowColor = "#ffd25e";
         ctx.shadowBlur = 6;
         ctx.beginPath();
         ctx.moveTo(8, 0);
@@ -3819,9 +3346,9 @@ document.getElementById("hudLevel").textContent = this.level.endless
         ctx.shadowBlur = 0;
         ctx.restore();
       }
-      // 中心主剑
-      ctx.fillStyle = "#e8f4ff";
-      ctx.shadowColor = "#a8d8ff";
+      // 中心主剑（金色）
+      ctx.fillStyle = "#fff3c8";
+      ctx.shadowColor = "#ffd25e";
       ctx.shadowBlur = 10;
       ctx.beginPath();
       ctx.moveTo(26, 0);
@@ -3831,7 +3358,7 @@ document.getElementById("hudLevel").textContent = this.level.endless
       ctx.closePath();
       ctx.fill();
       ctx.shadowBlur = 0;
-      ctx.strokeStyle = "#8ab8d8";
+      ctx.strokeStyle = "#d8a03a";
       ctx.lineWidth = 1.4;
       ctx.beginPath();
       ctx.moveTo(14, -4.5);
@@ -4384,5 +3911,7 @@ document.getElementById("hudLevel").textContent = this.level.endless
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
 }
+
+mountCultivation(StoneWars);
 
 window.__stoneWars = new StoneWars();

@@ -204,15 +204,15 @@ export const WEAPONS = {
   // 金丹期：神通初成
   swordarray: {
     id: "swordarray", name: "万剑归宗", short: "万", era: "cultivation", kind: "swordrain",
-    desc: "剑丸飞抵目标后，18 把飞剑从修仙者处腾空而起，呈剑雨落向目标区域，范围伤害",
-    color: "#a8d8ff", speed: 760, gravity: 850, damage: 22, blast: 70,
+    desc: "剑丸飞抵目标后，18 把金色飞剑从修仙者处腾空而起，呈剑雨落向目标区域，范围伤害",
+    color: "#ffd25e", speed: 760, gravity: 850, damage: 22, blast: 70,
     cooldown: 3.0, icon: "swordarray", realm: "金丹",
   },
   dragonpalm: {
     id: "dragonpalm", name: "降龙十八掌", short: "龙", era: "cultivation", kind: "dragon",
-    desc: "掌力化龙，金龙蜿蜒游动冲撞，命中后剧烈爆炸",
-    color: "#ff8a5a", speed: 920, gravity: 620, damage: 80, blast: 130,
-    cooldown: 2.8, icon: "dragonpalm", realm: "金丹",
+    desc: "掌力化龙，金龙蜿蜒游动冲撞，命中后剧烈爆炸；用一次后冷却 1 回合",
+    color: "#ff8a5a", speed: 920, gravity: 620, damage: 70, blast: 115,
+    cooldown: 2.8, turnCooldown: 1, icon: "dragonpalm", realm: "金丹",
   },
   // 元婴期：神识强大
   teleport: {
@@ -245,15 +245,15 @@ export const WEAPONS = {
   // 渡劫期：毁天灭地
   skylightning: {
     id: "skylightning", name: "天雷灭世", short: "灭", era: "cultivation", kind: "skybolt",
-    desc: "抛出引雷子，落点处天降大范围雷霆，万雷轰顶",
-    color: "#fff8c8", speed: 500, gravity: 700, damage: 120, blast: 180,
-    fuse: 2.2, cooldown: 5.0, icon: "skylightning", realm: "渡劫",
+    desc: "抛出引雷子，落点处天降大范围雷霆，万雷轰顶；用一次后冷却 2 回合",
+    color: "#fff8c8", speed: 500, gravity: 700, damage: 100, blast: 160,
+    fuse: 2.2, cooldown: 5.0, turnCooldown: 2, icon: "skylightning", realm: "渡劫",
   },
   formation: {
     id: "formation", name: "诛仙阵", short: "诛", era: "cultivation", kind: "zhuxian",
-    desc: "抛出阵图，苍穹降下巨剑与万剑：巨剑穿建筑插地，小剑落于建筑之上",
-    color: "#ff6a9a", speed: 600, gravity: 800, damage: 45, blast: 90,
-    fuse: 1.6, cooldown: 4.5, icon: "formation", realm: "渡劫",
+    desc: "抛出阵图，苍穹降下巨剑与万剑：巨剑穿建筑插地，小剑落于建筑之上；用一次后冷却 2 回合",
+    color: "#ff6a9a", speed: 600, gravity: 800, damage: 38, blast: 80,
+    fuse: 1.6, cooldown: 4.5, turnCooldown: 2, icon: "formation", realm: "渡劫",
   },
   // 渡劫期：补天术（时空锚定：下一次敌方攻击后回溯到本回合状态）
   mend: {

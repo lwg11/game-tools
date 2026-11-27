@@ -450,6 +450,22 @@ body.normal-mode #hudCheat { display: none; }
   transform-origin: top;
   display: none;
 }
+/* 神通回合冷却：左上角显示剩余回合 */
+.weapon-card .w-tcool {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  padding: 1px 5px;
+  border-radius: 6px;
+  background: rgba(10, 12, 18, 0.78);
+  border: 1px solid rgba(255, 205, 92, 0.45);
+  color: #ffd88a;
+  font-size: clamp(8px, 1.1vh, 10px);
+  font-weight: 900;
+  pointer-events: none;
+}
+.weapon-card.turn-lock { opacity: 0.5; filter: saturate(0.4); }
 .weapon-card .w-power {
   position: absolute;
   right: 4px;
