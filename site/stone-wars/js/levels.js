@@ -209,9 +209,9 @@ export const WEAPONS = {
     cooldown: 3.0, icon: "swordarray", realm: "金丹",
   },
   dragonpalm: {
-    id: "dragonpalm", name: "降龙十八掌", short: "龙", era: "cultivation", kind: "boulder",
-    desc: "掌力化龙，蜿蜒冲撞，命中后剧烈爆炸",
-    color: "#ff8a5a", speed: 920, gravity: 880, damage: 80, blast: 130,
+    id: "dragonpalm", name: "降龙十八掌", short: "龙", era: "cultivation", kind: "dragon",
+    desc: "掌力化龙，金龙蜿蜒游动冲撞，命中后剧烈爆炸",
+    color: "#ff8a5a", speed: 920, gravity: 620, damage: 80, blast: 130,
     cooldown: 2.8, icon: "dragonpalm", realm: "金丹",
   },
   // 元婴期：神识强大
@@ -222,11 +222,11 @@ export const WEAPONS = {
     cooldown: 5, icon: "teleport", realm: "元婴", buffType: "teleport",
   },
   poisonmist: {
-    id: "poisonmist", name: "毒雾术", short: "毒", era: "cultivation", kind: "grenade",
-    desc: "释放毒雾，使敌人中毒持续掉血",
+    id: "poisonmist", name: "毒雾术", short: "毒", era: "cultivation", kind: "poisoncloud",
+    desc: "爆开一片浓雾，只伤害单位不毁建筑，中毒持续一个回合",
     color: "#8aff6a", speed: 750, gravity: 900, damage: 20, blast: 80,
     fuse: 1.2, bounce: 0.3, cooldown: 3.5, icon: "poisonmist", realm: "元婴",
-    poisonDur: 5, poisonDps: 8,
+    poisonDur: 9999, poisonDps: 8,
   },
   // 化神期：呼风唤雨
   heal: {
@@ -244,16 +244,16 @@ export const WEAPONS = {
   },
   // 渡劫期：毁天灭地
   skylightning: {
-    id: "skylightning", name: "天雷灭世", short: "灭", era: "cultivation", kind: "grenade",
-    desc: "召唤九天神雷，毁灭一切",
+    id: "skylightning", name: "天雷灭世", short: "灭", era: "cultivation", kind: "skybolt",
+    desc: "抛出引雷子，落点处天降大范围雷霆，万雷轰顶",
     color: "#fff8c8", speed: 500, gravity: 700, damage: 120, blast: 180,
-    fuse: 2.5, bounce: 0.2, cooldown: 5.0, icon: "skylightning", realm: "渡劫",
+    fuse: 2.2, cooldown: 5.0, icon: "skylightning", realm: "渡劫",
   },
   formation: {
-    id: "formation", name: "诛仙阵", short: "诛", era: "cultivation", kind: "split",
-    desc: "布下诛仙剑阵，万剑齐发，毁天灭地",
-    color: "#ff6a9a", speed: 600, gravity: 800, damage: 45, blast: 80,
-    cooldown: 4.5, icon: "formation", realm: "渡劫",
+    id: "formation", name: "诛仙阵", short: "诛", era: "cultivation", kind: "zhuxian",
+    desc: "抛出阵图，苍穹降下巨剑与万剑：巨剑穿建筑插地，小剑落于建筑之上",
+    color: "#ff6a9a", speed: 600, gravity: 800, damage: 45, blast: 90,
+    fuse: 1.6, cooldown: 4.5, icon: "formation", realm: "渡劫",
   },
   // 渡劫期：补天术（时空锚定：下一次敌方攻击后回溯到本回合状态）
   mend: {

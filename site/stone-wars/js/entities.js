@@ -564,9 +564,14 @@ export class Unit {
       const bw = 46;
       const bx = this.x - bw / 2;
       const by = this.y - (this.mount ? 106 : this.type === "chief" ? 96 : 86);
-      ctx.fillStyle = "rgba(8,8,10,.62)";
+      // 半透明底 + 细亮边，不遮挡画面
+      ctx.fillStyle = "rgba(16,18,24,.42)";
       this._roundRect(ctx, bx - 1, by - 1, bw + 2, 7, 3);
       ctx.fill();
+      ctx.strokeStyle = "rgba(255,255,255,.16)";
+      ctx.lineWidth = 1;
+      this._roundRect(ctx, bx - 1, by - 1, bw + 2, 7, 3);
+      ctx.stroke();
       const ratio = this.hp / this.maxHp;
       ctx.fillStyle = this.team === 0
         ? (ratio > 0.5 ? "#7ddc91" : ratio > 0.25 ? "#ffcf6b" : "#ff7b6b")
@@ -706,7 +711,8 @@ export class Projectile {
     this.hitSet = new Set();
     this.returned = false;
     this.smokeT = 0;
-    this.fuse = this.kind === "grenade" ? this.weapon.fuse
+    this.fuse = this.kind === "grenade" || this.kind === "skybolt" || this.kind === "zhuxian"
+      ? this.weapon.fuse
       : type === "bananaSmall" ? 0.9 : null;
     this.r = this.kind === "boulder" ? 8 : this.kind === "spike" ? 9 : this.kind === "spear" ? 4 : 6;
     // 锁魂链：链条一端锚定在施法者手上，钩爪飞出
@@ -740,6 +746,10 @@ export class Projectile {
     }
     if (this.kind === "chain") {
       this.updateChain(dt);
+      return;
+    }
+    if (this.kind === "dragon") {
+      this.updateDragon(dt);
       return;
     }
     const w = this.weapon;
@@ -989,6 +999,67 @@ export class Projectile {
     }
   }
 
+  /**
+   * 降龙十八掌：金龙在空中蜿蜒游动（蛇形摆动 + 重力下坠），
+   * 命中敌人或撞地后爆开。
+   */
+  updateDragon(dt) {
+    const g = this.game;
+    const w = this.weapon;
+    for (const u of g.units) {
+      if (!u.alive || u.team === this.team) continue;
+      if (this.hitsUnit(u, this.x, this.y, 6)) {
+        this.explode();
+        return;
+      }
+    }
+    const speed = Math.hypot(this.vx, this.vy) || 1;
+    // 垂直于飞行方向的单位向量：游动摆动的施加方向
+    const px = -this.vy / speed;
+    const py = this.vx / speed;
+    const steps = clamp(Math.ceil(speed * dt / 6), 1, 8);
+    const h = dt / steps;
+    for (let i = 0; i < steps && !this.dead; i++) {
+      // 蛇形游动：横向正弦力，随时间推进形成“游动”波浪
+      const sway = Math.sin(this.age * 9) * 300;
+      this.vx += px * sway * h;
+      this.vy += py * sway * h * 0.6;
+      this.vy += w.gravity * h;
+      this.vx += g.wind * 12 * h;
+      const nx = this.x + this.vx * h;
+      const ny = this.y + this.vy * h;
+      if (nx < -80 || nx > W + 80 || ny > H + 80) {
+        this.explode();
+        return;
+      }
+      if (g.terrain.circleHit(nx, ny, 5)) {
+        this.x = nx;
+        this.y = ny;
+        this.explode();
+        return;
+      }
+      this.x = nx;
+      this.y = ny;
+    }
+    // 记录轨迹供龙身游动渲染
+    this.trail.push({ x: this.x, y: this.y });
+    if (this.trail.length > 26) this.trail.shift();
+    this.rotation = Math.atan2(this.vy, this.vx);
+    if (this.auraColor) {
+      this.auraT -= dt;
+      if (this.auraT <= 0) {
+        this.auraT = 0.03;
+        g.particles.push({
+          x: this.x + rand(-4, 4), y: this.y + rand(-4, 4),
+          vx: rand(-40, 40), vy: rand(-60, 0),
+          life: rand(0.2, 0.5), maxLife: 0.5, size: rand(2, 4),
+          color: this.auraColor, kind: "spark", gravity: -20,
+        });
+      }
+    }
+    if (this.age > 3.6) this.explode();
+  }
+
   /** 命中判定：头、躯干、坐骑分开算，避免打头时从身体上方穿过去 */
   hitsUnit(u, px, py, pad = 0) {
     const s = u.scale || 1;
@@ -1053,6 +1124,16 @@ export class Projectile {
     } else if (this.kind === "chain") {
       // 锁魂链：不留火焰残留，只爆紫色魂火
       g.explode(this.x, this.y, blast, dmg, this.team, "chain", this.type);
+    } else if (this.kind === "skybolt") {
+      // 天雷灭世：引雷子落点处天降大范围雷霆（不炸地形）
+      g.spawnSkyLightning(this.x, this.y, this.team, dmg, blast);
+    } else if (this.kind === "zhuxian") {
+      // 诛仙阵：阵图落点处苍穹降下巨剑与万剑
+      g.spawnSwordFormation(this.x, this.y, this.team, dmg, blast);
+    } else if (this.kind === "poisoncloud") {
+      // 毒雾术：浓雾爆发，只伤单位不毁建筑，中毒持续一个回合
+      g.poisonCloudBurst(this.x, this.y, blast, dmg, this.team);
+      return;
     } else {
       g.explode(this.x, this.y, blast, dmg, this.team, this.kind, this.type);
     }
@@ -1737,94 +1818,117 @@ export class Projectile {
       ctx.stroke();
       ctx.globalCompositeOperation = "source-over";
     } else if (type === "dragonpalm") {
-      // 降龙十八掌：金色巨龙蜿蜒前行，龙首冲撞，龙身九曲，龙尾拖曳
-      ctx.rotate(this.rotation);
+      // 降龙十八掌：金龙沿飞行轨迹蜿蜒游动（动态龙身 + 背鳍 + 摆须龙首）
+      const t = this.age;
+      const tr = this.trail;
+      // 节点：龙头 + 历史轨迹（越靠后越旧），换算到本地坐标
+      const pts = [{ x: 0, y: 0 }];
+      for (let i = tr.length - 1; i >= 0; i -= 2) pts.push({ x: tr[i].x - this.x, y: tr[i].y - this.y });
+      const n = Math.max(2, pts.length);
+      const headA = this.rotation;
+      const px = Math.cos(headA + Math.PI / 2);
+      const py = Math.sin(headA + Math.PI / 2);
+      // 游动偏移：越靠近尾部摆动越大，形成“游动”波浪
+      const pos = pts.map((p, i) => {
+        const k = i / (n - 1);
+        const sway = Math.sin(t * 11 - i * 0.8) * 10 * k;
+        return { x: p.x + px * sway, y: p.y + py * sway, k };
+      });
       ctx.globalCompositeOperation = "lighter";
-      // 龙身光晕
-      const dg = ctx.createRadialGradient(0, 0, 0, 0, 0, 40);
-      dg.addColorStop(0, "rgba(255,180,80,.4)");
-      dg.addColorStop(0.5, "rgba(255,120,50,.15)");
+      // 龙身周围的金色光晕
+      const dg = ctx.createRadialGradient(0, 0, 0, 0, 0, 48);
+      dg.addColorStop(0, "rgba(255,190,90,.42)");
+      dg.addColorStop(0.5, "rgba(255,120,50,.14)");
       dg.addColorStop(1, "rgba(0,0,0,0)");
       ctx.fillStyle = dg;
       ctx.beginPath();
-      ctx.arc(0, 0, 40, 0, TAU);
+      ctx.arc(0, 0, 48, 0, TAU);
       ctx.fill();
-      // 龙身（波浪形，从龙尾到龙首逐渐变粗）
-      const segs = 24;
-      ctx.beginPath();
-      for (let i = 0; i <= segs; i++) {
-        const t = i / segs;
-        const px = -50 + t * 60;
-        const py = Math.sin(t * 10 + this.age * 12) * 7 * (1 - t * 0.5);
-        if (i === 0) ctx.moveTo(px, py);
-        else ctx.lineTo(px, py);
-      }
-      // 龙身渐变描边（粗→细）
-      for (let i = 0; i < segs; i++) {
-        const t0 = i / segs;
-        const t1 = (i + 1) / segs;
-        const x0 = -50 + t0 * 60;
-        const y0 = Math.sin(t0 * 10 + this.age * 12) * 7 * (1 - t0 * 0.5);
-        const x1 = -50 + t1 * 60;
-        const y1 = Math.sin(t1 * 10 + this.age * 12) * 7 * (1 - t1 * 0.5);
-        const w = 2 + t0 * 5;
-        ctx.strokeStyle = `rgba(255,${160 + Math.floor(t0 * 60)},${60 + Math.floor(t0 * 40)},${0.3 + t0 * 0.4})`;
-        ctx.lineWidth = w;
+      // 龙身：从尾到头逐段加粗，金色渐变 + 红色背鳍
+      ctx.lineCap = "round";
+      for (let i = n - 1; i >= 1; i--) {
+        const a = pos[i];
+        const b = pos[i - 1];
+        ctx.strokeStyle = `rgba(255,${150 + Math.floor((1 - a.k) * 70)},${70 + Math.floor((1 - a.k) * 40)},${0.3 + (1 - a.k) * 0.45})`;
+        ctx.lineWidth = 2.5 + (1 - a.k) * 6.5;
         ctx.beginPath();
-        ctx.moveTo(x0, y0);
-        ctx.lineTo(x1, y1);
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
         ctx.stroke();
+        if (i % 2 === 0 && i > 1) {
+          const mx = (a.x + b.x) / 2;
+          const my = (a.y + b.y) / 2;
+          const dx = b.x - a.x;
+          const dy = b.y - a.y;
+          const dl = Math.hypot(dx, dy) || 1;
+          const fx = -dy / dl;
+          const fy = dx / dl;
+          ctx.fillStyle = "rgba(255,90,50,.55)";
+          ctx.beginPath();
+          ctx.moveTo(mx + fx * 2, my + fy * 2);
+          ctx.lineTo(mx - (dx / dl) * 4 + fx * 9, my - (dy / dl) * 4 + fy * 9);
+          ctx.lineTo(mx - (dx / dl) * 8 + fx * 2, my - (dy / dl) * 8 + fy * 2);
+          ctx.closePath();
+          ctx.fill();
+        }
       }
-      // 龙首（三角形，朝前）
-      const headX = 12;
-      const headY = Math.sin(this.age * 12) * 2;
+      // 龙头（朝飞行方向）
+      ctx.rotate(headA);
+      const hornSway = Math.sin(t * 13) * 1.5;
+      ctx.strokeStyle = "#ffd25e";
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.moveTo(-3, -4);
+      ctx.quadraticCurveTo(-10, -9, -14, -12 + hornSway);
+      ctx.moveTo(-3, 4);
+      ctx.quadraticCurveTo(-10, 9, -14, 12 - hornSway);
+      ctx.stroke();
+      // 头颅 + 长吻
       ctx.fillStyle = "#ff8a5a";
       ctx.shadowColor = "#ff8a5a";
-      ctx.shadowBlur = 16;
+      ctx.shadowBlur = 14;
       ctx.beginPath();
-      ctx.moveTo(headX + 10, headY);
-      ctx.lineTo(headX - 4, headY - 8);
-      ctx.lineTo(headX - 8, headY);
-      ctx.lineTo(headX - 4, headY + 8);
+      ctx.ellipse(2, 0, 9, 6.5, 0, 0, TAU);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(6, -4.5);
+      ctx.lineTo(16, -2);
+      ctx.lineTo(16, 2);
+      ctx.lineTo(6, 4.5);
       ctx.closePath();
       ctx.fill();
       ctx.shadowBlur = 0;
-      // 龙角
-      ctx.strokeStyle = "#ffd25e";
+      // 下颚
+      ctx.strokeStyle = "#d85a30";
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.moveTo(headX - 2, headY - 6);
-      ctx.lineTo(headX - 6, headY - 12);
-      ctx.moveTo(headX - 2, headY + 6);
-      ctx.lineTo(headX - 6, headY + 12);
+      ctx.moveTo(6, 4);
+      ctx.quadraticCurveTo(12, 6.5 + Math.sin(t * 12) * 1.2, 16, 2);
       ctx.stroke();
       // 龙眼
       ctx.fillStyle = "#fff4c8";
       ctx.beginPath();
-      ctx.arc(headX + 2, headY - 2, 1.8, 0, TAU);
-      ctx.arc(headX + 2, headY + 2, 1.8, 0, TAU);
+      ctx.arc(4, -2.6, 1.8, 0, TAU);
+      ctx.arc(4, 2.6, 1.8, 0, TAU);
       ctx.fill();
-      // 龙须
-      ctx.strokeStyle = "rgba(255,210,94,.6)";
+      // 龙须（随游动摆动）
+      ctx.strokeStyle = "rgba(255,210,94,.7)";
       ctx.lineWidth = 1.2;
+      const ws = Math.sin(t * 15) * 3;
       ctx.beginPath();
-      ctx.moveTo(headX + 8, headY);
-      ctx.quadraticCurveTo(headX + 16, headY - 4 + Math.sin(this.age * 15) * 3, headX + 22, headY - 6);
-      ctx.moveTo(headX + 8, headY);
-      ctx.quadraticCurveTo(headX + 16, headY + 4 - Math.sin(this.age * 15) * 3, headX + 22, headY + 6);
+      ctx.moveTo(14, -1);
+      ctx.quadraticCurveTo(22, -5 + ws, 27, -8 + ws);
+      ctx.moveTo(14, 1);
+      ctx.quadraticCurveTo(22, 5 - ws, 27, 8 - ws);
       ctx.stroke();
-      // 龙珠（龙首前方的能量球）
+      // 龙吻前的能量珠
       ctx.fillStyle = "#ffd25e";
       ctx.shadowColor = "#ffd25e";
       ctx.shadowBlur = 12;
       ctx.beginPath();
-      ctx.arc(headX + 14, headY, 5, 0, TAU);
+      ctx.arc(19, 0, 3.5 + Math.sin(t * 10) * 0.8, 0, TAU);
       ctx.fill();
       ctx.shadowBlur = 0;
-      ctx.fillStyle = "#fff4c8";
-      ctx.beginPath();
-      ctx.arc(headX + 14, headY, 2.5, 0, TAU);
-      ctx.fill();
       ctx.globalCompositeOperation = "source-over";
     } else if (type === "shieldcharm") {
       // 护体符：金光护盾 + 旋转符文 + 六边形光阵

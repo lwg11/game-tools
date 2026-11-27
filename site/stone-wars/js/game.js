@@ -57,8 +57,14 @@ class StoneWars {
     this.fires = [];
     // 万剑归宗：剑雨中的飞剑列表
     this.swordRain = [];
+    // 天雷灭世：天降雷霆列表
+    this.skyBolts = [];
+    // 诛仙阵：苍穹降下的剑列表
+    this.swordFormation = [];
     // 补天术：时空锚点（下一次敌方攻击后回溯）
     this.mendRewind = null;
+    // 跳跃缓冲计时（修复移动键与跳跃键偶现不同步导致斜跳失效）
+    this.jumpBufferT = 0;
     this.weaponIds = [...ERA_WEAPONS.stone];
     this.selectedWeapon = "spear";
     this.ammo = {};
@@ -102,8 +108,6 @@ class StoneWars {
     this.result = null;
     this.touch = { left: false, right: false };
     this.keys = {};
-    // 跳跃缓冲计时（修复移动键与跳跃键偶现不同步导致斜跳失效）
-    this.jumpBufferT = 0;
     this.hintTimer = null;
     this.bannerTimer = null;
     this.lastEnemyTarget = null;
@@ -397,6 +401,10 @@ if (u) u.jump(this._moveDir());
     this.glows = [];
     this.fires = [];
     this.swordRain = [];
+    this.skyBolts = [];
+    this.swordFormation = [];
+    this.mendRewind = null;
+    this.jumpBufferT = 0;
     this.screenFlash = 0;
     this.units = [];
     this.players = [];
@@ -876,6 +884,8 @@ if (u) u.jump(this._moveDir());
     // 清掉飞行中的弹药与火焰，避免回溯后继续造成残留伤害
     this.projectiles.length = 0;
     this.fires.length = 0;
+    this.skyBolts.length = 0;
+    this.swordFormation.length = 0;
     if (this.players.length) {
       this.activePlayerIndex = clamp(snap.activePlayerIndex, 0, this.players.length - 1);
     }
@@ -980,6 +990,8 @@ if (u) u.jump(this._moveDir());
     // 补天术快照：记录本回合开始时的血量与地形，供补天术回溯
     for (const u of this.units) u.prevHp = u.hp;
     this.terrainSnapshot = this.terrain ? this.terrain.snapshot() : null;
+    // 毒雾中毒持续一个回合：轮到玩家回合开始时清除
+    for (const u of this.units) { u.poisonT = 0; u.poisonDps = 0; }
     // 补天术锚点若在上个敌方阶段未被消耗（敌方未出手），则失效
     this.mendRewind = null;
     this._activePlayer();
@@ -1646,6 +1658,8 @@ if (!this.players.some((u) => u.alive)) { this.finish(false, "族人全部倒下
   _updateEffects(dt) {
     this._updateFires(dt);
     this._updateSwordRain(dt);
+    this._updateSkyBolts(dt);
+    this._updateSwordFormation(dt);
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const p = this.particles[i];
       p.life -= dt;
@@ -1824,6 +1838,294 @@ if (!this.players.some((u) => u.alive)) { this.finish(false, "族人全部倒下
         this.swordRain.splice(i, 1);
       }
     }
+  }
+
+  /**
+   * 范围伤害与状态效果（爆炸 / 天雷 / 剑阵 / 毒雾共用）。
+   * opts.slow / opts.poison 为状态配置，opts.knock 控制是否击飞。
+   */
+  _damageUnitsInRadius(x, y, radius, damage, team, opts = {}) {
+    const diff = this._difficulty();
+    for (const u of this.units) {
+      if (!u.alive) continue;
+      // 以单位命中胶囊上离爆点最近的位置计算距离，爆头也能打满伤害
+      const s = u.scale || 1;
+      const topY = u.y - (u.mount ? 76 : 63) * s;
+      const cy = clamp(y, topY, u.y - 6);
+      const dx = u.x - x;
+      const dy = cy - y;
+      const d = Math.hypot(dx, dy);
+      const reach = radius + 16;
+      if (d >= reach) continue;
+      const f = 1 - d / reach;
+      let dmg = Math.max(4, Math.round(damage * (0.35 + 0.65 * f)));
+      if (team === 1 && u.team === 0) dmg = Math.round(dmg * diff.dmg);
+      u.takeDamage(dmg, team);
+      if (u.alive && opts.knock !== false) {
+        u.vy = -Math.min(360, 70 + f * damage * 2.4);
+        u.onGround = false;
+        u.vx += Math.sign(dx || 1) * f * 60;
+      }
+      if (opts.slow && u.alive) {
+        u.slowT = Math.max(u.slowT, opts.slow.dur);
+        u.slowMul = opts.slow.mul;
+        if (opts.slowSrc) u.slowSrc = opts.slowSrc;
+        this.addText(u.x, u.y - 92, "减速", "#b48ce8");
+      }
+      if (opts.poison && u.alive) {
+        u.poisonT = Math.max(u.poisonT, opts.poison.dur);
+        u.poisonDps = opts.poison.dps;
+        this.addText(u.x, u.y - 92, "中毒", "#8aff6a");
+      }
+    }
+  }
+
+  // ------------------------------------------------------------ 天雷灭世：天降雷霆
+  /** 引雷子落点处，大范围内降下多道雷霆（不摧毁地形） */
+  spawnSkyLightning(x, y, team, damage, blast) {
+    if (!this.terrain) return;
+    const R = Math.max(120, blast || 160);
+    const hitSet = new Set();
+    const cx = clamp(x, 30, W - 30);
+    const groundAt = (px) => this.terrain.surfaceBelow(px, 0) ?? (H - 60);
+    // 中心主雷
+    this.skyBolts.push({
+      tx: cx, ty: groundAt(cx), delay: 0, t: 0, dur: 0.32,
+      struck: false, main: true, segs: null,
+      team, damage, radius: Math.max(90, R * 0.62), hitSet,
+    });
+    // 周围随机落雷，形成大范围雷暴
+    const count = 14;
+    for (let i = 0; i < count; i++) {
+      const tx = clamp(cx + rand(-R, R) * rand(0.25, 1), 20, W - 20);
+      this.skyBolts.push({
+        tx, ty: groundAt(tx),
+        delay: 0.06 + i * 0.05 + rand(0, 0.05),
+        t: 0, dur: rand(0.16, 0.24),
+        struck: false, main: false, segs: null,
+        team, damage, radius: Math.max(56, R * 0.34), hitSet,
+      });
+    }
+    this.shake = Math.max(this.shake, 14);
+    this.screenFlash = Math.max(this.screenFlash, 0.4);
+    this.flashColor = "#fff8c8";
+    this.sfx.shoot("skylightning");
+  }
+
+  /** 更新天雷：到点劈落，落点范围伤害 */
+  _updateSkyBolts(dt) {
+    if (!this.skyBolts.length) return;
+    for (let i = this.skyBolts.length - 1; i >= 0; i--) {
+      const b = this.skyBolts[i];
+      b.t += dt;
+      if (!b.struck && b.t >= b.delay) {
+        b.struck = true;
+        b.segs = this._makeBoltSegments(b.tx, b.ty, b.main ? 26 : 14);
+        this.rings.push({ x: b.tx, y: b.ty, r: 6, max: b.radius * 1.6, t: 0, life: 0.22, color: "rgba(255,248,200,.8)" });
+        this.spawnParticles(b.tx, b.ty - 4, b.main ? 22 : 10, "#fff8c8", "spark");
+        this._damageUnitsInRadius(b.tx, b.ty, b.radius, b.damage * (b.main ? 1 : 0.42), b.team, {});
+        this.shake = Math.max(this.shake, b.main ? 10 : 5);
+        if (b.main) {
+          this.screenFlash = Math.max(this.screenFlash, 0.36);
+          this.flashColor = "#ffffff";
+        }
+      }
+      if (b.t > b.delay + b.dur + 0.12) this.skyBolts.splice(i, 1);
+    }
+  }
+
+  /** 生成一道竖直闪电的锯齿折线（顶部在画面外） */
+  _makeBoltSegments(tx, ty, jitter = 14) {
+    const segs = [];
+    const top = -30;
+    const n = Math.max(4, Math.floor((ty - top) / 46));
+    for (let i = 0; i <= n; i++) {
+      const yy = top + ((ty - top) * i) / n;
+      const xx = i === 0 || i === n ? tx : tx + rand(-jitter, jitter);
+      segs.push({ x: xx, y: yy });
+    }
+    return segs;
+  }
+
+  /** 绘制天雷：高亮闪电柱 + 落点辉光 */
+  _drawSkyBolts(ctx) {
+    if (!this.skyBolts.length) return;
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    for (const b of this.skyBolts) {
+      if (!b.struck || !b.segs) continue;
+      const k = clamp(1 - (b.t - b.delay) / b.dur, 0, 1);
+      const layers = [
+        [b.main ? 7 : 4.5, `rgba(255,240,160,${0.35 * k})`],
+        [b.main ? 3 : 2, `rgba(255,255,255,${0.9 * k})`],
+      ];
+      for (const [lw, col] of layers) {
+        ctx.strokeStyle = col;
+        ctx.lineWidth = lw;
+        ctx.lineJoin = "round";
+        ctx.beginPath();
+        b.segs.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+        ctx.stroke();
+      }
+      const g = ctx.createRadialGradient(b.tx, b.ty, 0, b.tx, b.ty, b.radius);
+      g.addColorStop(0, `rgba(255,255,230,${0.5 * k})`);
+      g.addColorStop(1, "rgba(255,248,200,0)");
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(b.tx, b.ty, b.radius, 0, TAU);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // ------------------------------------------------------------ 诛仙阵：苍穹剑雨
+  /**
+   * 阵图落点处：一柄巨剑从天而降穿透建筑直插地面并缓缓消散，
+   * 周围小剑环绕落下，撞停在建筑表面（不穿透）。
+   */
+  spawnSwordFormation(x, y, team, damage, blast) {
+    if (!this.terrain) return;
+    const R = Math.max(90, (blast || 80) * 0.9);
+    const cx = clamp(x, 40, W - 40);
+    const groundAt = (px) => this.terrain.surfaceBelow(px, 0) ?? (H - 60);
+    const hitSet = new Set();
+    // 主巨剑：自苍穹最高处直插而下，穿透一切建筑直到地面
+    this.swordFormation.push({
+      big: true, scale: 2.8,
+      tx: cx, x: cx, y: -180,
+      vy: 2100, team, damage, blast,
+      gy: groundAt(cx), stuck: false, stuckT: 0,
+      fade: 1.8, hitSet, trail: [],
+    });
+    // 环绕小剑
+    const count = 8;
+    for (let i = 0; i < count; i++) {
+      const a = (i / count) * TAU;
+      const tx = clamp(cx + Math.cos(a) * R * rand(0.5, 1), 24, W - 24);
+      this.swordFormation.push({
+        big: false, scale: rand(0.85, 1.15),
+        tx, x: tx, y: -140 - rand(0, 160),
+        vy: rand(1500, 1900), team, damage, blast,
+        gy: groundAt(tx), stuck: false, stuckT: 0,
+        fade: rand(0.9, 1.3), hitSet, trail: [],
+      });
+    }
+    this.shake = Math.max(this.shake, 8);
+    this.sfx.shoot("formation");
+  }
+
+  /** 更新诛仙剑阵：巨剑穿建筑插地，小剑停在建筑表面，落地后慢慢消散 */
+  _updateSwordFormation(dt) {
+    if (!this.swordFormation.length) return;
+    for (let i = this.swordFormation.length - 1; i >= 0; i--) {
+      const s = this.swordFormation[i];
+      if (s.stuck) {
+        s.stuckT += dt;
+        if (s.stuckT > s.fade) this.swordFormation.splice(i, 1);
+        continue;
+      }
+      s.y += s.vy * dt;
+      s.trail.push({ x: s.x, y: s.y });
+      if (s.trail.length > 10) s.trail.shift();
+      if (s.big) {
+        // 巨剑：穿透建筑，贯穿伤害沿途敌人
+        for (const u of this.units) {
+          if (!u.alive || u.team === s.team || s.hitSet.has(u)) continue;
+          const dx = s.x - u.x;
+          const dy = s.y - (u.y - 30);
+          if (dx * dx + dy * dy < 44 * 44) {
+            s.hitSet.add(u);
+            u.takeDamage(s.damage * 0.8, s.team);
+            this.spawnParticles(s.x, s.y, 8, "#ff6a9a", "spark");
+          }
+        }
+        if (s.y >= s.gy - 10) {
+          s.y = s.gy - 10;
+          s.stuck = true;
+          s.stuckT = 0;
+          this.rings.push({ x: s.x, y: s.gy, r: 10, max: s.blast * 1.8, t: 0, life: 0.4, color: "rgba(255,106,154,.75)" });
+          this.spawnParticles(s.x, s.gy, 26, "#ff6a9a", "spark");
+          this.spawnParticles(s.x, s.gy, 12, "#ffd8e8", "fire");
+          this._damageUnitsInRadius(s.x, s.gy, s.blast, s.damage * 1.1, s.team, {});
+          this.shake = Math.max(this.shake, 12);
+          this.screenFlash = Math.max(this.screenFlash, 0.25);
+          this.flashColor = "#ff6a9a";
+        }
+      } else if (this.terrain.circleHit(s.x, s.y, 5) || s.y >= s.gy - 4) {
+        // 小剑：撞停在建筑/平台表面，不穿透
+        s.y = Math.min(s.y, s.gy - 4);
+        s.stuck = true;
+        s.stuckT = 0;
+        this.rings.push({ x: s.x, y: s.y, r: 4, max: s.blast * 0.8, t: 0, life: 0.25, color: "rgba(255,106,154,.6)" });
+        this.spawnParticles(s.x, s.y, 8, "#ff6a9a", "spark");
+        this._damageUnitsInRadius(s.x, s.y + 10, s.blast * 0.55, s.damage * 0.55, s.team, {});
+      }
+    }
+  }
+
+  /** 绘制诛仙剑阵：巨剑大且亮、小剑环绕，插地后淡出消散 */
+  _drawSwordFormation(ctx) {
+    if (!this.swordFormation.length) return;
+    for (const s of this.swordFormation) {
+      ctx.save();
+      ctx.translate(s.x, s.y);
+      let alpha = 1;
+      if (s.stuck) alpha = clamp(1 - s.stuckT / s.fade, 0, 1);
+      ctx.globalAlpha = alpha;
+      if (s.big) {
+        ctx.shadowColor = "#ff6a9a";
+        ctx.shadowBlur = 26;
+      }
+      // 剑尖朝下
+      ctx.rotate(Math.PI / 2);
+      this._drawSwordShape(ctx, s.scale);
+      ctx.restore();
+      if (!s.stuck && s.trail.length > 1) {
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";
+        ctx.strokeStyle = s.big ? "rgba(255,106,154,.5)" : "rgba(255,150,180,.35)";
+        ctx.lineWidth = s.big ? 5 : 2.5;
+        ctx.beginPath();
+        s.trail.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+  }
+
+  // ------------------------------------------------------------ 毒雾术：浓雾爆发
+  /** 毒雾爆发：一片浓雾，只伤害单位、不破坏建筑与地形；中毒持续一个回合 */
+  poisonCloudBurst(x, y, radius, damage, team) {
+    if (!this.terrain) return;
+    const R = Math.max(60, radius || 80);
+    // 浓雾气体（大面积半透明绿雾，缓慢扩散上升）
+    for (let i = 0; i < 26; i++) {
+      const a = rand(0, TAU);
+      const rr = rand(0, R * 0.9);
+      this.particles.push({
+        x: x + Math.cos(a) * rr, y: y + Math.sin(a) * rr * 0.45,
+        vx: rand(-18, 18), vy: rand(-26, -6),
+        life: rand(1.2, 2.4), maxLife: 2.4, size: rand(16, 34),
+        color: "gas", kind: "gas", gravity: -6,
+      });
+    }
+    // 爆发气泡
+    for (let i = 0; i < 12; i++) {
+      this.particles.push({
+        x: x + rand(-14, 14), y: y + rand(-14, 14),
+        vx: rand(-90, 90), vy: rand(-140, -40),
+        life: rand(0.4, 0.9), maxLife: 0.9, size: rand(2.5, 6),
+        color: "#8aff6a", kind: "spark", gravity: -30,
+      });
+    }
+    this.rings.push({ x, y, r: R * 0.2, max: R * 1.3, t: 0, life: 0.4, color: "rgba(138,255,106,.55)" });
+    this.glows.push({ x, y, r: R * 1.1, life: 0.4, max: 0.4, color: "rgba(138,255,106,.5)" });
+    // 只伤害单位，不 carve 地形
+    this._damageUnitsInRadius(x, y, R, damage, team, {
+      poison: { dur: 9999, dps: WEAPONS.poisonmist.poisonDps },
+    });
+    this.shake = Math.max(this.shake, 4);
+    this.sfx.shoot("poisonmist");
   }
 
   /** 绘制剑雨中的飞剑：完整剑形（剑刃 + 剑格 + 剑柄） */
@@ -2121,42 +2423,11 @@ if (!this.players.some((u) => u.alive)) { this.finish(false, "族人全部倒下
       }
     }
     // 伤害与击退（含友军误伤）
-    const diff = this._difficulty();
-    for (const u of this.units) {
-      if (!u.alive) continue;
-      // 以单位命中胶囊上离爆点最近的位置计算距离，爆头也能打满伤害
-      const s = u.scale || 1;
-      const topY = u.y - (u.mount ? 76 : 63) * s;
-      const cy = clamp(y, topY, u.y - 6);
-      const dx = u.x - x;
-      const dy = cy - y;
-      const d = Math.hypot(dx, dy);
-      const reach = radius + 16;
-      if (d < reach) {
-        const f = 1 - d / reach;
-        let dmg = Math.max(4, Math.round(damage * (0.35 + 0.65 * f)));
-        if (team === 1 && u.team === 0) dmg = Math.round(dmg * diff.dmg);
-        u.takeDamage(dmg, team);
-        if (u.alive) {
-          u.vy = -Math.min(360, 70 + f * damage * 2.4);
-          u.onGround = false;
-          u.vx += Math.sign(dx || 1) * f * 60;
-        }
-        // 减速效果（锁魂链、呼风唤雨）
-        if (weaponSlow && u.alive) {
-          u.slowT = Math.max(u.slowT, weaponSlow.dur);
-          u.slowMul = weaponSlow.mul;
-          if (weaponType === "soulchain") u.slowSrc = "soulchain";
-          this.addText(u.x, u.y - 92, "减速", "#b48ce8");
-        }
-        // 中毒效果（毒雾术）
-        if (weaponPoison && u.alive) {
-          u.poisonT = Math.max(u.poisonT, weaponPoison.dur);
-          u.poisonDps = weaponPoison.dps;
-          this.addText(u.x, u.y - 92, "中毒", "#8aff6a");
-        }
-      }
-    }
+    this._damageUnitsInRadius(x, y, radius, damage, team, {
+      slow: weaponSlow,
+      slowSrc: weaponType === "soulchain" ? "soulchain" : null,
+      poison: weaponPoison,
+    });
     this.sfx.explode(radius);
     // 爆炸把附近单位推下平台后，检查是否还有活人
     this._addTimer(0.9, () => this._checkEndState());
@@ -2625,6 +2896,8 @@ document.getElementById("hudLevel").textContent = this.level.endless
     this._drawFires(ctx);
     for (const p of this.projectiles) p.draw(ctx);
     this._drawSwordRain(ctx);
+    this._drawSkyBolts(ctx);
+    this._drawSwordFormation(ctx);
 
     if (this.phase === "aim" && (this.aim.active || this.aim.locked)) this._drawPlayerAim(ctx);
     if (this.phase === "aim") this._drawEnemyAims(ctx);
@@ -3040,6 +3313,19 @@ document.getElementById("hudLevel").textContent = this.level.endless
         ctx.fillStyle = p.color;
         ctx.beginPath();
         ctx.arc(p.x, p.y, Math.max(0.8, p.size * a), 0, TAU);
+        ctx.fill();
+        ctx.globalCompositeOperation = "source-over";
+      } else if (p.kind === "gas") {
+        // 毒雾：大面积半透明绿色气体
+        ctx.globalCompositeOperation = "lighter";
+        const r = p.size * (1.7 - a * 0.7);
+        const gg = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
+        gg.addColorStop(0, "rgba(138,255,106,.16)");
+        gg.addColorStop(0.6, "rgba(110,220,90,.10)");
+        gg.addColorStop(1, "rgba(90,180,70,0)");
+        ctx.fillStyle = gg;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, r, 0, TAU);
         ctx.fill();
         ctx.globalCompositeOperation = "source-over";
       } else if (p.kind === "chain") {
